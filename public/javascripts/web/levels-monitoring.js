@@ -382,7 +382,7 @@ const loadChart = async ({
   choosenInstrumentId = instrumentId;
   const targetDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
 
-  chartCandles = new ChartCandles($rootContainer);
+  chartCandles = new ChartCandles($rootContainer, choosenPeriod);
   chartVolume = new ChartVolume($rootContainer);
 
   chartCandles.setOriginalData(resultGetCandles.result);

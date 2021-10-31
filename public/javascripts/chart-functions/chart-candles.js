@@ -1,9 +1,9 @@
 /* global
 functions, getUnix,
-objects, LightweightCharts */
+objects, moment, LightweightCharts */
 
 class ChartCandles {
-  constructor(rootContainer) {
+  constructor(rootContainer, period) {
     this.containerName = 'chart-candles';
     this.appendChart(rootContainer);
 
@@ -13,6 +13,8 @@ class ChartCandles {
 
     this.addChart();
     this.addMainSeries();
+
+    this.period = period;
 
     this.markers = [];
     this.extraSeries = [];
@@ -24,8 +26,8 @@ class ChartCandles {
     rootContainer.insertAdjacentHTML('beforeend', `<div class="${this.containerName}"></div>`);
   }
 
-  setOriginalData(instrumentData, period) {
-    const preparedData = ChartCandles.prepareNewData(instrumentData);
+  setOriginalData(instrumentData) {
+    const preparedData = this.prepareNewData(instrumentData);
     this.originalData.unshift(...preparedData);
   }
 
@@ -139,14 +141,16 @@ class ChartCandles {
     });
   }
 
-  static prepareNewData(instrumentData) {
-    return instrumentData
+  prepareNewData(instrumentData) {
+    const isUnixTime = ['5m', '1h', '4h'].includes(this.period);
+
+    const validData = instrumentData
       .map(data => {
         const timeUnix = getUnix(data.time);
 
         return {
           timeUnix,
-          time: data.time,
+          time: isUnixTime ? timeUnix : moment(data.time).format('YYYY-MM-DD'),
 
           open: data.data[0],
           close: data.data[1],
@@ -163,5 +167,7 @@ class ChartCandles {
 
         return 1;
       });
+
+    return validData;
   }
 }
