@@ -1,6 +1,6 @@
 /* global
 functions, makeRequest, initPopWindow, getUnix
-objects, windows, moment, user, wsClient, ChartCandles, ChartVolume, ChartPeriods
+objects, windows, moment, user, wsClient, ChartCandles, ChartVolume
 */
 
 /* Constants */
@@ -44,7 +44,6 @@ let instrumentsDocs = [];
 let userLevelBounds = [];
 
 let chartVolume = {};
-let chartPeriods = {};
 let chartCandles = {};
 
 /* JQuery */
@@ -155,7 +154,7 @@ $(document).ready(async () => {
   });
 
   $chartPeriods
-    .on('click', function () {
+    .on('click', async function () {
       const $period = $(this);
       const period = $period.data('period');
 
@@ -164,19 +163,9 @@ $(document).ready(async () => {
 
       choosenPeriod = period;
 
-      if (chartCandles && chartCandles.chart) {
-        const periodData = chartPeriods.setPeriod(
-          period, [chartCandles.chart, chartVolume.chart],
-        );
-
-        chartCandles.drawSeries(chartCandles.mainSeries, periodData);
-        chartVolume.drawSeries(periodData);
-
-        drawLevelLines({
-          instrumentId: choosedInstrumentId,
-          period: choosenPeriod,
-        });
-      }
+      await loadChart({
+        instrumentId: choosedInstrumentId,
+      });
     });
 
   $settings
@@ -215,155 +204,7 @@ $(document).ready(async () => {
 
       $instrument.addClass('is_active');
 
-      console.log('start loading');
-
-      const limit = TIMEFRAME_NUMBER_CANDLES_MAPPER[choosenPeriod];
-      const endTime = new Date().toISOString();
-
-      const resultGetCandles = await makeRequest({
-        method: 'GET',
-        url: `${URL_GET_CANDLES}?instrumentId=${instrumentId}&limit=${limit}&endTime=${endTime}`,
-      });
-
-      if (!resultGetCandles || !resultGetCandles.status) {
-        alert(resultGetCandles.message || `Cant makeRequest ${URL_GET_CANDLES}`);
-        return true;
-      }
-
-      console.log('end loading');
-
-      chartCandles = {};
-      chartVolume = {};
-      chartPeriods = {};
-      $($rootContainer).empty();
-
-      if (!resultGetCandles.result || !resultGetCandles.result.length) {
-        return true;
-      }
-
-      choosedInstrumentId = instrumentId;
-      const targetDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
-
-      chartPeriods = new ChartPeriods();
-      chartCandles = new ChartCandles($rootContainer);
-      chartVolume = new ChartVolume($rootContainer);
-
-      const listCharts = [chartCandles, chartVolume];
-
-      chartPeriods.setPeriod(choosenPeriod, [chartCandles.chart, chartVolume.chart]);
-      chartPeriods.setOriginalData(resultGetCandles.result);
-
-      const instrumentData = chartPeriods.getDataByPeriod(choosenPeriod) || [];
-
-      chartCandles.drawSeries(chartCandles.mainSeries, instrumentData);
-      chartVolume.drawSeries(instrumentData);
-
-      wsClient.send(JSON.stringify({
-        actionName: 'subscribe',
-        data: {
-          subscriptionName: 'candleData',
-          instrumentName: targetDoc.name,
-        },
-      }));
-
-      drawLevelLines({
-        instrumentId,
-        period: choosenPeriod,
-      });
-
-      chartCandles.chart.subscribeCrosshairMove((param) => {
-        if (param.time) {
-          const price = param.seriesPrices.get(chartCandles.mainSeries);
-
-          if (price) {
-            $open.text(price.open);
-            $close.text(price.close);
-            $low.text(price.low);
-            $high.text(price.high);
-          }
-        }
-      });
-
-      let isCrossHairMoving = false;
-
-      listCharts.forEach(elem => {
-        const otherCharts = listCharts.filter(chart => chart.containerName !== elem.containerName);
-
-        elem.chart.subscribeCrosshairMove(param => {
-          if (!param.point || !param.time || isCrossHairMoving) {
-            return true;
-          }
-
-          isCrossHairMoving = true;
-
-          otherCharts.forEach(innerElem => {
-            innerElem.chart.moveCrosshair(param.point);
-          });
-
-          isCrossHairMoving = false;
-
-          elem.chart.timeScale().subscribeVisibleLogicalRangeChange(range => {
-            otherCharts.forEach(innerElem => {
-              innerElem.chart.timeScale().setVisibleLogicalRange(range);
-            });
-          });
-        });
-      });
-
-      let isEndHistory = false;
-      let isStartedLoad = false;
-
-      chartCandles.chart
-        .timeScale()
-        .subscribeVisibleLogicalRangeChange(async newVisibleLogicalRange => {
-          if (isStartedLoad || isEndHistory) {
-            return true;
-          }
-
-          const barsInfo = chartCandles.mainSeries.barsInLogicalRange(newVisibleLogicalRange);
-
-          if (barsInfo !== null && barsInfo.barsBefore < -5) {
-            isStartedLoad = true;
-
-            const limit = TIMEFRAME_NUMBER_CANDLES_MAPPER[choosenPeriod];
-            const endTime = new Date(chartPeriods.originalData[0].time * 1000).toISOString();
-
-            console.log('start loading');
-
-            const resultGetCandles = await makeRequest({
-              method: 'GET',
-              url: `${URL_GET_CANDLES}?instrumentId=${instrumentId}&limit=${limit}&endTime=${endTime}`,
-            });
-
-            if (!resultGetCandles || !resultGetCandles.status) {
-              alert(resultGetCandles.message || `Cant makeRequest ${URL_GET_CANDLES}`);
-              return true;
-            }
-
-            console.log('end loading');
-
-            if (!resultGetCandles.result || !resultGetCandles.result.length) {
-              isEndHistory = true;
-              return true;
-            }
-
-            chartPeriods.setOriginalData(resultGetCandles.result);
-
-            const instrumentData = chartPeriods
-              .getDataByPeriod(choosenPeriod)
-              .filter(e => !e.isRendered);
-
-            chartCandles.drawSeries(chartCandles.mainSeries, instrumentData);
-            chartVolume.drawSeries(instrumentData);
-
-            drawLevelLines({
-              instrumentId,
-              period: choosenPeriod,
-            });
-
-            isStartedLoad = false;
-          }
-        });
+      await loadChart({ instrumentId });
     });
 
   $('.md-content')
@@ -426,7 +267,7 @@ $(document).ready(async () => {
 
         body: {
           userId: user._id,
-        }
+        },
       });
 
       if (!resultAddLevels || !resultAddLevels.status) {
@@ -467,7 +308,7 @@ const drawLevelLines = ({
     chartCandles.removeSeries(series, false);
   });
 
-  const instrumentData = chartPeriods.getDataByPeriod(period) || [];
+  const instrumentData = chartCandles.originalData;
   const endTime = instrumentData[instrumentData.length - 1].time;
 
   userLevelBounds
@@ -499,5 +340,152 @@ const drawLevelLines = ({
         value: bound.level_price,
         time: endTime,
       }]);
+    });
+};
+
+const loadChart = async ({
+  instrumentId,
+}) => {
+  console.log('start loading');
+
+  const limit = TIMEFRAME_NUMBER_CANDLES_MAPPER[choosenPeriod];
+  const endTime = new Date().toISOString();
+
+  const resultGetCandles = await makeRequest({
+    method: 'GET',
+    url: `${URL_GET_CANDLES}/${choosenPeriod}?instrumentId=${instrumentId}&limit=${limit}&endTime=${endTime}`,
+  });
+
+  if (!resultGetCandles || !resultGetCandles.status) {
+    alert(resultGetCandles.message || `Cant makeRequest ${URL_GET_CANDLES}`);
+    return true;
+  }
+
+  console.log('end loading');
+
+  chartCandles = {};
+  chartVolume = {};
+
+  $($rootContainer).empty();
+
+  if (!resultGetCandles.result || !resultGetCandles.result.length) {
+    return true;
+  }
+
+  choosedInstrumentId = instrumentId;
+  const targetDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
+
+  chartCandles = new ChartCandles($rootContainer);
+  chartVolume = new ChartVolume($rootContainer);
+
+  const listCharts = [chartCandles, chartVolume];
+
+  chartCandles.drawSeries(chartCandles.mainSeries, chartCandles.originalData);
+  chartVolume.drawSeries(chartCandles.originalData);
+
+  wsClient.send(JSON.stringify({
+    actionName: 'subscribe',
+    data: {
+      subscriptionName: 'candleData',
+      instrumentName: targetDoc.name,
+    },
+  }));
+
+  drawLevelLines({
+    instrumentId,
+    period: choosenPeriod,
+  });
+
+  chartCandles.chart.subscribeCrosshairMove((param) => {
+    if (param.time) {
+      const price = param.seriesPrices.get(chartCandles.mainSeries);
+
+      if (price) {
+        $open.text(price.open);
+        $close.text(price.close);
+        $low.text(price.low);
+        $high.text(price.high);
+      }
+    }
+  });
+
+  let isCrossHairMoving = false;
+
+  listCharts.forEach(elem => {
+    const otherCharts = listCharts.filter(chart => chart.containerName !== elem.containerName);
+
+    elem.chart.subscribeCrosshairMove(param => {
+      if (!param.point || !param.time || isCrossHairMoving) {
+        return true;
+      }
+
+      isCrossHairMoving = true;
+
+      otherCharts.forEach(innerElem => {
+        innerElem.chart.moveCrosshair(param.point);
+      });
+
+      isCrossHairMoving = false;
+
+      elem.chart.timeScale().subscribeVisibleLogicalRangeChange(range => {
+        otherCharts.forEach(innerElem => {
+          innerElem.chart.timeScale().setVisibleLogicalRange(range);
+        });
+      });
+    });
+  });
+
+  let isEndHistory = false;
+  let isStartedLoad = false;
+
+  chartCandles.chart
+    .timeScale()
+    .subscribeVisibleLogicalRangeChange(async newVisibleLogicalRange => {
+      if (isStartedLoad || isEndHistory) {
+        return true;
+      }
+
+      const barsInfo = chartCandles.mainSeries.barsInLogicalRange(newVisibleLogicalRange);
+
+      if (barsInfo !== null && barsInfo.barsBefore < -5) {
+        isStartedLoad = true;
+
+        const limit = TIMEFRAME_NUMBER_CANDLES_MAPPER[choosenPeriod];
+        const endTime = new Date(chartCandles.originalData[0].time * 1000).toISOString();
+
+        console.log('start loading');
+
+        const resultGetCandles = await makeRequest({
+          method: 'GET',
+          url: `${URL_GET_CANDLES}?instrumentId=${instrumentId}&limit=${limit}&endTime=${endTime}`,
+        });
+
+        if (!resultGetCandles || !resultGetCandles.status) {
+          alert(resultGetCandles.message || `Cant makeRequest ${URL_GET_CANDLES}`);
+          return true;
+        }
+
+        console.log('end loading');
+
+        if (!resultGetCandles.result || !resultGetCandles.result.length) {
+          isEndHistory = true;
+          return true;
+        }
+
+        chartCandles.setOriginalData(resultGetCandles.result);
+
+        const instrumentData = chartCandles.originalData
+          .filter(e => !e.isRendered);
+
+        chartCandles.drawSeries(chartCandles.mainSeries, instrumentData);
+        chartVolume.drawSeries(instrumentData);
+
+        drawLevelLines({
+          instrumentId,
+          period: choosenPeriod,
+        });
+
+        isStartedLoad = false;
+      }
     });
 };

@@ -1,5 +1,5 @@
 /* global
-functions,
+functions, getUnix,
 objects, LightweightCharts */
 
 class ChartCandles {
@@ -16,10 +16,17 @@ class ChartCandles {
 
     this.markers = [];
     this.extraSeries = [];
+
+    this.originalData = [];
   }
 
   appendChart(rootContainer) {
     rootContainer.insertAdjacentHTML('beforeend', `<div class="${this.containerName}"></div>`);
+  }
+
+  setOriginalData(instrumentData) {
+    const preparedData = ChartCandles.prepareNewData(instrumentData);
+    this.originalData.unshift(...preparedData);
   }
 
   addChart() {
@@ -130,5 +137,31 @@ class ChartCandles {
         }),
       });
     });
+  }
+
+  static prepareNewData(instrumentData) {
+    return instrumentData
+      .map(data => {
+        const timeUnix = getUnix(data.time);
+
+        return {
+          timeUnix,
+          time: data.time,
+
+          open: data.data[0],
+          close: data.data[1],
+          low: data.data[2],
+          high: data.data[3],
+          volume: data.volume,
+          isRendered: false,
+        };
+      })
+      .sort((a, b) => {
+        if (a.timeUnix < b.timeUnix) {
+          return -1;
+        }
+
+        return 1;
+      });
   }
 }
