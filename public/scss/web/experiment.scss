@@ -66,14 +66,22 @@
     width: 80%;
     display: inline-block;
     box-sizing: border-box;
+    position: relative;
     border-bottom: 1px solid black;
 
-    .legend {
+    .charts-nav {
       position: absolute;
       z-index: 999;
-      margin-top: 10px;
-      margin-left: 10px;
+      top: 15px;
+      left: 15px;
 
+      .row {
+        display: flex;
+        align-items: center;
+      }
+    }
+
+    .legend {
       p.values {
         span {
           color: #000FFF;
@@ -84,11 +92,8 @@
     }
 
     .chart-periods {
-      position: absolute;
-      z-index: 999;
       display: flex;
-      margin-top: 43px;
-      margin-left: 10px;
+      margin-top: 12px;
 
       div {
         &.is_worked {
@@ -116,6 +121,18 @@
           text-align: center;
           display: block;
         }
+      }
+    }
+
+    .settings {
+      display: flex;
+      width: 27px;
+      margin-top: 8px;
+      margin-left: 5px;
+      cursor: pointer;
+
+      img {
+        width: 100%;
       }
     }
 

@@ -13,3 +13,9 @@ const wsClient = new WebSocket(`ws://${wsConnectionLink}:${wsConnectionPort}?use
 wsClient.onclose = event => {
   alert('Соединение было разорвано, перезагрузите страницу');
 };
+
+setInterval(() => {
+  wsClient.send(JSON.stringify({
+    actionName: 'pong',
+  }));
+}, 1 * 60 * 1000); // 1 minute

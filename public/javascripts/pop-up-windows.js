@@ -27,6 +27,52 @@ const windows = {
     </div>`;
   },
 
+  getLevelsMonitoringSettings(settings) {
+    console.log('settings', settings);
+    return `<div class="window levels-monitroing-settings">
+      <button class="close"></button>
+
+      <div class="levels-monitroing-settings-container">
+        <h2>Настройка уровней</h2>
+        <div class="levels-settings">
+          <ul>
+            <li>
+              <input type="checkbox" id="is_draw_levels_for_1h_candles" ${settings.is_draw_levels_for_1h_candles ? 'checked' : ''}>
+              <label for="is_draw_levels_for_1h_candles">Рисовать уровни для часовых свеч</label>
+            </li>
+
+            <li>
+              <input type="checkbox" id="is_draw_levels_for_4h_candles" ${settings.is_draw_levels_for_4h_candles ? 'checked' : ''}>
+              <label for="is_draw_levels_for_4h_candles">Рисовать уровни для 4-х часовых свеч</label>
+            </li>
+
+            <li>
+              <input type="checkbox" id="is_draw_levels_for_day_candles" ${settings.is_draw_levels_for_day_candles ? 'checked' : ''}>
+              <label for="is_draw_levels_for_day_candles">Рисовать уровни для дневых свеч</label>
+            </li>
+          </ul>
+
+          <div id="number_candles_for_calculate_1h_levels">
+            <p>К-во свечей для расчета часовых уровней</p>
+            <input type="text" value="${settings.number_candles_for_calculate_1h_levels || 10}">
+          </div>
+
+          <div id="number_candles_for_calculate_4h_levels">
+            <p>К-во свечей для расчета 4х-часовых уровней</p>
+            <input type="text" value="${settings.number_candles_for_calculate_4h_levels || 10}">
+          </div>
+
+          <div id="number_candles_for_calculate_day_levels">
+            <p>К-во свечей для расчета дневных уровней</p>
+            <input type="text" value="${settings.number_candles_for_calculate_day_levels || 10}">
+          </div>
+
+          <button id="save-settings">Сохранить</button>
+        </div>
+      </div>
+    </div>`;
+  },
+
   getVolumeMonitoringSettings(settings) {
     return `<div class="window volume-monitroing-settings">
       <button class="close"></button>

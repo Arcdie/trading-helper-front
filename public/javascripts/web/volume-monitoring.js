@@ -1,4 +1,4 @@
-/* global makeRequest, getTimestamp, initPopWindow,
+/* global makeRequest, getUnix, initPopWindow,
 windows, wsClient */
 
 /* Constants */
@@ -7,7 +7,7 @@ const URL_GET_ACTIVE_INSTRUMENTS = '/api/instruments/active';
 const URL_GET_INSTRUMENT_VOLUME_BOUNDS = '/api/instrument-volume-bounds';
 
 let instrumentsDocs = [];
-let nowTimestamp = getTimestamp();
+let nowTimestamp = getUnix();
 
 const settings = {
   spot: {
@@ -277,7 +277,7 @@ $(document).ready(async () => {
   setInterval(() => updateLifetimes, 60 * 1000); // 1 minute
 
   // update timestampt
-  setInterval(() => { nowTimestamp = getTimestamp(); }, 1000);
+  setInterval(() => { nowTimestamp = getUnix(); }, 1000);
 
   $container
     .on('click', 'span.instrument-name', function () {

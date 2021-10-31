@@ -7,28 +7,33 @@ block variables
 block content
 	.page.experiment
 		.chart-container
-			.legend
-				p.values
-					| ОТКР
-					span.open 0
-					| МАКС
-					span.high 0
-					| МИН
-					span.low 0
-					| ЗАКР
-					span.close 0
-			
-			.chart-periods
-				.5m(data-period='5m')
-					span 5M
-				.1h(data-period='1h')
-					span 1Ч
-				.4h(data-period='4h')
-					span 4Ч
-				.day(data-period='day')
-					span Д
-				.month(data-period='month')
-					span Мес
+			.charts-nav
+				.legend
+					p.values
+						| ОТКР
+						span.open 0
+						| МАКС
+						span.high 0
+						| МИН
+						span.low 0
+						| ЗАКР
+						span.close 0
+				
+				.row
+					.chart-periods
+						.5m(data-period='5m')
+							span 5M
+						.1h(data-period='1h')
+							span 1Ч
+						.4h(data-period='4h')
+							span 4Ч
+						.day(data-period='day')
+							span Д
+						//- .month(data-period='month')
+						//- 	span Мес
+
+					.settings
+						img(src="/images/settings.png", alt="settings")
 
 			.charts
 

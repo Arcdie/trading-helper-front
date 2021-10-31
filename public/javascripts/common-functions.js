@@ -15,7 +15,12 @@ const $mdcontent = $('div.md-content');
 const $modalWindow = $('div.pop-up div.md-modal');
 
 /* Functions */
-const getTimestamp = () => parseInt(new Date().getTime() / 1000, 10);
+const getRandomNumber = (min, max) => {
+  return Math.floor(Math.random() * (max - min)) + min;
+};
+
+const getUnix = targetDate =>
+  parseInt((targetDate ? new Date(targetDate) : new Date()).getTime() / 1000, 10);
 
 const initPopWindow = (str) => {
   $modalWindow

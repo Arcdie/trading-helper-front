@@ -32,6 +32,21 @@ table {
   border-collapse: collapse;
   border-spacing: 0; }
 
+.donate {
+  position: absolute;
+  bottom: 15px; }
+  .donate h3 {
+    font: 20px sans-serif;
+    border-bottom: 1px dashed black;
+    padding-bottom: 10px; }
+  .donate ul {
+    margin-top: 10px;
+    margin-left: 25px;
+    list-style: disc; }
+    .donate ul li {
+      margin-bottom: 8px;
+      font: 18px sans-serif; }
+
 div.shadow {
   width: 100%;
   height: 100%;
@@ -99,6 +114,24 @@ div.md-show.md-modal div.md-content {
 .window {
   padding: 20px;
   background-color: white; }
+  .window.levels-monitroing-settings .levels-monitroing-settings-container .levels-settings h2 {
+    font: 15px sans-serif;
+    border-bottom: 1px solid black; }
+  .window.levels-monitroing-settings .levels-monitroing-settings-container .levels-settings ul {
+    margin-top: 8px;
+    margin-bottom: 16px; }
+    .window.levels-monitroing-settings .levels-monitroing-settings-container .levels-settings ul li {
+      margin-bottom: 3px; }
+  .window.levels-monitroing-settings .levels-monitroing-settings-container .levels-settings div {
+    display: block;
+    margin-bottom: 10px;
+    width: 350px; }
+    .window.levels-monitroing-settings .levels-monitroing-settings-container .levels-settings div p {
+      display: inline-block; }
+    .window.levels-monitroing-settings .levels-monitroing-settings-container .levels-settings div input[type="text"] {
+      display: inline-block;
+      width: 26px;
+      float: right; }
   .window.volume-monitroing-settings {
     width: 300px;
     height: 200px; }
@@ -255,6 +288,22 @@ input:checked + .slider:before {
     .profile .common-instruction video {
       margin-top: 10px; }
 
+.utilities {
+  padding: 15px;
+  padding-top: 0; }
+  .utilities .utility {
+    display: block;
+    border-bottom: 1px dashed black;
+    padding-bottom: 20px;
+    padding-top: 20px;
+    font-family: sans-serif; }
+    .utilities .utility h3 {
+      font-size: 18px; }
+    .utilities .utility a {
+      margin-top: 10px;
+      text-decoration: none;
+      display: block; }
+
 .experiment {
   padding: 10px;
   position: relative;
@@ -299,22 +348,23 @@ input:checked + .slider:before {
     width: 80%;
     display: inline-block;
     box-sizing: border-box;
+    position: relative;
     border-bottom: 1px solid black; }
-    .experiment .chart-container .legend {
+    .experiment .chart-container .charts-nav {
       position: absolute;
       z-index: 999;
-      margin-top: 10px;
-      margin-left: 10px; }
-      .experiment .chart-container .legend p.values span {
-        color: #000FFF;
-        margin-left: 2px;
-        margin-right: 5px; }
+      top: 15px;
+      left: 15px; }
+      .experiment .chart-container .charts-nav .row {
+        display: flex;
+        align-items: center; }
+    .experiment .chart-container .legend p.values span {
+      color: #000FFF;
+      margin-left: 2px;
+      margin-right: 5px; }
     .experiment .chart-container .chart-periods {
-      position: absolute;
-      z-index: 999;
       display: flex;
-      margin-top: 43px;
-      margin-left: 10px; }
+      margin-top: 12px; }
       .experiment .chart-container .chart-periods div {
         width: 40px;
         height: 40px;
@@ -335,6 +385,14 @@ input:checked + .slider:before {
           margin: 8px auto;
           text-align: center;
           display: block; }
+    .experiment .chart-container .settings {
+      display: flex;
+      width: 27px;
+      margin-top: 8px;
+      margin-left: 5px;
+      cursor: pointer; }
+      .experiment .chart-container .settings img {
+        width: 100%; }
     .experiment .chart-container .chart-candles {
       width: 100%;
       height: 70%;

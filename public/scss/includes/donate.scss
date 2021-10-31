@@ -1,0 +1,21 @@
+.donate {
+  position: absolute;
+  bottom: 15px;
+
+  h3 {
+    font: 20px sans-serif;
+    border-bottom: 1px dashed black;
+    padding-bottom: 10px;
+  }
+
+  ul {
+    margin-top: 10px;
+    margin-left: 25px;
+    list-style: disc;
+
+    li {
+      margin-bottom: 8px;
+      font: 18px sans-serif;
+    }
+  }
+}

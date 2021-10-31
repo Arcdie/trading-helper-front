@@ -19,7 +19,7 @@ class ChartVolume {
 
     this.chart.applyOptions({
       layout: {
-        backgroundColor: '#F6FDFF',
+        backgroundColor: 'white',
       },
 
       crosshair: {

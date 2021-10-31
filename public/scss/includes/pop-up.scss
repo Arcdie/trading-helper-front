@@ -82,6 +82,45 @@ div.md-show.md-modal div.md-content {
 
   }
 
+  &.levels-monitroing-settings {
+    // width: 500px;
+    // height: 200px;
+
+    .levels-monitroing-settings-container {
+      .levels-settings {
+        h2 {
+          font: 15px sans-serif;
+          border-bottom: 1px solid black;
+        }
+
+        ul {
+          margin-top: 8px;
+          margin-bottom: 16px;
+
+          li {
+            margin-bottom: 3px;
+          }
+        }
+
+        div {
+          display: block;
+          margin-bottom: 10px;
+          width: 350px;
+
+          p {
+            display: inline-block;
+          }
+
+          input[type="text"] {
+            display: inline-block;
+            width: 26px;
+            float: right;
+          }
+        }
+      }
+    }
+  }
+
   &.volume-monitroing-settings {
     width: 300px;
     height: 200px;

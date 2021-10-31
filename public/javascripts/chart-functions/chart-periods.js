@@ -54,22 +54,10 @@ class ChartPeriods {
     return returnData;
   }
 
-  // remove startPeriod after collect minutes candles
-  setOriginalData(instrumentData, startPeriod) {
-    this.originalData = instrumentData.map(data => {
-      const timeUnix = parseInt(new Date(data.time).getTime() / 1000, 10);
+  setOriginalData(instrumentData) {
+    const preparedData = ChartPeriods.prepareNewData(instrumentData);
 
-      return {
-        timeUnix,
-        time: data.time,
-
-        open: data.data[0],
-        close: data.data[1],
-        low: data.data[2],
-        high: data.data[3],
-        volume: data.volume,
-      };
-    });
+    this.originalData.unshift(...preparedData);
 
     this.fiveMinutesTimeFrameData = [];
     this.oneHourTimeFrameData = [];
@@ -77,15 +65,18 @@ class ChartPeriods {
     this.dayTimeFrameData = [];
     this.monthTimeFrameData = [];
 
-    this.calculateFiveMinutesTimeFrameData();
-    this.calculateOneHourTimeFrameData();
-    this.calculateFourHoursTimeFrameData();
-    this.calculateDayTimeFrameData();
-    this.calculateMonthTimeFrameData();
+    if (this.originalData.length) {
+      this.calculateFiveMinutesTimeFrameData();
+      this.calculateOneHourTimeFrameData();
+      this.calculateFourHoursTimeFrameData();
+      this.calculateDayTimeFrameData();
+      // this.calculateMonthTimeFrameData();
+    }
   }
 
   calculateFiveMinutesTimeFrameData() {
     this.fiveMinutesTimeFrameData = this.originalData.map(data => {
+      data.isRendered = false;
       data.time = data.timeUnix;
       return data;
     });
@@ -96,10 +87,10 @@ class ChartPeriods {
     const breakdownByHour = [];
 
     let insertArr = [];
-    let currentDay = new Date(this.originalData[0].timeUnix * 1000).getDate();
+    let currentDay = new Date(this.originalData[0].timeUnix * 1000).getUTCDate();
 
     this.originalData.forEach(candle => {
-      const candleDay = new Date(candle.timeUnix * 1000).getDate();
+      const candleDay = new Date(candle.timeUnix * 1000).getUTCDate();
 
       if (candleDay !== currentDay) {
         breakdownByDay.push(insertArr);
@@ -163,6 +154,7 @@ class ChartPeriods {
         high: maxHigh,
         low: minLow,
         volume: parseInt(sumVolume, 10),
+        isRendered: false,
       });
     });
   }
@@ -172,10 +164,10 @@ class ChartPeriods {
     const breakdownByHour = [];
 
     let insertArr = [];
-    let currentDay = new Date(this.originalData[0].timeUnix * 1000).getDate();
+    let currentDay = new Date(this.originalData[0].timeUnix * 1000).getUTCDate();
 
     this.originalData.forEach(candle => {
-      const candleDay = new Date(candle.timeUnix * 1000).getDate();
+      const candleDay = new Date(candle.timeUnix * 1000).getUTCDate();
 
       if (candleDay !== currentDay) {
         breakdownByDay.push(insertArr);
@@ -239,6 +231,7 @@ class ChartPeriods {
         high: maxHigh,
         low: minLow,
         volume: parseInt(sumVolume, 10),
+        isRendered: false,
       });
     });
   }
@@ -247,10 +240,10 @@ class ChartPeriods {
     const breakdownByDay = [];
 
     let insertArr = [];
-    let currentDay = new Date(this.originalData[0].timeUnix * 1000).getDate();
+    let currentDay = new Date(this.originalData[0].timeUnix * 1000).getUTCDate();
 
     this.originalData.forEach(candle => {
-      const candleDay = new Date(candle.timeUnix * 1000).getDate();
+      const candleDay = new Date(candle.timeUnix * 1000).getUTCDate();
 
       if (candleDay !== currentDay) {
         breakdownByDay.push(insertArr);
@@ -297,6 +290,7 @@ class ChartPeriods {
         high: maxHigh,
         low: minLow,
         volume: parseInt(sumVolume, 10),
+        isRendered: false,
       });
     });
   }
@@ -305,10 +299,10 @@ class ChartPeriods {
     const breakdownByMonth = [];
 
     let insertArr = [];
-    let currentMonth = new Date(this.originalData[0].timeUnix * 1000).getMonth();
+    let currentMonth = new Date(this.originalData[0].timeUnix * 1000).getUTCMonth();
 
     this.originalData.forEach(candle => {
-      const candleMonth = new Date(candle.timeUnix * 1000).getMonth();
+      const candleMonth = new Date(candle.timeUnix * 1000).getUTCMonth();
 
       if (candleMonth !== currentMonth) {
         breakdownByMonth.push(insertArr);
@@ -355,7 +349,61 @@ class ChartPeriods {
         high: maxHigh,
         low: minLow,
         volume: parseInt(sumVolume, 10),
+        isRendered: false,
       });
     });
+  }
+
+  static prepareNewData(instrumentData) {
+    /*
+    let validData = [];
+    const firstCandleUnix = parseInt(new Date(instrumentData[0].time).getTime() / 1000, 10);
+
+    if ((firstCandleUnix % 86400) !== 0) {
+      let candleWithValidTimeIndex = false;
+
+      const lData = instrumentData.length;
+
+      for (let i = 0; i < lData; i += 1) {
+        const candle = instrumentData[i];
+
+        const candleUnix = parseInt(new Date(candle.time).getTime() / 1000, 10);
+
+        if ((candleUnix % 86400) === 0) {
+          candleWithValidTimeIndex = i;
+          break;
+        }
+      }
+
+      if (candleWithValidTimeIndex) {
+        validData = instrumentData.slice(candleWithValidTimeIndex, instrumentData.length - 1);
+      }
+    } else {
+      validData = instrumentData;
+    }
+    */
+
+    return instrumentData
+      .map(data => {
+        const timeUnix = parseInt(new Date(data.time).getTime() / 1000, 10);
+
+        return {
+          timeUnix,
+          time: data.time,
+
+          open: data.data[0],
+          close: data.data[1],
+          low: data.data[2],
+          high: data.data[3],
+          volume: data.volume,
+        };
+      })
+      .sort((a, b) => {
+        if (a.timeUnix < b.timeUnix) {
+          return -1;
+        }
+
+        return 1;
+      });
   }
 }

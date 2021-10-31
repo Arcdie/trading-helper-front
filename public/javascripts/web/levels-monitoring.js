@@ -1,401 +1,503 @@
-/* global makeRequest, initPopWindow, windows,
-  wsClient, TradingView */
+/* global
+functions, makeRequest, initPopWindow, getUnix
+objects, windows, moment, user, wsClient, ChartCandles, ChartVolume, ChartPeriods
+*/
 
 /* Constants */
 
+const URL_UPDATE_USER = '/api/users';
+const URL_GET_CANDLES = '/api/candles';
+const URL_GET_ACTIVE_INSTRUMENTS = '/api/instruments/active';
 const URL_GET_USER_LEVEL_BOUNDS = '/api/user-level-bounds';
-const URL_ADD_LEVELS = '/api/user-level-bounds/add-levels-from-tradingview-for-one-instrument';
-const URL_REMOVE_LEVEL_FOR_INSTRUMENT = '/api/user-level-bounds/remove-level-for-instrument';
-const URL_REMOVE_LEVELS_FOR_INSTRUMENT = '/api/user-level-bounds/remove-levels-for-instrument';
+const URL_ADD_USER_LEVELS_BOUNDS = '/api/user-level-bounds/add-levels';
 
-const PERCENT_FOR_SWITCH_ON_NOT_PROCESSING = 1.5;
+const AVAILABLE_PERIODS = new Map([
+  ['5M', '5m'],
+  ['1H', '1h'],
+  ['4H', '4h'],
+  ['DAY', 'day'],
+  // ['MONTH', 'month'],
+]);
 
-const TIMEFRAME = location.pathname.split('/')[2];
+const WORKING_PERIODS = [
+  AVAILABLE_PERIODS.get('5M'),
+  AVAILABLE_PERIODS.get('1H'),
+  AVAILABLE_PERIODS.get('4H'),
+  AVAILABLE_PERIODS.get('DAY'),
+  // AVAILABLE_PERIODS.get('MONTH'),
+];
 
+const TIMEFRAME_NUMBER_CANDLES_MAPPER = {
+  [AVAILABLE_PERIODS.get('5M')]: 500,
+  [AVAILABLE_PERIODS.get('1H')]: 6000,
+  [AVAILABLE_PERIODS.get('4H')]: 18000,
+  [AVAILABLE_PERIODS.get('DAY')]: 25000,
+  // [AVAILABLE_PERIODS.get('MONTH')]: 30000,
+};
+
+const DEFAULT_PERIOD = AVAILABLE_PERIODS.get('5M');
+
+let choosedInstrumentId;
+let choosenPeriod = DEFAULT_PERIOD;
+
+let instrumentsDocs = [];
 let userLevelBounds = [];
 
-const soundNewLevel = new Audio();
-soundNewLevel.src = '/audio/new-level.mp3';
+let chartVolume = {};
+let chartPeriods = {};
+let chartCandles = {};
 
 /* JQuery */
-const $container = $('.container');
+const $instrumentsContainer = $('.instruments-container');
+const $instrumentsList = $instrumentsContainer.find('.instruments-list .list');
+
+const $settings = $('.charts-nav .settings');
+const $chartPeriods = $('.chart-periods div');
+const $rootContainer = document.getElementsByClassName('charts')[0];
+
+const $legend = $('.legend');
+const $open = $legend.find('span.open');
+const $close = $legend.find('span.close');
+const $high = $legend.find('span.high');
+const $low = $legend.find('span.low');
 
 /* Functions */
-wsClient.onmessage = data => {
+wsClient.onmessage = async data => {
   const parsedData = JSON.parse(data.data);
 
   if (parsedData.actionName) {
-    if (parsedData.actionName === 'newInstrumentPrice') {
-      updatePrice(parsedData.data);
+    switch (parsedData.actionName) {
+      case 'candleData': {
+        if (parsedData.data.instrumentId !== choosedInstrumentId) {
+          break;
+        }
+
+        const {
+          instrumentId,
+          startTime,
+          open,
+          close,
+          high,
+          low,
+          volume,
+        } = parsedData.data;
+
+        let validTime = startTime / 1000;
+
+        if ([!'5m', '1h', '4h'].includes(choosenPeriod)) {
+          validTime = moment.unix(validTime).format('YYYY-MM-DD');
+        }
+
+        chartCandles.drawSeries(chartCandles.mainSeries, {
+          open: parseFloat(open),
+          close: parseFloat(close),
+          high: parseFloat(high),
+          low: parseFloat(low),
+          time: validTime,
+        });
+
+        chartVolume.drawSeries({
+          volume: parseFloat(volume),
+          time: validTime,
+        });
+
+        break;
+      }
+
+      default: break;
     }
   }
 };
 
 $(document).ready(async () => {
-  const resultGetLevels = await makeRequest({
+  const windowHeight = `${window.innerHeight - 20}px`;
+  $rootContainer.style.height = windowHeight;
+
+  const resultGetInstruments = await makeRequest({
     method: 'GET',
-    url: `${URL_GET_USER_LEVEL_BOUNDS}?timeframe=${TIMEFRAME}`,
+    url: `${URL_GET_ACTIVE_INSTRUMENTS}?isOnlyFutures=true`,
   });
 
-  if (resultGetLevels && resultGetLevels.status) {
-    userLevelBounds = resultGetLevels.result || [];
-
-    userLevelBounds.forEach(bound => {
-      bound.is_rendered = false;
-      bound.is_monitoring = false;
-      bound.is_warning_played = false;
-      bound.is_active_widget = false;
-
-      const numberSymbolsAfterComma = (bound.instrument_doc.price.toString().split('.')[1] || []).length;
-      bound.price_original = parseFloat(bound.price_original.toFixed(numberSymbolsAfterComma));
-    });
-
-    renderLevels(true);
-
-    setInterval(() => {
-      renderLevels(false);
-    }, 1000 * 5); // 5 seconds
+  if (!resultGetInstruments || !resultGetInstruments.status) {
+    alert(resultGetInstruments.message || 'Cant makeRequest URL_GET_ACTIVE_INSTRUMENTS');
+    return true;
   }
 
-  $container
-    .on('click', 'span.instrument-name', function () {
-      const $instrument = $(this).closest('.instrument');
+  const resultGetLevels = await makeRequest({
+    method: 'GET',
+    url: URL_GET_USER_LEVEL_BOUNDS,
+  });
 
-      const boundId = $instrument.data('boundid');
+  if (!resultGetLevels || !resultGetLevels.status) {
+    alert(resultGetLevels.message || 'Cant makeRequest URL_GET_USER_LEVEL_BOUNDS');
+    return true;
+  }
 
-      $instrument.toggleClass('is_monitoring');
+  userLevelBounds = resultGetLevels.result;
+  instrumentsDocs = resultGetInstruments.result;
 
-      const targetBound = userLevelBounds.find(
-        bound => bound._id.toString() === boundId.toString(),
-      );
+  $instrumentsContainer
+    .css({ maxHeight: windowHeight });
 
-      if (targetBound) {
-        targetBound.is_monitoring = !targetBound.is_monitoring;
+  $instrumentsList
+    .css({ maxHeight: windowHeight });
+
+  renderListInstruments(instrumentsDocs);
+
+  WORKING_PERIODS.forEach(period => {
+    const $period = $chartPeriods.parent().find(`.${period}`);
+
+    $period.addClass('is_worked');
+
+    if (period === DEFAULT_PERIOD) {
+      $period.addClass('is_active');
+    }
+  });
+
+  $chartPeriods
+    .on('click', function () {
+      const $period = $(this);
+      const period = $period.data('period');
+
+      $chartPeriods.removeClass('is_active');
+      $period.addClass('is_active');
+
+      choosenPeriod = period;
+
+      if (chartCandles && chartCandles.chart) {
+        const periodData = chartPeriods.setPeriod(
+          period, [chartCandles.chart, chartVolume.chart],
+        );
+
+        chartCandles.drawSeries(chartCandles.mainSeries, periodData);
+        chartVolume.drawSeries(periodData);
+
+        drawLevelLines({
+          instrumentId: choosedInstrumentId,
+          period: choosenPeriod,
+        });
       }
-    })
-    .on('click', '.navbar .remove-level', async function () {
-      const $instrument = $(this).closest('.instrument');
-      const $priceOriginal = $instrument.find('p.price_original span.price');
+    });
 
-      const instrumentId = $instrument.data('instrumentid');
-      const priceOriginal = parseFloat($priceOriginal.text());
+  $settings
+    .on('click', () => {
+      initPopWindow(windows.getLevelsMonitoringSettings(user.levels_monitoring_settings || {}));
+    });
 
-      const resultRemoveLevel = await makeRequest({
-        method: 'POST',
-        url: URL_REMOVE_LEVEL_FOR_INSTRUMENT,
+  $('.search input')
+    .on('keyup', function () {
+      const value = $(this).val().toLowerCase();
 
-        body: {
-          instrumentId,
-          priceOriginal,
-        },
-      });
+      let targetDocs = instrumentsDocs;
 
-      if (resultRemoveLevel && resultRemoveLevel.status) {
-        $instrument.remove();
-
-        userLevelBounds = userLevelBounds.filter(bound =>
-          bound.instrumentId !== instrumentId
-          && bound.price_original !== priceOriginal,
+      if (value) {
+        targetDocs = targetDocs.filter(doc => doc.name
+          .toLowerCase()
+          .includes(value),
         );
       }
-    })
-    .on('click', '.navbar .reload-levels', async function () {
-      const $instrument = $(this).closest('.instrument');
 
+      renderListInstruments(targetDocs);
+    });
+
+  $instrumentsList
+    .on('click', '.instrument', async function () {
+      const $instrument = $(this);
       const instrumentId = $instrument.data('instrumentid');
 
-      userLevelBounds = userLevelBounds.filter(bound =>
-        bound.instrument_id.toString() !== instrumentId.toString(),
-      );
+      if (choosedInstrumentId === instrumentId) {
+        return true;
+      }
 
-      renderLevels(false);
+      $instrumentsList
+        .find('.instrument')
+        .removeClass('is_active');
 
-      const resultRemoveLevels = await makeRequest({
-        method: 'POST',
-        url: URL_REMOVE_LEVELS_FOR_INSTRUMENT,
+      $instrument.addClass('is_active');
 
+      console.log('start loading');
+
+      const limit = TIMEFRAME_NUMBER_CANDLES_MAPPER[choosenPeriod];
+      const endTime = new Date().toISOString();
+
+      const resultGetCandles = await makeRequest({
+        method: 'GET',
+        url: `${URL_GET_CANDLES}?instrumentId=${instrumentId}&limit=${limit}&endTime=${endTime}`,
+      });
+
+      if (!resultGetCandles || !resultGetCandles.status) {
+        alert(resultGetCandles.message || `Cant makeRequest ${URL_GET_CANDLES}`);
+        return true;
+      }
+
+      console.log('end loading');
+
+      chartCandles = {};
+      chartVolume = {};
+      chartPeriods = {};
+      $($rootContainer).empty();
+
+      if (!resultGetCandles.result || !resultGetCandles.result.length) {
+        return true;
+      }
+
+      choosedInstrumentId = instrumentId;
+      const targetDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
+
+      chartPeriods = new ChartPeriods();
+      chartCandles = new ChartCandles($rootContainer);
+      chartVolume = new ChartVolume($rootContainer);
+
+      const listCharts = [chartCandles, chartVolume];
+
+      chartPeriods.setPeriod(choosenPeriod, [chartCandles.chart, chartVolume.chart]);
+      chartPeriods.setOriginalData(resultGetCandles.result);
+
+      const instrumentData = chartPeriods.getDataByPeriod(choosenPeriod) || [];
+
+      chartCandles.drawSeries(chartCandles.mainSeries, instrumentData);
+      chartVolume.drawSeries(instrumentData);
+
+      wsClient.send(JSON.stringify({
+        actionName: 'subscribe',
+        data: {
+          subscriptionName: 'candleData',
+          instrumentName: targetDoc.name,
+        },
+      }));
+
+      drawLevelLines({
+        instrumentId,
+        period: choosenPeriod,
+      });
+
+      chartCandles.chart.subscribeCrosshairMove((param) => {
+        if (param.time) {
+          const price = param.seriesPrices.get(chartCandles.mainSeries);
+
+          if (price) {
+            $open.text(price.open);
+            $close.text(price.close);
+            $low.text(price.low);
+            $high.text(price.high);
+          }
+        }
+      });
+
+      let isCrossHairMoving = false;
+
+      listCharts.forEach(elem => {
+        const otherCharts = listCharts.filter(chart => chart.containerName !== elem.containerName);
+
+        elem.chart.subscribeCrosshairMove(param => {
+          if (!param.point || !param.time || isCrossHairMoving) {
+            return true;
+          }
+
+          isCrossHairMoving = true;
+
+          otherCharts.forEach(innerElem => {
+            innerElem.chart.moveCrosshair(param.point);
+          });
+
+          isCrossHairMoving = false;
+
+          elem.chart.timeScale().subscribeVisibleLogicalRangeChange(range => {
+            otherCharts.forEach(innerElem => {
+              innerElem.chart.timeScale().setVisibleLogicalRange(range);
+            });
+          });
+        });
+      });
+
+      let isEndHistory = false;
+      let isStartedLoad = false;
+
+      chartCandles.chart
+        .timeScale()
+        .subscribeVisibleLogicalRangeChange(async newVisibleLogicalRange => {
+          if (isStartedLoad || isEndHistory) {
+            return true;
+          }
+
+          const barsInfo = chartCandles.mainSeries.barsInLogicalRange(newVisibleLogicalRange);
+
+          if (barsInfo !== null && barsInfo.barsBefore < -5) {
+            isStartedLoad = true;
+
+            const limit = TIMEFRAME_NUMBER_CANDLES_MAPPER[choosenPeriod];
+            const endTime = new Date(chartPeriods.originalData[0].time * 1000).toISOString();
+
+            console.log('start loading');
+
+            const resultGetCandles = await makeRequest({
+              method: 'GET',
+              url: `${URL_GET_CANDLES}?instrumentId=${instrumentId}&limit=${limit}&endTime=${endTime}`,
+            });
+
+            if (!resultGetCandles || !resultGetCandles.status) {
+              alert(resultGetCandles.message || `Cant makeRequest ${URL_GET_CANDLES}`);
+              return true;
+            }
+
+            console.log('end loading');
+
+            if (!resultGetCandles.result || !resultGetCandles.result.length) {
+              isEndHistory = true;
+              return true;
+            }
+
+            chartPeriods.setOriginalData(resultGetCandles.result);
+
+            const instrumentData = chartPeriods
+              .getDataByPeriod(choosenPeriod)
+              .filter(e => !e.isRendered);
+
+            chartCandles.drawSeries(chartCandles.mainSeries, instrumentData);
+            chartVolume.drawSeries(instrumentData);
+
+            drawLevelLines({
+              instrumentId,
+              period: choosenPeriod,
+            });
+
+            isStartedLoad = false;
+          }
+        });
+    });
+
+  $('.md-content')
+    .on('click', '.levels-settings #save-settings', async function () {
+      const isDrawLevelsFor1hCandles = $('#is_draw_levels_for_1h_candles').is(':checked');
+      const isDrawLevelsFor4hCandles = $('#is_draw_levels_for_4h_candles').is(':checked');
+      const isDrawLevelsForDayCandles = $('#is_draw_levels_for_day_candles').is(':checked');
+
+      const numberCandlesForCalculate1hLevels = parseInt($('#number_candles_for_calculate_1h_levels input').val(), 10);
+      const numberCandlesForCalculate4hLevels = parseInt($('#number_candles_for_calculate_4h_levels input').val(), 10);
+      const numberCandlesForCalculateDayLevels = parseInt($('#number_candles_for_calculate_day_levels input').val(), 10);
+
+      if (!numberCandlesForCalculate1hLevels || Number.isNaN(numberCandlesForCalculate1hLevels)) {
+        alert('Неправильно заполнено поле "К-во свечей для расчета часовых уровней"');
+        return false;
+      }
+
+      if (!numberCandlesForCalculate4hLevels || Number.isNaN(numberCandlesForCalculate4hLevels)) {
+        alert('Неправильно заполнено поле "К-во свечей для расчета 4х-часовых уровней"');
+        return false;
+      }
+
+      if (!numberCandlesForCalculateDayLevels || Number.isNaN(numberCandlesForCalculateDayLevels)) {
+        alert('Неправильно заполнено поле "К-во свечей для расчета дневных уровней"');
+        return false;
+      }
+
+      $(this).prop('disabled', true);
+
+      const resultUpdate = await makeRequest({
+        method: 'PATCH',
+        url: `${URL_UPDATE_USER}/${user._id}`,
         body: {
-          instrumentId,
+          isDrawLevelsFor1hCandles,
+          isDrawLevelsFor4hCandles,
+          isDrawLevelsForDayCandles,
+          numberCandlesForCalculate1hLevels,
+          numberCandlesForCalculate4hLevels,
+          numberCandlesForCalculateDayLevels,
         },
       });
 
-      if (resultRemoveLevels && resultRemoveLevels.status) {
-        const resultAddLevels = await makeRequest({
-          method: 'POST',
-          url: URL_ADD_LEVELS,
-
-          body: {
-            instrumentId,
-          },
-        });
-
-        const resultGetLevels = await makeRequest({
-          method: 'GET',
-          url: URL_GET_USER_LEVEL_BOUNDS,
-        });
-
-        if (resultGetLevels && resultGetLevels.status) {
-          const newUserLevelBounds = resultGetLevels.result.filter(bound =>
-            bound.instrument_id.toString() === instrumentId.toString(),
-          );
-
-          if (newUserLevelBounds && newUserLevelBounds.length) {
-            userLevelBounds.push(...newUserLevelBounds);
-            renderLevels(false);
-          }
-        }
+      if (!resultUpdate || !resultUpdate.status) {
+        alert(resultUpdate.message || 'Couldnt makeRequest URL_UPDATE_USER');
+        return false;
       }
-    })
-    .on('mousedown', '.navbar .tradingview-chart', async function () {
-      const $instrument = $(this).closest('.instrument');
 
-      const boundId = $instrument.data('boundid');
+      user.levels_monitoring_settings = {
+        is_draw_levels_for_1h_candles: isDrawLevelsFor1hCandles,
+        is_draw_levels_for_4h_candles: isDrawLevelsFor4hCandles,
+        is_draw_levels_for_day_candles: isDrawLevelsForDayCandles,
+        number_candles_for_calculate_1h_levels: numberCandlesForCalculate1hLevels,
+        number_candles_for_calculate_4h_levels: numberCandlesForCalculate4hLevels,
+        number_candles_for_calculate_day_levels: numberCandlesForCalculateDayLevels,
+      };
 
-      const bound = userLevelBounds.find(
-        bound => bound._id.toString() === boundId.toString(),
-      );
+      const resultAddLevels = await makeRequest({
+        method: 'POST',
+        url: URL_ADD_USER_LEVELS_BOUNDS,
 
-      if (bound) {
-        if (!bound.is_active_widget) {
-          bound.is_active_widget = true;
-          bound.$element.addClass('extended');
-
-          bound.widget = new TradingView.widget({
-            width: `${bound.$element.width()}px`,
-            height: 300,
-            symbol: bound.instrument_doc.name,
-            interval: '5',
-            timezone: 'Etc/UTC',
-            theme: 'light',
-            style: '1',
-            locale: 'ru',
-            toolbar_bg: '#f1f3f6',
-            enable_publishing: false,
-            hide_legend: true,
-            hide_side_toolbar: false,
-            save_image: false,
-            container_id: `chart-${bound._id}`,
-          });
-        } else {
-          bound.is_active_widget = false;
-          bound.$element.removeClass('extended');
-          bound.$element.find('.chart').empty();
-
-          bound.widget = false;
+        body: {
+          userId: user._id,
         }
+      });
+
+      if (!resultAddLevels || !resultAddLevels.status) {
+        alert(resultUpdate.message || 'Couldnt makeRequest URL_ADD_USER_LEVELS_BOUNDS');
+        return false;
       }
+
+      userLevelBounds = resultAddLevels.result;
+
+      if (choosedInstrumentId) {
+        drawLevelLines({
+          instrumentId: choosedInstrumentId,
+          period: choosenPeriod,
+        });
+      }
+
+      alert('done');
     });
 });
 
-const renderLevels = (isFirstRender = false) => {
-  userLevelBounds.forEach(bound => {
-    const instrumentPrice = bound.instrument_doc.price;
+const renderListInstruments = targetDocs => {
+  let appendInstrumentsStr = '';
 
-    let hasPriceCrossedOriginalPrice = false;
-
-    if (bound.is_long) {
-      if (instrumentPrice >= bound.price_original) {
-        hasPriceCrossedOriginalPrice = true;
-      }
-    } else {
-      if (instrumentPrice <= bound.price_original) {
-        hasPriceCrossedOriginalPrice = true;
-      }
-    }
-
-    if (hasPriceCrossedOriginalPrice) {
-      bound.is_worked = true;
-    }
-
-    let differenceBetweenNewPriceAndOriginalPrice;
-
-    if (bound.is_worked) {
-      if (bound.is_long) {
-        differenceBetweenNewPriceAndOriginalPrice = bound.price_original - instrumentPrice;
-      } else {
-        differenceBetweenNewPriceAndOriginalPrice = instrumentPrice - bound.price_original;
-      }
-    } else {
-      differenceBetweenNewPriceAndOriginalPrice = Math.abs(instrumentPrice - bound.price_original);
-    }
-
-    bound.price_original_percent =
-      parseFloat((100 / (bound.price_original / differenceBetweenNewPriceAndOriginalPrice))
-        .toFixed(2));
+  targetDocs.forEach(doc => {
+    appendInstrumentsStr += `<div class="instrument" data-instrumentid=${doc._id}>${doc.name}</div>`;
   });
 
-  const boundsToRemove = userLevelBounds.filter(
-    bound => bound.price_original_percent >= 10 && bound.is_rendered,
-  );
-
-  const softBounds = userLevelBounds
-    .filter(bound => bound.price_original_percent <= 5 && !bound.is_worked)
-    .sort((a, b) => {
-      if (a.price_original_percent < b.price_original_percent) {
-        return -1;
-      }
-
-      return 1;
-    });
-
-
-  let indexOrder = 1;
-
-  const workedBounds = userLevelBounds.filter(bound => bound.is_worked);
-
-  if (workedBounds && workedBounds.length) {
-    workedBounds.forEach(bound => {
-      bound.index_order = indexOrder;
-      indexOrder += 1;
-    });
-  }
-
-  if (softBounds && softBounds.length) {
-    softBounds.forEach(bound => {
-      bound.index_order = indexOrder;
-      indexOrder += 1;
-    });
-  }
-
-  if (isFirstRender) {
-    softBounds.forEach(bound => {
-      if (bound.price_original_percent <= PERCENT_FOR_SWITCH_ON_NOT_PROCESSING) {
-        bound.is_warning_played = true;
-      }
-    });
-  } else {
-    softBounds.forEach(bound => {
-      if (bound.price_original_percent <= PERCENT_FOR_SWITCH_ON_NOT_PROCESSING
-        && !bound.is_warning_played) {
-        // soundNewLevel.play();
-        bound.is_warning_played = true;
-      }
-    });
-  }
-
-  let appendStr = '';
-  const newRenderedBounds = [];
-
-  [...workedBounds, ...softBounds].forEach(bound => {
-    const instrumentPrice = bound.instrument_doc.price;
-
-    const blockWithOriginalPrice = `<p class="price_original">
-      <span class="price">${bound.price_original}</span>
-      <span class="percents">${bound.price_original_percent}%</span>
-    </p>`;
-
-    const blockWithInstrumentPrice = `<p class="price_current">
-      <span class="price">${instrumentPrice}</span></p>`;
-
-    if (!bound.is_rendered) {
-      let isProcessed = false;
-      let isMonitoring = false;
-      const isWorked = bound.is_worked;
-
-      if (!isWorked) {
-        isMonitoring = bound.is_monitoring;
-
-        if (!isMonitoring) {
-          isProcessed = bound.price_original_percent <= PERCENT_FOR_SWITCH_ON_NOT_PROCESSING && !bound.is_monitoring;
-        }
-      }
-
-      appendStr += `<div
-        id="bound-${bound._id}"
-        style="order: ${bound.index_order};"
-        class="instrument ${bound.instrument_doc.name}
-        ${isWorked ? 'is_worked' : ''}
-        ${isProcessed ? 'not_processed' : ''}
-        ${isMonitoring ? 'is_monitoring' : ''}"
-        data-boundid="${bound._id}"
-        data-instrumentid="${bound.instrument_id}"
-        data-name="${bound.instrument_doc.name}"
-      >
-        <span class="instrument-name">${bound.instrument_doc.name} (${bound.is_long ? 'long' : 'short'})</span>
-        <div class="levels">
-          ${!bound.is_long && instrumentPrice > bound.price_original ? blockWithInstrumentPrice : ''}
-          ${bound.is_long && instrumentPrice >= bound.price_original && isWorked ? blockWithInstrumentPrice : ''}
-
-          ${blockWithOriginalPrice}
-
-          ${bound.is_long && instrumentPrice < bound.price_original ? blockWithInstrumentPrice : ''}
-          ${!bound.is_long && instrumentPrice <= bound.price_original && isWorked ? blockWithInstrumentPrice : ''}
-
-        </div>
-
-        <div class="chart" id="chart-${bound._id}"></div>
-
-        <div class="navbar">
-          <button class="tradingview-chart" title="График в TV">TV</button>
-          <button class="remove-level" title="Удалить уровень">x</button>
-          <button class="reload-levels" title="Обновить уровни для инструмента">
-            <img src="/images/reload.png" alt="reload">
-          </button>
-        </div>
-      </div>`;
-
-      newRenderedBounds.push(bound);
-    } else {
-      bound.$element.css('order', bound.index_order);
-
-      const $blockWithOriginalPrice = bound.$element.find('p.price_original');
-      const $blockWithInstrumentPrice = bound.$element.find('p.price_current');
-
-      $blockWithOriginalPrice.find('span.price').text(bound.price_original);
-      $blockWithOriginalPrice.find('span.percents').text(`${bound.price_original_percent}%`);
-
-      $blockWithInstrumentPrice.find('span.price').text(bound.instrument_doc.price);
-
-      if (bound.price_original_percent > PERCENT_FOR_SWITCH_ON_NOT_PROCESSING
-        && bound.$element.hasClass('not_processed')) {
-        bound.$element.removeClass('not_processed');
-      }
-
-      if (bound.price_original_percent <= PERCENT_FOR_SWITCH_ON_NOT_PROCESSING
-        && !bound.$element.hasClass('not_processed')) {
-        bound.$element.addClass('not_processed');
-      }
-
-      if (bound.is_worked && !bound.$element.hasClass('is_worked')) {
-        bound.$element
-          .removeClass('is_monitoring')
-          .addClass('is_worked')
-          .find('.levels')
-          .empty()
-          .append(`
-          ${bound.is_long && instrumentPrice >= bound.price_original ? blockWithInstrumentPrice : ''}
-
-          ${blockWithOriginalPrice}
-
-          ${!bound.is_long && instrumentPrice <= bound.price_original ? blockWithInstrumentPrice : ''}
-        `);
-      }
-    }
-  });
-
-  if (newRenderedBounds && newRenderedBounds.length) {
-    $container.append(appendStr);
-
-    newRenderedBounds.forEach(bound => {
-      bound.is_rendered = true;
-      bound.$element = $(`#bound-${bound._id}`);
-    });
-  }
-
-  if (boundsToRemove && boundsToRemove.length) {
-    boundsToRemove.forEach(bound => {
-      bound.is_rendered = false;
-      bound.$element.remove();
-    });
-  }
+  $instrumentsList
+    .empty()
+    .append(appendInstrumentsStr);
 };
 
-const updatePrice = ({ instrumentName, newPrice }) => {
-  const targetBounds = userLevelBounds.filter(
-    bound => bound.instrument_doc.name === instrumentName,
-  );
-
-  targetBounds.forEach(bound => {
-    bound.instrument_doc.price = newPrice;
+const drawLevelLines = ({
+  instrumentId,
+  period,
+}) => {
+  chartCandles.extraSeries.forEach(series => {
+    chartCandles.removeSeries(series, false);
   });
+
+  const instrumentData = chartPeriods.getDataByPeriod(period) || [];
+  const endTime = instrumentData[instrumentData.length - 1].time;
+
+  userLevelBounds
+    .filter(bound => bound.instrument_id === instrumentId)
+    .forEach(bound => {
+      let startCandleTime = moment(bound.level_start_candle_time).utc();
+
+      switch (period) {
+        case 'day': startCandleTime = startCandleTime.startOf('day'); break;
+        case '4h': startCandleTime = startCandleTime.startOf('day'); break;
+        // case 'month': startCandleTime = startCandleTime.startOf('month'); break;
+        default: startCandleTime = startCandleTime.startOf('hour'); break;
+      }
+
+      let validTime;
+
+      if (['5m', '1h', '4h'].includes(choosenPeriod)) {
+        validTime = startCandleTime.unix();
+      } else {
+        validTime = startCandleTime.format('YYYY-MM-DD');
+      }
+
+      const newExtraSeries = chartCandles.addExtraSeries();
+
+      chartCandles.drawSeries(newExtraSeries, [{
+        value: bound.level_price,
+        time: validTime,
+      }, {
+        value: bound.level_price,
+        time: endTime,
+      }]);
+    });
 };

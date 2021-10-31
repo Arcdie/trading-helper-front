@@ -1,4 +1,6 @@
-/* global LightweightCharts */
+/* global
+functions,
+objects, LightweightCharts */
 
 class ChartCandles {
   constructor(rootContainer) {
@@ -6,53 +8,18 @@ class ChartCandles {
     this.appendChart(rootContainer);
 
     this.containerDocument = document.getElementsByClassName(this.containerName)[0];
-
-    this.settings = {};
-
     this.containerWidth = this.containerDocument.clientWidth;
     this.containerHeight = this.containerDocument.clientHeight;
 
     this.addChart();
-    this.addSeries();
+    this.addMainSeries();
+
     this.markers = [];
+    this.extraSeries = [];
   }
 
   appendChart(rootContainer) {
     rootContainer.insertAdjacentHTML('beforeend', `<div class="${this.containerName}"></div>`);
-  }
-
-  drawSeries(data) {
-    if (Array.isArray(data)) {
-      this.series.setData(data);
-    } else {
-      this.series.update(data);
-    }
-  }
-
-  hideSeries() {
-    this.series.applyOptions({
-      visible: false,
-    });
-  }
-
-  showSeries() {
-    this.series.applyOptions({
-      visible: true,
-    });
-  }
-
-  drawMarkers() {
-    this.series.setMarkers(this.markers.map(marker => ({
-      time: marker.time,
-      color: marker.color,
-      text: marker.text,
-      position: 'aboveBar',
-      shape: 'arrowDown',
-    })));
-  }
-
-  addMarker(data) {
-    this.markers.push(data);
   }
 
   addChart() {
@@ -63,7 +30,7 @@ class ChartCandles {
 
     this.chart.applyOptions({
       layout: {
-        backgroundColor: '#F6FDFF',
+        backgroundColor: 'white',
       },
 
       crosshair: {
@@ -76,22 +43,92 @@ class ChartCandles {
     });
   }
 
+  addMainSeries() {
+    this.mainSeries = this.chart.addCandlestickSeries({
+      upColor: '#000FFF',
+      downColor: 'rgba(0, 0, 0, 0)',
+      borderDownColor: '#000FFF',
+      wickColor: '#000000',
+
+      autoscaleInfoProvider: original => {
+        const res = original();
+
+        if (res && res.priceRange) {
+          this.changePriceRangeForExtraSeries(res.priceRange);
+        }
+
+        return res;
+      },
+    });
+  }
+
+  addExtraSeries() {
+    const newExtraSeries = this.chart.addLineSeries({
+      priceLineSource: false,
+      priceLineVisible: false,
+      lineWidth: 1,
+      lastValueVisible: false,
+      priceScaleId: '',
+    });
+
+    newExtraSeries.id = new Date().getTime();
+    this.extraSeries.push(newExtraSeries);
+    return newExtraSeries;
+  }
+
+  addMarker(data) {
+    this.markers.push(data);
+  }
+
+  drawSeries(series, data) {
+    if (Array.isArray(data)) {
+      series.setData(data);
+      data.forEach(e => { e.isRendered = true; });
+    } else {
+      series.update(data);
+    }
+  }
+
+  drawMarkers() {
+    this.mainSeries.setMarkers(this.markers.map(marker => ({
+      time: marker.time,
+      color: marker.color,
+      text: marker.text,
+      position: 'aboveBar',
+      shape: 'arrowDown',
+    })));
+  }
+
   removeChart() {
     this.removeSeries();
     this.chart.remove();
   }
 
-  addSeries() {
-    this.series = this.chart.addCandlestickSeries({
-      upColor: '#000FFF',
-      downColor: 'rgba(0, 0, 0, 0)',
-      borderDownColor: '#000FFF',
-      wickColor: '#000000',
-    });
+  removeSeries(series, isMainSeries) {
+    this.chart.removeSeries(series);
+
+    if (isMainSeries) {
+      this.mainSeries = false;
+    } else {
+      this.extraSeries = this.extraSeries.filter(
+        extraSeries => extraSeries.id !== series.id,
+      );
+    }
   }
 
-  removeSeries() {
-    this.chart.removeSeries(this.series);
-    this.series = false;
+  changePriceRangeForExtraSeries({
+    minValue,
+    maxValue,
+  }) {
+    this.extraSeries.forEach(series => {
+      series.applyOptions({
+        autoscaleInfoProvider: () => ({
+          priceRange: {
+            minValue,
+            maxValue,
+          },
+        }),
+      });
+    });
   }
 }

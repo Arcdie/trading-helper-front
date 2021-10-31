@@ -2,13 +2,58 @@ extends ../app
 
 block variables
 	-
-		const pageTitle = 'Мониторинг уровней';
+		const pageTitle = 'Уровни';
 
 block content
-	.page.levels-monitoring
-		.container
+	.page.experiment
+		.chart-container
+			.charts-nav
+				.legend
+					p.values
+						| ОТКР
+						span.open 0
+						| МАКС
+						span.high 0
+						| МИН
+						span.low 0
+						| ЗАКР
+						span.close 0
+				
+				.row
+					.chart-periods
+						.5m(data-period='5m')
+							span 5M
+						.1h(data-period='1h')
+							span 1Ч
+						.4h(data-period='4h')
+							span 4Ч
+						.day(data-period='day')
+							span Д
+						//- .month(data-period='month')
+						//- 	span Мес
+
+					.settings
+						img(src="/images/settings.png", alt="settings")
+
+			.charts
+
+		.instruments-container
+			.search
+				input(type="text" placeholder="Поиск")
+		
+			.instruments-list
+				.headlines
+					span Инструмент
+				
+				.list
 
 block scripts
-	script(src='https://s3.tradingview.com/tv.js')
+	script(src='/libs/moment.min.js')
+	script(src='/libs/trading-view-charts.min.js')
+	
 	script(src='/javascripts/websocket.js')
+	script(src='/javascripts/chart-functions/chart-candles.js')
+	script(src='/javascripts/chart-functions/chart-volume.js')
+	script(src='/javascripts/chart-functions/chart-periods.js')
+
 	script(src='/javascripts/web/levels-monitoring.js')
