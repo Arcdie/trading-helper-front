@@ -24,7 +24,7 @@ class ChartCandles {
     rootContainer.insertAdjacentHTML('beforeend', `<div class="${this.containerName}"></div>`);
   }
 
-  setOriginalData(instrumentData) {
+  setOriginalData(instrumentData, period) {
     const preparedData = ChartCandles.prepareNewData(instrumentData);
     this.originalData.unshift(...preparedData);
   }

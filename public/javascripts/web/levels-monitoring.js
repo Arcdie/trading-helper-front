@@ -37,7 +37,7 @@ const TIMEFRAME_NUMBER_CANDLES_MAPPER = {
 
 const DEFAULT_PERIOD = AVAILABLE_PERIODS.get('5M');
 
-let choosedInstrumentId;
+let choosenInstrumentId;
 let choosenPeriod = DEFAULT_PERIOD;
 
 let instrumentsDocs = [];
@@ -67,7 +67,7 @@ wsClient.onmessage = async data => {
   if (parsedData.actionName) {
     switch (parsedData.actionName) {
       case 'candleData': {
-        if (parsedData.data.instrumentId !== choosedInstrumentId) {
+        if (parsedData.data.instrumentId !== choosenInstrumentId) {
           break;
         }
 
@@ -163,9 +163,11 @@ $(document).ready(async () => {
 
       choosenPeriod = period;
 
-      await loadChart({
-        instrumentId: choosedInstrumentId,
-      });
+      if (choosenInstrumentId) {
+        await loadChart({
+          instrumentId: choosenInstrumentId,
+        });
+      }
     });
 
   $settings
@@ -194,7 +196,7 @@ $(document).ready(async () => {
       const $instrument = $(this);
       const instrumentId = $instrument.data('instrumentid');
 
-      if (choosedInstrumentId === instrumentId) {
+      if (choosenInstrumentId === instrumentId) {
         return true;
       }
 
@@ -277,9 +279,9 @@ $(document).ready(async () => {
 
       userLevelBounds = resultAddLevels.result;
 
-      if (choosedInstrumentId) {
+      if (choosenInstrumentId) {
         drawLevelLines({
-          instrumentId: choosedInstrumentId,
+          instrumentId: choosenInstrumentId,
           period: choosenPeriod,
         });
       }
@@ -309,6 +311,11 @@ const drawLevelLines = ({
   });
 
   const instrumentData = chartCandles.originalData;
+
+  if (!instrumentData || !instrumentData.length) {
+    return true;
+  }
+
   const endTime = instrumentData[instrumentData.length - 1].time;
 
   userLevelBounds
@@ -372,11 +379,13 @@ const loadChart = async ({
     return true;
   }
 
-  choosedInstrumentId = instrumentId;
+  choosenInstrumentId = instrumentId;
   const targetDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
 
   chartCandles = new ChartCandles($rootContainer);
   chartVolume = new ChartVolume($rootContainer);
+
+  chartCandles.setOriginalData(resultGetCandles.result);
 
   const listCharts = [chartCandles, chartVolume];
 
@@ -395,6 +404,24 @@ const loadChart = async ({
     instrumentId,
     period: choosenPeriod,
   });
+
+  if (['5m', '1h', '4h'].includes(choosenPeriod)) {
+    listCharts.forEach(chartWrapper => {
+      chartWrapper.chart.applyOptions({
+        timeScale: {
+          timeVisible: true,
+        },
+      });
+    });
+  } else {
+    listCharts.forEach(chartWrapper => {
+      chartWrapper.chart.applyOptions({
+        timeScale: {
+          timeVisible: false,
+        },
+      });
+    });
+  }
 
   chartCandles.chart.subscribeCrosshairMove((param) => {
     if (param.time) {
@@ -450,14 +477,18 @@ const loadChart = async ({
       if (barsInfo !== null && barsInfo.barsBefore < -5) {
         isStartedLoad = true;
 
+        if (!chartCandles.originalData.length) {
+          return true;
+        }
+
         const limit = TIMEFRAME_NUMBER_CANDLES_MAPPER[choosenPeriod];
-        const endTime = new Date(chartCandles.originalData[0].time * 1000).toISOString();
+        const endTime = new Date(chartCandles.originalData[0].timeUnix * 1000).toISOString();
 
         console.log('start loading');
 
         const resultGetCandles = await makeRequest({
           method: 'GET',
-          url: `${URL_GET_CANDLES}?instrumentId=${instrumentId}&limit=${limit}&endTime=${endTime}`,
+          url: `${URL_GET_CANDLES}/${choosenPeriod}?instrumentId=${instrumentId}&limit=${limit}&endTime=${endTime}`,
         });
 
         if (!resultGetCandles || !resultGetCandles.status) {
