@@ -29,6 +29,7 @@ class ChartCandles {
   setOriginalData(instrumentData) {
     const preparedData = this.prepareNewData(instrumentData);
     this.originalData.unshift(...preparedData);
+    return preparedData;
   }
 
   addChart() {
