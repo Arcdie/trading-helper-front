@@ -28,7 +28,6 @@ const windows = {
   },
 
   getLevelsMonitoringSettings(settings) {
-    console.log('settings', settings);
     return `<div class="window levels-monitroing-settings">
       <button class="close"></button>
 

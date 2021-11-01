@@ -41,7 +41,6 @@ let choosenInstrumentId;
 let choosenPeriod = DEFAULT_PERIOD;
 
 let instrumentsDocs = [];
-let userLevelBounds = [];
 
 let chartVolume = {};
 let chartCandles = {};
@@ -50,8 +49,11 @@ let chartCandles = {};
 const $instrumentsContainer = $('.instruments-container');
 const $instrumentsList = $instrumentsContainer.find('.instruments-list .list');
 
-const $settings = $('.charts-nav .settings');
+const $chartsNav = $('.charts-nav');
 const $chartPeriods = $('.chart-periods div');
+const $settings = $chartsNav.find('.settings');
+const $actionsMenu = $chartsNav.find('.actions-menu');
+const $saveLevels = $actionsMenu.find('#save-levels');
 const $rootContainer = document.getElementsByClassName('charts')[0];
 
 const $legend = $('.legend');
@@ -66,6 +68,22 @@ wsClient.onmessage = async data => {
 
   if (parsedData.actionName) {
     switch (parsedData.actionName) {
+      case 'newFuturesInstrumentPrice': {
+        console.log('newFuturesInstrumentPrice');
+        const {
+          newPrice,
+          instrumentName,
+        } = parsedData.data;
+
+        const targetDoc = instrumentsDocs.find(doc => doc.name === instrumentName);
+
+        if (targetDoc) {
+          targetDoc.price = newPrice;
+        }
+
+        break;
+      }
+
       case 'candleData': {
         if (parsedData.data.instrumentId !== choosenInstrumentId) {
           break;
@@ -132,7 +150,6 @@ $(document).ready(async () => {
     return true;
   }
 
-  userLevelBounds = resultGetLevels.result;
   instrumentsDocs = resultGetInstruments.result;
 
   $instrumentsContainer
@@ -142,6 +159,30 @@ $(document).ready(async () => {
     .css({ maxHeight: windowHeight });
 
   renderListInstruments(instrumentsDocs);
+
+  if (resultGetLevels.result.length) {
+    instrumentsDocs.forEach(instrumentDoc => {
+      if (!instrumentDoc.user_level_bounds) {
+        instrumentDoc.user_level_bounds = [];
+      }
+
+      const targetBounds = resultGetLevels.result.filter(
+        bound => bound.instrument_id === instrumentDoc._id,
+      );
+
+      if (targetBounds && targetBounds.length) {
+        targetBounds.forEach(bound => {
+          instrumentDoc.user_level_bounds.push({
+            level_price: bound.level_price,
+            level_timeframe: bound.level_timeframe,
+            level_start_candle_time: bound.level_start_candle_time,
+          });
+        });
+      }
+    });
+
+    intervalCalculateLevels(10 * 1000);
+  }
 
   WORKING_PERIODS.forEach(period => {
     const $period = $chartPeriods.parent().find(`.${period}`);
@@ -175,6 +216,28 @@ $(document).ready(async () => {
       initPopWindow(windows.getLevelsMonitoringSettings(user.levels_monitoring_settings || {}));
     });
 
+  $saveLevels
+    .on('click', async function () {
+      $(this).prop('disabled', true);
+      alert('Это может занять некоторое время, чуть позже ускорю этот процесс');
+
+      const resultAddLevels = await makeRequest({
+        method: 'POST',
+        url: URL_ADD_USER_LEVELS_BOUNDS,
+
+        body: {
+          userId: user._id,
+        },
+      });
+
+      if (!resultAddLevels || !resultAddLevels.status) {
+        alert(resultAddLevels.message || 'Couldnt makeRequest URL_ADD_USER_LEVELS_BOUNDS');
+        return false;
+      }
+
+      return location.reload(true);
+    });
+
   $('.search input')
     .on('keyup', function () {
       const value = $(this).val().toLowerCase();
@@ -206,6 +269,7 @@ $(document).ready(async () => {
 
       $instrument.addClass('is_active');
 
+      choosenInstrumentId = instrumentId;
       await loadChart({ instrumentId });
     });
 
@@ -263,30 +327,10 @@ $(document).ready(async () => {
         number_candles_for_calculate_day_levels: numberCandlesForCalculateDayLevels,
       };
 
-      const resultAddLevels = await makeRequest({
-        method: 'POST',
-        url: URL_ADD_USER_LEVELS_BOUNDS,
+      $('.shadow').click();
+      $saveLevels.addClass('is_active');
 
-        body: {
-          userId: user._id,
-        },
-      });
-
-      if (!resultAddLevels || !resultAddLevels.status) {
-        alert(resultUpdate.message || 'Couldnt makeRequest URL_ADD_USER_LEVELS_BOUNDS');
-        return false;
-      }
-
-      userLevelBounds = resultAddLevels.result;
-
-      if (choosenInstrumentId) {
-        drawLevelLines({
-          instrumentId: choosenInstrumentId,
-          period: choosenPeriod,
-        });
-      }
-
-      alert('done');
+      // alert('done');
     });
 });
 
@@ -294,7 +338,13 @@ const renderListInstruments = targetDocs => {
   let appendInstrumentsStr = '';
 
   targetDocs.forEach(doc => {
-    appendInstrumentsStr += `<div class="instrument" data-instrumentid=${doc._id}>${doc.name}</div>`;
+    appendInstrumentsStr += `<div
+      id="instrument-${doc._id}"
+      class="instrument"
+      data-instrumentid=${doc._id}>
+      <span class="instrument-name">${doc.name}</span>
+      <span class="levels"></span>
+    </div>`;
   });
 
   $instrumentsList
@@ -306,10 +356,6 @@ const drawLevelLines = ({
   instrumentId,
   period,
 }) => {
-  if (!chartCandles.extraSeries.length) {
-    return true;
-  }
-
   chartCandles.extraSeries.forEach(series => {
     chartCandles.removeSeries(series, false);
   });
@@ -322,8 +368,9 @@ const drawLevelLines = ({
 
   const endTime = instrumentData[instrumentData.length - 1].time;
 
-  userLevelBounds
-    .filter(bound => bound.instrument_id === instrumentId)
+  const targetInstrumentDoc = instrumentsDocs.find(doc => instrumentId === doc._id);
+
+  targetInstrumentDoc.user_level_bounds
     .forEach(bound => {
       let startCandleTime = moment(bound.level_start_candle_time).utc();
 
@@ -402,6 +449,11 @@ const loadChart = async ({
       subscriptionName: 'candleData',
       instrumentName: targetDoc.name,
     },
+  }));
+
+  wsClient.send(JSON.stringify({
+    actionName: 'subscribe',
+    data: { subscriptionName: 'newFuturesInstrumentPrice' },
   }));
 
   drawLevelLines({
@@ -520,4 +572,35 @@ const loadChart = async ({
         isStartedLoad = false;
       }
     });
+};
+
+const intervalCalculateLevels = (interval) => {
+  instrumentsDocs.forEach(instrumentDoc => {
+    instrumentDoc.user_level_bounds.forEach(bound => {
+      const differenceBetweenInstrumentAndLevelPrices = Math.abs(instrumentDoc.price - bound.level_price);
+      const percentPerPrice = 100 / (instrumentDoc.price / differenceBetweenInstrumentAndLevelPrices);
+
+      bound.percent_per_price = percentPerPrice;
+    });
+
+    instrumentDoc.user_level_bounds = instrumentDoc.user_level_bounds.sort((a, b) => {
+      return a.percent_per_price < b.percent_per_price ? -1 : 1;
+    });
+  });
+
+  const sortedInstruments = instrumentsDocs
+    .filter(doc => doc.user_level_bounds.length)
+    .sort((a, b) => {
+      return a.user_level_bounds[0].percent_per_price < b.user_level_bounds[0].percent_per_price ? -1 : 1;
+    });
+
+  sortedInstruments.forEach((instrumentDoc, index) => {
+    const $instrument = $(`#instrument-${instrumentDoc._id}`);
+    $instrument.css('order', index);
+    $instrument
+      .find('.levels')
+      .text(`${instrumentDoc.user_level_bounds[0].percent_per_price.toFixed(1)}%`);
+  });
+
+  setTimeout(intervalCalculateLevels, interval, interval);
 };

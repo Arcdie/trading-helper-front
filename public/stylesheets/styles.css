@@ -503,78 +503,138 @@ input:checked + .slider:before {
         float: right; }
 
 .levels-monitoring {
-  width: 100%; }
-  .levels-monitoring .container {
-    display: inline-flex;
-    flex-wrap: wrap;
-    padding: 15px; }
-    .levels-monitoring .container .instrument {
-      width: 190px;
-      height: 170px;
-      float: left;
-      position: relative;
-      border: 1px solid black;
-      padding: 15px 10px;
-      margin-right: 20px;
-      margin-bottom: 20px;
-      display: flex;
-      flex-wrap: wrap;
-      align-content: flex-start; }
-      .levels-monitoring .container .instrument.is_worked {
-        background-color: #b8b8b8 !important; }
-      .levels-monitoring .container .instrument.is_monitoring {
-        background-color: #06d73c40 !important; }
-      .levels-monitoring .container .instrument.not_processed {
-        background-color: #ffca6a78; }
-      .levels-monitoring .container .instrument.extended {
-        width: 22.6%;
-        height: 443px; }
-        .levels-monitoring .container .instrument.extended .navbar {
-          margin-top: 10px; }
-      .levels-monitoring .container .instrument .instrument-name {
-        text-align: center;
-        display: block;
-        cursor: pointer;
-        margin-bottom: 15px;
-        font: 19px sans-serif; }
-      .levels-monitoring .container .instrument .levels {
-        width: 100%; }
-        .levels-monitoring .container .instrument .levels p {
-          margin-bottom: 5px;
-          font: 19px monospace; }
-          .levels-monitoring .container .instrument .levels p.price_original {
-            border-top: 1px solid black;
-            border-bottom: 1px solid; }
-        .levels-monitoring .container .instrument .levels span.percents {
-          float: right; }
-      .levels-monitoring .container .instrument .navbar {
+  padding: 10px;
+  position: relative;
+  display: flex; }
+  .levels-monitoring .instruments-container {
+    width: 20%;
+    overflow-y: hidden;
+    display: inline-block;
+    box-sizing: border-box;
+    border: 1px solid black; }
+    .levels-monitoring .instruments-container .search {
+      width: 100%;
+      height: 35px; }
+      .levels-monitoring .instruments-container .search input[type="text"] {
         width: 100%;
+        height: 100%;
+        box-sizing: border-box;
+        border-right: none;
+        border-top: none;
+        border-left: none;
+        padding: 0 8px;
+        outline: none; }
+    .levels-monitoring .instruments-container .instruments-list {
+      width: 100%; }
+      .levels-monitoring .instruments-container .instruments-list .headlines {
+        text-align: left;
+        padding: 5px 10px;
+        border-bottom: 1px solid black; }
+        .levels-monitoring .instruments-container .instruments-list .headlines span {
+          cursor: pointer;
+          display: inline-block;
+          box-sizing: border-box; }
+          .levels-monitoring .instruments-container .instruments-list .headlines span.is_active {
+            background-color: #00a1ff59; }
+          .levels-monitoring .instruments-container .instruments-list .headlines span.instrument-name {
+            width: 80%; }
+          .levels-monitoring .instruments-container .instruments-list .headlines span.levels {
+            width: 20%;
+            text-align: center; }
+      .levels-monitoring .instruments-container .instruments-list .list {
+        display: flex;
+        overflow-y: scroll;
+        flex-direction: column; }
+        .levels-monitoring .instruments-container .instruments-list .list .instrument {
+          cursor: pointer;
+          padding: 10px 10px;
+          border-bottom: 1px solid black; }
+          .levels-monitoring .instruments-container .instruments-list .list .instrument.is_active {
+            background-color: #0066ff61 !important; }
+          .levels-monitoring .instruments-container .instruments-list .list .instrument:hover {
+            background-color: #0066ff1f; }
+          .levels-monitoring .instruments-container .instruments-list .list .instrument:last-child {
+            border-bottom: none; }
+          .levels-monitoring .instruments-container .instruments-list .list .instrument span {
+            cursor: pointer;
+            display: inline-block;
+            box-sizing: border-box; }
+            .levels-monitoring .instruments-container .instruments-list .list .instrument span.instrument-name {
+              width: 79%; }
+            .levels-monitoring .instruments-container .instruments-list .list .instrument span.levels {
+              width: 19%;
+              text-align: center; }
+  .levels-monitoring .chart-container {
+    width: 80%;
+    display: inline-block;
+    box-sizing: border-box;
+    position: relative;
+    border-bottom: 1px solid black; }
+    .levels-monitoring .chart-container .charts-nav {
+      position: absolute;
+      z-index: 999;
+      top: 15px;
+      left: 15px; }
+      .levels-monitoring .chart-container .charts-nav .row {
+        display: flex;
+        align-items: center; }
+    .levels-monitoring .chart-container .legend p.values span {
+      color: #000FFF;
+      margin-left: 2px;
+      margin-right: 5px; }
+    .levels-monitoring .chart-container .actions-menu {
+      margin-top: 12px; }
+      .levels-monitoring .chart-container .actions-menu button {
+        display: none;
+        cursor: pointer; }
+        .levels-monitoring .chart-container .actions-menu button.is_active {
+          display: block; }
+    .levels-monitoring .chart-container .chart-periods {
+      display: flex;
+      margin-top: 12px; }
+      .levels-monitoring .chart-container .chart-periods div {
+        width: 40px;
+        height: 40px;
+        cursor: pointer;
+        display: none;
+        box-sizing: border-box;
+        margin-right: 5px;
         position: relative;
-        z-index: 9;
-        margin-top: 26px; }
-        .levels-monitoring .container .instrument .navbar button {
-          border-radius: 100px;
-          width: 30px;
-          height: 30px;
-          background-color: transparent;
-          cursor: pointer; }
-          .levels-monitoring .container .instrument .navbar button img {
-            width: 105%;
-            margin-top: 3px; }
-          .levels-monitoring .container .instrument .navbar button.tradingview-chart {
-            font-size: 11px;
-            float: left; }
-          .levels-monitoring .container .instrument .navbar button.remove-level {
-            float: right;
-            font-size: 14px; }
-          .levels-monitoring .container .instrument .navbar button.reload-levels {
-            float: right;
-            margin-right: 6px; }
-      .levels-monitoring .container .instrument .chart {
-        margin-top: 15px; }
-  .levels-monitoring .settings {
-    display: block;
-    border-top: 1px solid black; }
+        border: 1px dashed #d9d9d9;
+        background-color: white; }
+        .levels-monitoring .chart-container .chart-periods div.is_worked {
+          display: flex;
+          justify-content: center;
+          align-items: center; }
+        .levels-monitoring .chart-container .chart-periods div.is_active {
+          border-color: #00bf20; }
+        .levels-monitoring .chart-container .chart-periods div span {
+          margin: 8px auto;
+          text-align: center;
+          display: block; }
+    .levels-monitoring .chart-container .settings {
+      display: flex;
+      width: 27px;
+      margin-top: 8px;
+      margin-left: 5px;
+      cursor: pointer; }
+      .levels-monitoring .chart-container .settings img {
+        width: 100%; }
+    .levels-monitoring .chart-container .chart-candles {
+      width: 100%;
+      height: 70%;
+      /* height: 70%; */
+      /* height: 50%; */
+      border: 1px solid black;
+      border-right: none;
+      box-sizing: border-box; }
+    .levels-monitoring .chart-container .chart-volume {
+      width: 100%;
+      height: 30%;
+      border: 1px solid black;
+      border-top: none;
+      border-right: none;
+      box-sizing: border-box; }
 
 .robots-statistics .container-instruments {
   padding: 15px; }

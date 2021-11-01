@@ -5,7 +5,7 @@ block variables
 		const pageTitle = 'Уровни';
 
 block content
-	.page.experiment
+	.page.levels-monitoring
 		.chart-container
 			.charts-nav
 				.legend
@@ -35,6 +35,9 @@ block content
 					.settings
 						img(src="/images/settings.png", alt="settings")
 
+				.actions-menu
+					button#save-levels Сохранить уровни
+
 			.charts
 
 		.instruments-container
@@ -43,8 +46,9 @@ block content
 		
 			.instruments-list
 				.headlines
-					span Инструмент
-				
+					span.instrument-name Инструмент
+					span.levels.is_active LvL
+
 				.list
 
 block scripts
