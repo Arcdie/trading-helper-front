@@ -85,6 +85,10 @@ wsClient.onmessage = async data => {
       }
 
       case 'candleData': {
+        if (choosenPeriod !== '5m') {
+          break;
+        }
+
         if (parsedData.data.instrumentId !== choosenInstrumentId) {
           break;
         }
@@ -369,6 +373,10 @@ const drawLevelLines = ({
   const endTime = instrumentData[instrumentData.length - 1].time;
 
   const targetInstrumentDoc = instrumentsDocs.find(doc => instrumentId === doc._id);
+
+  if (!targetInstrumentDoc.user_level_bounds || !targetInstrumentDoc.user_level_bounds.length) {
+    return true;
+  }
 
   targetInstrumentDoc.user_level_bounds
     .forEach(bound => {
