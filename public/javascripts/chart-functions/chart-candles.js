@@ -93,7 +93,6 @@ class ChartCandles {
   drawSeries(series, data) {
     if (Array.isArray(data)) {
       series.setData(data);
-      data.forEach(e => { e.isRendered = true; });
     } else {
       series.update(data);
     }
@@ -158,7 +157,6 @@ class ChartCandles {
           low: data.data[2],
           high: data.data[3],
           volume: data.volume,
-          isRendered: false,
         };
       })
       .sort((a, b) => {

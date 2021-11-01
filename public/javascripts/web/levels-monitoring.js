@@ -509,11 +509,8 @@ const loadChart = async ({
 
         chartCandles.setOriginalData(resultGetCandles.result);
 
-        const instrumentData = chartCandles.originalData
-          .filter(e => !e.isRendered);
-
-        chartCandles.drawSeries(chartCandles.mainSeries, instrumentData);
-        chartVolume.drawSeries(instrumentData);
+        chartCandles.drawSeries(chartCandles.mainSeries, chartCandles.originalData);
+        chartVolume.drawSeries(chartCandles.originalData);
 
         drawLevelLines({
           instrumentId,
