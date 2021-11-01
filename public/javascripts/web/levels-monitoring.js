@@ -306,6 +306,10 @@ const drawLevelLines = ({
   instrumentId,
   period,
 }) => {
+  if (!chartCandles.extraSeries.length) {
+    return true;
+  }
+
   chartCandles.extraSeries.forEach(series => {
     chartCandles.removeSeries(series, false);
   });
