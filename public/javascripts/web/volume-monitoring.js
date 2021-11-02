@@ -188,7 +188,7 @@ wsClient.onmessage = async data => {
 };
 
 $(document).ready(async () => {
-  wsClient.omopen = () => {
+  wsClient.onopen = () => {
     wsClient.send(JSON.stringify({
       actionName: 'subscribe',
       data: {
