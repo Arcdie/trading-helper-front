@@ -165,14 +165,18 @@ wsClient.onmessage = async data => {
         const targetDoc = instrumentsDocs.find(doc => doc._id.toString() === instrumentId);
 
         if (targetDoc) {
-          targetDoc.average_volume_for_last_24_hours = parseInt(averageVolumeForLast24Hours, 10);
-          targetDoc.average_volume_for_last_15_minutes = parseInt(averageVolumeForLast15Minutes, 10);
-
           const $instrument = $(`#instrument-${instrumentId}`);
           const $volume = $instrument.find('.volume');
 
-          $volume.find('.volume-15m').text(formatNumberToPretty(targetDoc.average_volume_for_last_15_minutes));
-          $volume.find('.volume-24h').text(formatNumberToPretty(parseInt(targetDoc.average_volume_for_last_24_hours / 2, 10)));
+          if (averageVolumeForLast15Minutes) {
+            targetDoc.average_volume_for_last_15_minutes = parseInt(averageVolumeForLast15Minutes, 10);
+            $volume.find('.average-15m span').text(formatNumberToPretty(targetDoc.average_volume_for_last_15_minutes));
+          }
+
+          if (averageVolumeForLast24Hours) {
+            targetDoc.average_volume_for_last_24_hours = parseInt(averageVolumeForLast24Hours, 10);
+            $volume.find('.average-24h span').text(formatNumberToPretty(parseInt(targetDoc.average_volume_for_last_24_hours / 2, 10)));
+          }
         }
 
         break;
@@ -184,19 +188,21 @@ wsClient.onmessage = async data => {
 };
 
 $(document).ready(async () => {
-  wsClient.send(JSON.stringify({
-    actionName: 'subscribe',
-    data: {
-      subscriptionsNames: [
-        'newInstrumentVolumeBound',
-        'updateInstrumentVolumeBound',
-        'deactivateInstrumentVolumeBound',
-        'newSpotInstrumentPrice',
-        'newFuturesInstrumentPrice',
-        'updateAverageVolume',
-      ],
-    },
-  }));
+  wsClient.omopen = () => {
+    wsClient.send(JSON.stringify({
+      actionName: 'subscribe',
+      data: {
+        subscriptionsNames: [
+          'newInstrumentVolumeBound',
+          'updateInstrumentVolumeBound',
+          'deactivateInstrumentVolumeBound',
+          'newSpotInstrumentPrice',
+          'newFuturesInstrumentPrice',
+          'updateAverageVolume',
+        ],
+      },
+    }));
+  };
 
   const resultGetInstruments = await makeRequest({
     method: 'GET',
@@ -352,8 +358,13 @@ const addNewInstrument = (instrumentDoc) => {
     <div class="bids"></div>
 
     <div class="volume">
-      15M объем: <span class="average-15m">${formatNumberToPretty(parseInt(instrumentDoc.average_volume_for_last_15_minutes, 10))}</span>
-      24H объем: <span class="average-24h">${formatNumberToPretty(parseInt(instrumentDoc.average_volume_for_last_24_hours / 2, 10))}</span>
+      <p class="average-15m">
+        15M объем: <span>${formatNumberToPretty(parseInt(instrumentDoc.average_volume_for_last_15_minutes, 10))}</span>
+      </p>
+
+      <p class="average-24h">
+        24H объем: <span>${formatNumberToPretty(parseInt(instrumentDoc.average_volume_for_last_24_hours / 2, 10))}</span>
+      </p>
     </div>
   </div>`);
 };

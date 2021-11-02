@@ -443,7 +443,7 @@ input:checked + .slider:before {
     width: 260px;
     position: relative;
     border: 1px solid black;
-    padding: 10px 10px 45px;
+    padding: 10px 10px 62px;
     margin-right: 20px;
     margin-bottom: 20px;
     display: flex;
@@ -466,11 +466,11 @@ input:checked + .slider:before {
       border-bottom: 1px solid black; }
       .volume-monitoring .instrument .instrument-price span {
         font: 18px monospace; }
-    .volume-monitoring .instrument .volume-5m {
+    .volume-monitoring .instrument .volume {
       font: 15px sans-serif;
       position: absolute;
       bottom: 15px; }
-      .volume-monitoring .instrument .volume-5m span {
+      .volume-monitoring .instrument .volume span {
         font-weight: bold; }
     .volume-monitoring .instrument .asks .level, .volume-monitoring .instrument .bids .level {
       width: 100%;
