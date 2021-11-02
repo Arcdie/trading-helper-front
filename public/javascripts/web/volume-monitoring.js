@@ -38,7 +38,22 @@ wsClient.onmessage = async data => {
 
   if (parsedData.actionName) {
     switch (parsedData.actionName) {
-      case 'newInstrumentPrice': {
+      case 'newSpotInstrumentPrice': {
+        const {
+          newPrice,
+          instrumentName,
+        } = parsedData.data;
+
+        const targetDoc = instrumentsDocs.find(doc => doc.name === instrumentName);
+
+        if (targetDoc) {
+          targetDoc.price = newPrice;
+        }
+
+        break;
+      }
+
+      case 'newFuturesInstrumentPrice': {
         const {
           newPrice,
           instrumentName,
@@ -143,16 +158,21 @@ wsClient.onmessage = async data => {
       case 'updateAverageVolume': {
         const {
           instrumentId,
-          averageVolume,
+          averageVolumeForLast24Hours,
+          averageVolumeForLast15Minutes,
         } = parsedData.data;
 
         const targetDoc = instrumentsDocs.find(doc => doc._id.toString() === instrumentId);
 
         if (targetDoc) {
-          targetDoc.average_volume = parseInt(averageVolume, 10);
+          targetDoc.average_volume_for_last_24_hours = parseInt(averageVolumeForLast24Hours, 10);
+          targetDoc.average_volume_for_last_15_minutes = parseInt(averageVolumeForLast15Minutes, 10);
 
           const $instrument = $(`#instrument-${instrumentId}`);
-          $instrument.find('.volume-5m span').text(formatNumberToPretty(targetDoc.average_volume));
+          const $volume = $instrument.find('.volume');
+
+          $volume.find('.volume-15m').text(formatNumberToPretty(targetDoc.average_volume_for_last_15_minutes));
+          $volume.find('.volume-24h').text(formatNumberToPretty(parseInt(targetDoc.average_volume_for_last_24_hours / 2, 10)));
         }
 
         break;
@@ -164,7 +184,20 @@ wsClient.onmessage = async data => {
 };
 
 $(document).ready(async () => {
-  // initPopWindow(windows.getVolumeMonitoringSettings(settings));
+  wsClient.send(JSON.stringify({
+    actionName: 'subscribe',
+    data: {
+      subscriptionsNames: [
+        'newInstrumentVolumeBound',
+        'updateInstrumentVolumeBound',
+        'deactivateInstrumentVolumeBound',
+        'newSpotInstrumentPrice',
+        'newFuturesInstrumentPrice',
+        'updateAverageVolume',
+      ],
+    },
+  }));
+
   const resultGetInstruments = await makeRequest({
     method: 'GET',
     url: URL_GET_ACTIVE_INSTRUMENTS,
@@ -318,7 +351,10 @@ const addNewInstrument = (instrumentDoc) => {
     <div class="instrument-price"><span>${instrumentDoc.price}</span></div>
     <div class="bids"></div>
 
-    <div class="volume-5m">Объем: <span>${formatNumberToPretty(parseInt(instrumentDoc.average_volume, 10))}</span></div>
+    <div class="volume">
+      15M объем: <span class="average-15m">${formatNumberToPretty(parseInt(instrumentDoc.average_volume_for_last_15_minutes, 10))}</span>
+      24H объем: <span class="average-24h">${formatNumberToPretty(parseInt(instrumentDoc.average_volume_for_last_24_hours / 2, 10))}</span>
+    </div>
   </div>`);
 };
 
