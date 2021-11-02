@@ -9,6 +9,8 @@ const URL_GET_INSTRUMENT_VOLUME_BOUNDS = '/api/instrument-volume-bounds';
 let instrumentsDocs = [];
 let nowTimestamp = getUnix();
 
+let sortByDistaceToPrice = false;
+
 const settings = {
   spot: {
     sortByDistaceToPrice: true,
@@ -47,7 +49,7 @@ wsClient.onmessage = async data => {
         const targetDoc = instrumentsDocs.find(doc => doc.name === instrumentName);
 
         if (targetDoc) {
-          targetDoc.price = newPrice;
+          targetDoc.price = parseFloat(newPrice.toString());
         }
 
         break;
@@ -230,23 +232,11 @@ $(document).ready(async () => {
   instrumentsDocs.forEach(doc => {
     doc.asks = instrumentVolumeBounds
       .filter(bound => bound.instrument_id.toString() === doc._id.toString() && bound.is_ask)
-      .sort((a, b) => {
-        if (a.price > b.price) {
-          return -1;
-        }
-
-        return 1;
-      });
+      .sort((a, b) => a.price > b.price ? -1 : 1);
 
     doc.bids = instrumentVolumeBounds
       .filter(bound => bound.instrument_id.toString() === doc._id.toString() && !bound.is_ask)
-      .sort((a, b) => {
-        if (a.price > b.price) {
-          return -1;
-        }
-
-        return 1;
-      });
+      .sort((a, b) => a.price > b.price ? -1 : 1);
 
     [...doc.asks, ...doc.bids].forEach(bound => {
       const differenceBetweenPriceAndOrder = Math.abs(doc.price - bound.price);
@@ -257,42 +247,86 @@ $(document).ready(async () => {
     });
   });
 
-  const docsToRender = instrumentsDocs
+  instrumentsDocs
     .filter(doc => doc.asks.length || doc.bids.length)
     .sort((a, b) => {
-      let minPercentAskA = 100;
-      let minPercentBidA = 100;
+      if (sortByDistaceToPrice) {
+        let minPercentAskA = 100;
+        let minPercentBidA = 100;
 
-      let minPercentAskB = 100;
-      let minPercentBidB = 100;
+        let minPercentAskB = 100;
+        let minPercentBidB = 100;
 
-      let minPercentAsk = 100;
-      let minPercentBid = 100;
+        let minPercentAsk = 100;
+        let minPercentBid = 100;
 
-      if (a.asks.length) {
-        minPercentAskA = a.asks[0].price_original_percent;
+        if (a.asks.length) {
+          minPercentAskA = a.asks[0].price_original_percent;
+        }
+
+        if (a.bids.length) {
+          minPercentBidA = a.bids[0].price_original_percent;
+        }
+
+        if (b.asks.length) {
+          minPercentAskB = b.asks[0].price_original_percent;
+        }
+
+        if (b.bids.length) {
+          minPercentBidB = b.bids[0].price_original_percent;
+        }
+
+        minPercentAsk = minPercentAskA <= minPercentBidA ? minPercentAskA : minPercentBidA;
+        minPercentBid = minPercentAskB <= minPercentBidB ? minPercentAskB : minPercentBidB;
+
+        return minPercentAsk < minPercentBid ? -1 : 1;
+      } else {
+        let maxLifetimeAskA = 0;
+        let maxLifetimeBidA = 0;
+
+        let maxLifetimeAskB = 0;
+        let maxLifetimeBidB = 0;
+
+        let maxLifetimeAsk = 0;
+        let maxLifetimeBid = 0;
+
+        if (a.asks.length) {
+          a.asks.forEach(ask => {
+            if (ask.lifetime > maxLifetimeAskA) {
+              maxLifetimeAskA = ask.lifetime;
+            }
+          });
+        }
+
+        if (a.bids.length) {
+          a.bids.forEach(bid => {
+            if (bid.lifetime > maxLifetimeBidA) {
+              maxLifetimeBidA = bid.lifetime;
+            }
+          });
+        }
+
+        if (b.asks.length) {
+          b.asks.forEach(ask => {
+            if (ask.lifetime > maxLifetimeAskB) {
+              maxLifetimeAskB = ask.lifetime;
+            }
+          });
+        }
+
+        if (b.bids.length) {
+          b.bids.forEach(bid => {
+            if (bid.lifetime > maxLifetimeBidB) {
+              maxLifetimeBidB = bid.lifetime;
+            }
+          });
+        }
+
+        maxLifetimeAsk = maxLifetimeAskA >= maxLifetimeBidA ? maxLifetimeAskA : maxLifetimeBidA;
+        maxLifetimeBid = maxLifetimeAskB >= maxLifetimeBidB ? maxLifetimeAskB : maxLifetimeBidB;
+
+        return maxLifetimeAsk > maxLifetimeBid ? -1 : 1;
       }
-
-      if (a.bids.length) {
-        minPercentBidA = a.bids[0].price_original_percent;
-      }
-
-      if (b.asks.length) {
-        minPercentAskB = b.asks[0].price_original_percent;
-      }
-
-      if (b.bids.length) {
-        minPercentBidB = b.bids[0].price_original_percent;
-      }
-
-      minPercentAsk = minPercentAskA <= minPercentBidA ? minPercentAskA : minPercentBidA;
-      minPercentBid = minPercentAskB <= minPercentBidB ? minPercentAskB : minPercentBidB;
-
-      if (minPercentAsk < minPercentBid) {
-        return -1;
-      }
-
-      return 1;
     })
     .forEach((doc, index) => {
       doc.is_rendered = true;
@@ -490,7 +524,7 @@ const handlerNewInstrumentVolumeBound = (newBound) => {
 const recalculateOrderVolume = () => {
   let indexOrder = 1;
 
-  const favoriteDocs = instrumentsDocs
+  instrumentsDocs
     .filter(doc => doc.is_monitoring)
     .forEach(doc => {
       if (doc.index_order !== indexOrder) {
@@ -502,42 +536,86 @@ const recalculateOrderVolume = () => {
       indexOrder += 1;
     });
 
-  const renderedDocs = instrumentsDocs
+  instrumentsDocs
     .filter(doc => doc.is_rendered && !doc.is_monitoring)
     .sort((a, b) => {
-      let minPercentAskA = 100;
-      let minPercentBidA = 100;
+      if (sortByDistaceToPrice) {
+        let minPercentAskA = 100;
+        let minPercentBidA = 100;
 
-      let minPercentAskB = 100;
-      let minPercentBidB = 100;
+        let minPercentAskB = 100;
+        let minPercentBidB = 100;
 
-      let minPercentAsk = 100;
-      let minPercentBid = 100;
+        let minPercentAsk = 100;
+        let minPercentBid = 100;
 
-      if (a.asks.length) {
-        minPercentAskA = a.asks[0].price_original_percent;
+        if (a.asks.length) {
+          minPercentAskA = a.asks[0].price_original_percent;
+        }
+
+        if (a.bids.length) {
+          minPercentBidA = a.bids[0].price_original_percent;
+        }
+
+        if (b.asks.length) {
+          minPercentAskB = b.asks[0].price_original_percent;
+        }
+
+        if (b.bids.length) {
+          minPercentBidB = b.bids[0].price_original_percent;
+        }
+
+        minPercentAsk = minPercentAskA <= minPercentBidA ? minPercentAskA : minPercentBidA;
+        minPercentBid = minPercentAskB <= minPercentBidB ? minPercentAskB : minPercentBidB;
+
+        return minPercentAsk < minPercentBid ? -1 : 1;
+      } else {
+        let maxLifetimeAskA = 0;
+        let maxLifetimeBidA = 0;
+
+        let maxLifetimeAskB = 0;
+        let maxLifetimeBidB = 0;
+
+        let maxLifetimeAsk = 0;
+        let maxLifetimeBid = 0;
+
+        if (a.asks.length) {
+          a.asks.forEach(ask => {
+            if (ask.lifetime > maxLifetimeAskA) {
+              maxLifetimeAskA = ask.lifetime;
+            }
+          });
+        }
+
+        if (a.bids.length) {
+          a.bids.forEach(bid => {
+            if (bid.lifetime > maxLifetimeBidA) {
+              maxLifetimeBidA = bid.lifetime;
+            }
+          });
+        }
+
+        if (b.asks.length) {
+          b.asks.forEach(ask => {
+            if (ask.lifetime > maxLifetimeAskB) {
+              maxLifetimeAskB = ask.lifetime;
+            }
+          });
+        }
+
+        if (b.bids.length) {
+          b.bids.forEach(bid => {
+            if (bid.lifetime > maxLifetimeBidB) {
+              maxLifetimeBidB = bid.lifetime;
+            }
+          });
+        }
+
+        maxLifetimeAsk = maxLifetimeAskA >= maxLifetimeBidA ? maxLifetimeAskA : maxLifetimeBidA;
+        maxLifetimeBid = maxLifetimeAskB >= maxLifetimeBidB ? maxLifetimeAskB : maxLifetimeBidB;
+
+        return maxLifetimeAsk > maxLifetimeBid ? -1 : 1;
       }
-
-      if (a.bids.length) {
-        minPercentBidA = a.bids[0].price_original_percent;
-      }
-
-      if (b.asks.length) {
-        minPercentAskB = b.asks[0].price_original_percent;
-      }
-
-      if (b.bids.length) {
-        minPercentBidB = b.bids[0].price_original_percent;
-      }
-
-      minPercentAsk = minPercentAskA <= minPercentBidA ? minPercentAskA : minPercentBidA;
-      minPercentBid = minPercentAskB <= minPercentBidB ? minPercentAskB : minPercentBidB;
-
-      if (minPercentAsk < minPercentBid) {
-        return -1;
-      }
-
-      return 1;
     })
     .forEach(doc => {
       if (doc.index_order !== indexOrder) {
