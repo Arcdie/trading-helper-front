@@ -74,10 +74,10 @@ class ChartCandles {
 
   addExtraSeries() {
     const newExtraSeries = this.chart.addLineSeries({
-      priceLineSource: false,
+      // priceLineSource: false,
       priceLineVisible: false,
       lineWidth: 1,
-      lastValueVisible: false,
+      // lastValueVisible: false,
       priceScaleId: '',
     });
 

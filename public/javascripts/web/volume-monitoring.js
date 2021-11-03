@@ -9,7 +9,7 @@ const URL_GET_INSTRUMENT_VOLUME_BOUNDS = '/api/instrument-volume-bounds';
 let instrumentsDocs = [];
 let nowTimestamp = getUnix();
 
-let sortByDistaceToPrice = false;
+let sortByDistaceToPrice = true;
 
 const settings = {
   spot: {
