@@ -1,5 +1,5 @@
 /* global
-functions, makeRequest, initPopWindow, getUnix
+functions, makeRequest, initPopWindow,
 objects, windows, moment, user, wsClient, ChartCandles, ChartVolume
 */
 
@@ -15,7 +15,7 @@ const AVAILABLE_PERIODS = new Map([
   ['5M', '5m'],
   ['1H', '1h'],
   ['4H', '4h'],
-  ['DAY', 'day'],
+  ['1D', '1d'],
   // ['MONTH', 'month'],
 ]);
 
@@ -23,7 +23,7 @@ const WORKING_PERIODS = [
   AVAILABLE_PERIODS.get('5M'),
   AVAILABLE_PERIODS.get('1H'),
   AVAILABLE_PERIODS.get('4H'),
-  AVAILABLE_PERIODS.get('DAY'),
+  AVAILABLE_PERIODS.get('1D'),
   // AVAILABLE_PERIODS.get('MONTH'),
 ];
 
@@ -31,7 +31,7 @@ const TIMEFRAME_NUMBER_CANDLES_MAPPER = {
   [AVAILABLE_PERIODS.get('5M')]: 500,
   [AVAILABLE_PERIODS.get('1H')]: 6000,
   [AVAILABLE_PERIODS.get('4H')]: 18000,
-  [AVAILABLE_PERIODS.get('DAY')]: 25000,
+  [AVAILABLE_PERIODS.get('1D')]: 25000,
   // [AVAILABLE_PERIODS.get('MONTH')]: 30000,
 };
 
@@ -69,7 +69,6 @@ wsClient.onmessage = async data => {
   if (parsedData.actionName) {
     switch (parsedData.actionName) {
       case 'newFuturesInstrumentPrice': {
-        console.log('newFuturesInstrumentPrice');
         const {
           newPrice,
           instrumentName,
@@ -84,46 +83,10 @@ wsClient.onmessage = async data => {
         break;
       }
 
-      case 'candleData': {
-        if (choosenPeriod !== '5m') {
-          break;
-        }
-
-        if (parsedData.data.instrumentId !== choosenInstrumentId) {
-          break;
-        }
-
-        const {
-          instrumentId,
-          startTime,
-          open,
-          close,
-          high,
-          low,
-          volume,
-        } = parsedData.data;
-
-        let validTime = startTime / 1000;
-
-        if ([!'5m', '1h', '4h'].includes(choosenPeriod)) {
-          validTime = moment.unix(validTime).format('YYYY-MM-DD');
-        }
-
-        chartCandles.drawSeries(chartCandles.mainSeries, {
-          open: parseFloat(open),
-          close: parseFloat(close),
-          high: parseFloat(high),
-          low: parseFloat(low),
-          time: validTime,
-        });
-
-        chartVolume.drawSeries({
-          volume: parseFloat(volume),
-          time: validTime,
-        });
-
-        break;
-      }
+      case 'candle5mData': updateLastCandle(parsedData.data, '5m'); break;
+      case 'candle1hData': updateLastCandle(parsedData.data, '1h'); break;
+      case 'candle4hData': updateLastCandle(parsedData.data, '4h'); break;
+      case 'candle1dData': updateLastCandle(parsedData.data, '1d'); break;
 
       default: break;
     }
@@ -281,11 +244,11 @@ $(document).ready(async () => {
     .on('click', '.levels-settings #save-settings', async function () {
       const isDrawLevelsFor1hCandles = $('#is_draw_levels_for_1h_candles').is(':checked');
       const isDrawLevelsFor4hCandles = $('#is_draw_levels_for_4h_candles').is(':checked');
-      const isDrawLevelsForDayCandles = $('#is_draw_levels_for_day_candles').is(':checked');
+      const isDrawLevelsForDayCandles = $('#is_draw_levels_for_1d_candles').is(':checked');
 
       const numberCandlesForCalculate1hLevels = parseInt($('#number_candles_for_calculate_1h_levels input').val(), 10);
       const numberCandlesForCalculate4hLevels = parseInt($('#number_candles_for_calculate_4h_levels input').val(), 10);
-      const numberCandlesForCalculateDayLevels = parseInt($('#number_candles_for_calculate_day_levels input').val(), 10);
+      const numberCandlesForCalculateDayLevels = parseInt($('#number_candles_for_calculate_1d_levels input').val(), 10);
 
       if (!numberCandlesForCalculate1hLevels || Number.isNaN(numberCandlesForCalculate1hLevels)) {
         alert('Неправильно заполнено поле "К-во свечей для расчета часовых уровней"');
@@ -325,10 +288,10 @@ $(document).ready(async () => {
       user.levels_monitoring_settings = {
         is_draw_levels_for_1h_candles: isDrawLevelsFor1hCandles,
         is_draw_levels_for_4h_candles: isDrawLevelsFor4hCandles,
-        is_draw_levels_for_day_candles: isDrawLevelsForDayCandles,
+        is_draw_levels_for_1d_candles: isDrawLevelsForDayCandles,
         number_candles_for_calculate_1h_levels: numberCandlesForCalculate1hLevels,
         number_candles_for_calculate_4h_levels: numberCandlesForCalculate4hLevels,
-        number_candles_for_calculate_day_levels: numberCandlesForCalculateDayLevels,
+        number_candles_for_calculate_1d_levels: numberCandlesForCalculateDayLevels,
       };
 
       $('.shadow').click();
@@ -383,7 +346,7 @@ const drawLevelLines = ({
       let startCandleTime = moment(bound.level_start_candle_time).utc();
 
       switch (period) {
-        case 'day': startCandleTime = startCandleTime.startOf('day'); break;
+        case '1d': startCandleTime = startCandleTime.startOf('day'); break;
         case '4h': startCandleTime = startCandleTime.startOf('day'); break;
         // case 'month': startCandleTime = startCandleTime.startOf('month'); break;
         default: startCandleTime = startCandleTime.startOf('hour'); break;
@@ -454,7 +417,7 @@ const loadChart = async ({
   wsClient.send(JSON.stringify({
     actionName: 'subscribe',
     data: {
-      subscriptionName: 'candleData',
+      subscriptionName: `candle${choosenPeriod}Data`,
       instrumentName: targetDoc.name,
     },
   }));
@@ -580,6 +543,41 @@ const loadChart = async ({
         isStartedLoad = false;
       }
     });
+};
+
+const updateLastCandle = (data, period) => {
+  if (period !== choosenPeriod
+    || data.instrumentId !== choosenInstrumentId) {
+    return true;
+  }
+
+  const {
+    startTime,
+    open,
+    close,
+    high,
+    low,
+    volume,
+  } = data;
+
+  let validTime = startTime / 1000;
+
+  if ([!'5m', '1h', '4h'].includes(choosenPeriod)) {
+    validTime = moment.unix(validTime).format('YYYY-MM-DD');
+  }
+
+  chartCandles.drawSeries(chartCandles.mainSeries, {
+    open: parseFloat(open),
+    close: parseFloat(close),
+    high: parseFloat(high),
+    low: parseFloat(low),
+    time: validTime,
+  });
+
+  chartVolume.drawSeries({
+    volume: parseFloat(volume),
+    time: validTime,
+  });
 };
 
 const intervalCalculateLevels = (interval) => {
