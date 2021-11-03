@@ -46,7 +46,7 @@ const windows = {
             </li>
 
             <li>
-              <input type="checkbox" id="is_draw_levels_for_day_candles" ${settings.is_draw_levels_for_day_candles ? 'checked' : ''}>
+              <input type="checkbox" id="is_draw_levels_for_1d_candles" ${settings.is_draw_levels_for_1d_candles ? 'checked' : ''}>
               <label for="is_draw_levels_for_day_candles">Рисовать уровни для дневых свеч</label>
             </li>
           </ul>
@@ -61,9 +61,9 @@ const windows = {
             <input type="text" value="${settings.number_candles_for_calculate_4h_levels || 10}">
           </div>
 
-          <div id="number_candles_for_calculate_day_levels">
+          <div id="number_candles_for_calculate_1d_levels">
             <p>К-во свечей для расчета дневных уровней</p>
-            <input type="text" value="${settings.number_candles_for_calculate_day_levels || 10}">
+            <input type="text" value="${settings.number_candles_for_calculate_1d_levels || 10}">
           </div>
 
           <button id="save-settings">Сохранить</button>

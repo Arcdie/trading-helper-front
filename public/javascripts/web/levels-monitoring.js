@@ -418,7 +418,7 @@ const loadChart = async ({
     actionName: 'subscribe',
     data: {
       subscriptionName: `candle${choosenPeriod}Data`,
-      instrumentName: targetDoc.name,
+      instrumentId: targetDoc._id,
     },
   }));
 
