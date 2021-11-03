@@ -132,6 +132,9 @@ div.md-show.md-modal div.md-content {
       display: inline-block;
       width: 26px;
       float: right; }
+  .window.levels-loading-page .levels-loading-page-container p {
+    margin-top: 16px;
+    text-align: center; }
   .window.volume-monitroing-settings {
     width: 300px;
     height: 200px; }

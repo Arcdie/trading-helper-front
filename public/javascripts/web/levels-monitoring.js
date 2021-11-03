@@ -88,6 +88,18 @@ wsClient.onmessage = async data => {
       case 'candle4hData': updateLastCandle(parsedData.data, '4h'); break;
       case 'candle1dData': updateLastCandle(parsedData.data, '1d'); break;
 
+      case 'levelsLoaded': {
+        const $amountLoadedLevels = $('#amount-loaded-levels');
+        const currentAmount = parseInt($amountLoadedLevels.text(), 10);
+        $amountLoadedLevels.text(currentAmount + 1);
+        break;
+      }
+
+      case 'userLevelBoundsCreated': {
+        location.reload(true);
+        break;
+      }
+
       default: break;
     }
   }
@@ -186,9 +198,10 @@ $(document).ready(async () => {
   $saveLevels
     .on('click', async function () {
       $(this).prop('disabled', true);
-      alert('Это может занять некоторое время, чуть позже ускорю этот процесс');
 
-      const resultAddLevels = await makeRequest({
+      initPopWindow(windows.getLevelsLoadingPage(instrumentsDocs.length));
+
+      await makeRequest({
         method: 'POST',
         url: URL_ADD_USER_LEVELS_BOUNDS,
 
@@ -196,13 +209,6 @@ $(document).ready(async () => {
           userId: user._id,
         },
       });
-
-      if (!resultAddLevels || !resultAddLevels.status) {
-        alert(resultAddLevels.message || 'Couldnt makeRequest URL_ADD_USER_LEVELS_BOUNDS');
-        return false;
-      }
-
-      return location.reload(true);
     });
 
   $('.search input')
@@ -595,17 +601,29 @@ const intervalCalculateLevels = (interval) => {
   });
 
   const sortedInstruments = instrumentsDocs
-    .filter(doc => doc.user_level_bounds.length)
+    // .filter(doc => doc.user_level_bounds.length)
     .sort((a, b) => {
+      if (!a.user_level_bounds[0]) {
+        return 1;
+      }
+
+      if (!b.user_level_bounds[0]) {
+        return -1;
+      }
+
       return a.user_level_bounds[0].percent_per_price < b.user_level_bounds[0].percent_per_price ? -1 : 1;
     });
 
   sortedInstruments.forEach((instrumentDoc, index) => {
     const $instrument = $(`#instrument-${instrumentDoc._id}`);
+
     $instrument.css('order', index);
-    $instrument
-      .find('.levels')
-      .text(`${instrumentDoc.user_level_bounds[0].percent_per_price.toFixed(1)}%`);
+
+    if (instrumentDoc.user_level_bounds[0]) {
+      $instrument
+        .find('.levels')
+        .text(`${instrumentDoc.user_level_bounds[0].percent_per_price.toFixed(1)}%`);
+    }
   });
 
   setTimeout(intervalCalculateLevels, interval, interval);

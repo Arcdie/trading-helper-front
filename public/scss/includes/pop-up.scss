@@ -121,6 +121,15 @@ div.md-show.md-modal div.md-content {
     }
   }
 
+  &.levels-loading-page {
+    .levels-loading-page-container {
+      p {
+        margin-top: 16px;
+        text-align: center;
+      }
+    }
+  }
+
   &.volume-monitroing-settings {
     width: 300px;
     height: 200px;

@@ -27,6 +27,7 @@ const windows = {
     </div>`;
   },
 
+  // levels-monitoring
   getLevelsMonitoringSettings(settings) {
     return `<div class="window levels-monitroing-settings">
       <button class="close"></button>
@@ -72,6 +73,16 @@ const windows = {
     </div>`;
   },
 
+  getLevelsLoadingPage(lInstruments) {
+    return `<div class="window levels-loading-page">
+      <div class="levels-loading-page-container">
+        <h2>Загрузка уровней..</h2>
+        <p><span id="amount-loaded-levels">0</span> / ${lInstruments}</p>
+      </div>
+    </div>`;
+  },
+
+  // volume-monitoring
   getVolumeMonitoringSettings(settings) {
     return `<div class="window volume-monitroing-settings">
       <button class="close"></button>
