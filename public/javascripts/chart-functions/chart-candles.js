@@ -16,6 +16,9 @@ class ChartCandles {
 
     this.period = period;
 
+    this.maxTopPriceValue;
+    this.maxBottomPriceValue;
+
     this.markers = [];
     this.extraSeries = [];
 
@@ -48,7 +51,19 @@ class ChartCandles {
       },
 
       timeScale: {
+        rightOffset: 12,
         secondsVisible: false,
+      },
+
+      priceScale: {
+        // autoScale: false,
+      },
+
+      handleScale: {
+        axisPressedMouseMove: {
+          time: true,
+          price: false,
+        },
       },
     });
   }
@@ -64,7 +79,21 @@ class ChartCandles {
         const res = original();
 
         if (res && res.priceRange) {
-          this.changePriceRangeForExtraSeries(res.priceRange);
+          let wereChanges = false;
+
+          if (this.maxTopPriceValue !== res.priceRange.maxValue) {
+            wereChanges = true;
+            this.maxTopPriceValue = res.priceRange.maxValue;
+          }
+
+          if (this.maxBottomPriceValue !== res.priceRange.minValue) {
+            wereChanges = true;
+            this.maxBottomPriceValue = res.priceRange.minValue;
+          }
+
+          if (wereChanges) {
+            this.changePriceRangeForExtraSeries(res.priceRange);
+          }
         }
 
         return res;
@@ -74,11 +103,14 @@ class ChartCandles {
 
   addExtraSeries() {
     const newExtraSeries = this.chart.addLineSeries({
-      // priceLineSource: false,
+      priceLineSource: false,
       priceLineVisible: false,
+      lastValueVisible: true,
       lineWidth: 1,
-      // lastValueVisible: false,
-      priceScaleId: '',
+      priceScaleId: 'level',
+
+      // lineType: LightweightCharts.LineType.Simple,
+      // lineStyle: LightweightCharts.LineStyle.LargeDashed,
     });
 
     newExtraSeries.id = new Date().getTime();
@@ -143,14 +175,18 @@ class ChartCandles {
 
   prepareNewData(instrumentData) {
     const isUnixTime = ['5m', '1h', '4h'].includes(this.period);
+    const userTimezone = -(new Date().getTimezoneOffset());
 
     const validData = instrumentData
       .map(data => {
         const timeUnix = getUnix(data.time);
 
         return {
-          timeUnix,
-          time: isUnixTime ? timeUnix : moment(data.time).format('YYYY-MM-DD'),
+          originalTime: data.time,
+          originalTimeUnix: timeUnix,
+          time: isUnixTime ?
+            timeUnix + (userTimezone * 60)
+            : moment(data.time).add(userTimezone, 'minutes').format('YYYY-MM-DD'),
 
           open: data.data[0],
           close: data.data[1],
@@ -160,7 +196,7 @@ class ChartCandles {
         };
       })
       .sort((a, b) => {
-        if (a.timeUnix < b.timeUnix) {
+        if (a.originalTimeUnix < b.originalTimeUnix) {
           return -1;
         }
 

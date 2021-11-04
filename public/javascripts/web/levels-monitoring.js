@@ -27,19 +27,17 @@ const WORKING_PERIODS = [
   // AVAILABLE_PERIODS.get('MONTH'),
 ];
 
-const TIMEFRAME_NUMBER_CANDLES_MAPPER = {
-  [AVAILABLE_PERIODS.get('5M')]: 500,
-  [AVAILABLE_PERIODS.get('1H')]: 6000,
-  [AVAILABLE_PERIODS.get('4H')]: 18000,
-  [AVAILABLE_PERIODS.get('1D')]: 25000,
-  // [AVAILABLE_PERIODS.get('MONTH')]: 30000,
-};
+const windowWidth = window.innerWidth;
+const windowHeight = window.innerHeight;
 
+const LIMIT_GET_CANDLES = Math.ceil(windowWidth / 6);
 const DEFAULT_PERIOD = AVAILABLE_PERIODS.get('5M');
+const USER_TIMEZONE = new Date().getTimezoneOffset() / 60;
 
 let choosenInstrumentId;
 let choosenPeriod = DEFAULT_PERIOD;
 
+let isLoading = false;
 let instrumentsDocs = [];
 
 let chartVolume = {};
@@ -53,7 +51,6 @@ const $chartsNav = $('.charts-nav');
 const $chartPeriods = $('.chart-periods div');
 const $settings = $chartsNav.find('.settings');
 const $actionsMenu = $chartsNav.find('.actions-menu');
-const $saveLevels = $actionsMenu.find('#save-levels');
 const $rootContainer = document.getElementsByClassName('charts')[0];
 
 const $legend = $('.legend');
@@ -106,8 +103,7 @@ wsClient.onmessage = async data => {
 };
 
 $(document).ready(async () => {
-  const windowHeight = `${window.innerHeight - 20}px`;
-  $rootContainer.style.height = windowHeight;
+  $rootContainer.style.height = `${windowHeight - 20}px`;
 
   const resultGetInstruments = await makeRequest({
     method: 'GET',
@@ -175,6 +171,10 @@ $(document).ready(async () => {
 
   $chartPeriods
     .on('click', async function () {
+      if (isLoading) {
+        return true;
+      }
+
       const $period = $(this);
       const period = $period.data('period');
 
@@ -184,6 +184,8 @@ $(document).ready(async () => {
       choosenPeriod = period;
 
       if (choosenInstrumentId) {
+        isLoading = true;
+
         await loadChart({
           instrumentId: choosenInstrumentId,
         });
@@ -193,22 +195,6 @@ $(document).ready(async () => {
   $settings
     .on('click', () => {
       initPopWindow(windows.getLevelsMonitoringSettings(user.levels_monitoring_settings || {}));
-    });
-
-  $saveLevels
-    .on('click', async function () {
-      $(this).prop('disabled', true);
-
-      initPopWindow(windows.getLevelsLoadingPage(instrumentsDocs.length));
-
-      await makeRequest({
-        method: 'POST',
-        url: URL_ADD_USER_LEVELS_BOUNDS,
-
-        body: {
-          userId: user._id,
-        },
-      });
     });
 
   $('.search input')
@@ -235,6 +221,12 @@ $(document).ready(async () => {
       if (choosenInstrumentId === instrumentId) {
         return true;
       }
+
+      if (isLoading) {
+        return true;
+      }
+
+      isLoading = true;
 
       $instrumentsList
         .find('.instrument')
@@ -301,9 +293,17 @@ $(document).ready(async () => {
       };
 
       $('.shadow').click();
-      $saveLevels.addClass('is_active');
 
-      // alert('done');
+      initPopWindow(windows.getLevelsLoadingPage(instrumentsDocs.length));
+
+      await makeRequest({
+        method: 'POST',
+        url: URL_ADD_USER_LEVELS_BOUNDS,
+
+        body: {
+          userId: user._id,
+        },
+      });
     });
 });
 
@@ -339,7 +339,16 @@ const drawLevelLines = ({
     return true;
   }
 
-  const endTime = instrumentData[instrumentData.length - 1].time;
+  let validEndTime;
+  const endTime = moment
+    .unix(instrumentData[instrumentData.length - 1].originalTimeUnix)
+    .add(1, 'M');
+
+  if (['5m', '1h', '4h'].includes(choosenPeriod)) {
+    validEndTime = endTime.unix();
+  } else {
+    validEndTime = endTime.format('YYYY-MM-DD');
+  }
 
   const targetInstrumentDoc = instrumentsDocs.find(doc => instrumentId === doc._id);
 
@@ -373,7 +382,7 @@ const drawLevelLines = ({
         time: validTime,
       }, {
         value: bound.level_price,
-        time: endTime,
+        time: validEndTime,
       }]);
     });
 };
@@ -383,12 +392,11 @@ const loadChart = async ({
 }) => {
   console.log('start loading');
 
-  const limit = TIMEFRAME_NUMBER_CANDLES_MAPPER[choosenPeriod];
   const endTime = new Date().toISOString();
 
   const resultGetCandles = await makeRequest({
     method: 'GET',
-    url: `${URL_GET_CANDLES}/${choosenPeriod}?instrumentId=${instrumentId}&limit=${limit}&endTime=${endTime}`,
+    url: `${URL_GET_CANDLES}/${choosenPeriod}?instrumentId=${instrumentId}&limit=${LIMIT_GET_CANDLES}&endTime=${endTime}`,
   });
 
   if (!resultGetCandles || !resultGetCandles.status) {
@@ -514,14 +522,15 @@ const loadChart = async ({
           return true;
         }
 
-        const limit = TIMEFRAME_NUMBER_CANDLES_MAPPER[choosenPeriod];
-        const endTime = new Date(chartCandles.originalData[0].timeUnix * 1000).toISOString();
+        isLoading = true;
+
+        const endTime = new Date(chartCandles.originalData[0].originalTimeUnix * 1000).toISOString();
 
         console.log('start loading');
 
         const resultGetCandles = await makeRequest({
           method: 'GET',
-          url: `${URL_GET_CANDLES}/${choosenPeriod}?instrumentId=${instrumentId}&limit=${limit}&endTime=${endTime}`,
+          url: `${URL_GET_CANDLES}/${choosenPeriod}?instrumentId=${instrumentId}&limit=${LIMIT_GET_CANDLES}&endTime=${endTime}`,
         });
 
         if (!resultGetCandles || !resultGetCandles.status) {
@@ -546,9 +555,12 @@ const loadChart = async ({
           period: choosenPeriod,
         });
 
+        isLoading = false;
         isStartedLoad = false;
       }
     });
+
+  isLoading = false;
 };
 
 const updateLastCandle = (data, period) => {

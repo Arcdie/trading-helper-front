@@ -556,8 +556,6 @@ input:checked + .slider:before {
             background-color: #0066ff61 !important; }
           .levels-monitoring .instruments-container .instruments-list .list .instrument:hover {
             background-color: #0066ff1f; }
-          .levels-monitoring .instruments-container .instruments-list .list .instrument:last-child {
-            border-bottom: none; }
           .levels-monitoring .instruments-container .instruments-list .list .instrument span {
             cursor: pointer;
             display: inline-block;
