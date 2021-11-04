@@ -9,17 +9,40 @@ block content
 		h1(data-id= user._id) Профиль #{user.fullname}
 		
 		.links
-			a(href='/levels-monitoring') Уровни
-			a(href='/volume-monitoring') Плотности
-			a(href='/utilities') Утилиты
 			//- a(href='/robots-statistics') Статистика по роботам
 			a(href='https://t.me/helperenok_bot', target="_blank") Telegram-бот
     
-		//- .donate
-		//- 	h3 Donate
-		//- 
-		//- 	ul
-		//- 		li USDT TRC20: <b>TAs7n92PiBgmGpB79SurCzfNMyyKUXgom2</b>
-		//- 		li BTC: <b>bc1qmsla9dmj04yw0ze09ezd0tjlp6j6cwjupmdmxp</b>
+		.resources
+			a(href='/levels-monitoring')
+				span Уровни
+				p Рисует уровни по заданным параметрам. Live-наблюдение. Есть перенос уровней в cscalp.
+				p В разработке: <br>
+				ul
+					li Оповещение в телеграм / смс о подходе цены к уровню;
+					li Сортировка по к-ву пройденного объема / трейдов за период;
+					li Пользовательские уровни (кто-то треугольник нарисовал, а вы будете видеть);
+
+			a(href='/volume-monitoring')
+				span Плотности
+				p Находит плотности, запоминает сколько плотность уже живет.
+				p В разработке: <br>
+				ul
+					li К-во касаний к плотности;
+					li Зона избранного;
+
+			a(href='/utilities')
+				span Помощники для cscalp
+				p Перенос уровней, настройка стакана, настройка рабочих объемов
+		
+			a.soon
+				span Статистика по роботам (скоро)
+				p Развернутая статистика: сколько протолкал, время включения, с графиками, объемами.
+		
+		.donate
+			h3 Donate. Проект бесплатный, а сервера нет :)
+		
+			ul
+				li USDT TRC20: <b>TAs7n92PiBgmGpB79SurCzfNMyyKUXgom2</b>
+				li BTC: <b>bc1qmsla9dmj04yw0ze09ezd0tjlp6j6cwjupmdmxp</b>
 
 block scripts

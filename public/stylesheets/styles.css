@@ -33,8 +33,7 @@ table {
   border-spacing: 0; }
 
 .donate {
-  position: absolute;
-  bottom: 15px; }
+  margin-top: 20px; }
   .donate h3 {
     font: 20px sans-serif;
     border-bottom: 1px dashed black;
@@ -225,6 +224,32 @@ input:checked + .slider:before {
     float: right; }
     .profile .links a {
       margin-left: 10px; }
+  .profile .resources a {
+    display: block;
+    text-decoration: none;
+    border: 1px solid black;
+    border-left: none;
+    border-right: none;
+    padding: 20px 0;
+    margin-top: 20px;
+    font-family: sans-serif;
+    padding-left: 15px; }
+    .profile .resources a.soon {
+      opacity: .3; }
+    .profile .resources a:hover {
+      background-color: #1b00ff1a; }
+    .profile .resources a span {
+      color: #010101;
+      font-size: 23px; }
+    .profile .resources a p {
+      margin-top: 10px;
+      color: #5b5b5b; }
+    .profile .resources a ul {
+      margin-top: 10px;
+      list-style: circle; }
+      .profile .resources a ul li {
+        color: #5b5b5b;
+        margin-left: 22px; }
   .profile .settings-for-tradingview,
   .profile .settings-for-profile {
     margin-top: 10px;
@@ -294,18 +319,32 @@ input:checked + .slider:before {
 .utilities {
   padding: 15px;
   padding-top: 0; }
-  .utilities .utility {
+  .utilities a.utility {
     display: block;
-    border-bottom: 1px dashed black;
-    padding-bottom: 20px;
-    padding-top: 20px;
-    font-family: sans-serif; }
-    .utilities .utility h3 {
-      font-size: 18px; }
-    .utilities .utility a {
+    text-decoration: none;
+    border: 1px solid black;
+    border-left: none;
+    border-right: none;
+    padding: 20px 0;
+    margin-top: 20px;
+    font-family: sans-serif;
+    padding-left: 15px; }
+    .utilities a.utility.soon {
+      opacity: .3; }
+    .utilities a.utility:hover {
+      background-color: #1b00ff1a; }
+    .utilities a.utility span {
+      color: #010101;
+      font-size: 23px; }
+    .utilities a.utility p {
       margin-top: 10px;
-      text-decoration: none;
-      display: block; }
+      color: #5b5b5b; }
+    .utilities a.utility ul {
+      margin-top: 10px;
+      list-style: circle; }
+      .utilities a.utility ul li {
+        color: #5b5b5b;
+        margin-left: 22px; }
 
 .experiment {
   padding: 10px;
