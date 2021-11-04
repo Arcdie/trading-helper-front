@@ -29,6 +29,7 @@ const WORKING_PERIODS = [
 
 const windowWidth = window.innerWidth;
 const windowHeight = window.innerHeight;
+const userTimezone = -(new Date().getTimezoneOffset());
 
 const LIMIT_GET_CANDLES = Math.ceil(windowWidth / 6);
 const DEFAULT_PERIOD = AVAILABLE_PERIODS.get('5M');
@@ -576,7 +577,7 @@ const updateLastCandle = (data, period) => {
     volume,
   } = data;
 
-  let validTime = startTime / 1000;
+  let validTime = (startTime / 1000) + (userTimezone * 60);
 
   if ([!'5m', '1h', '4h'].includes(choosenPeriod)) {
     validTime = moment.unix(validTime).format('YYYY-MM-DD');
