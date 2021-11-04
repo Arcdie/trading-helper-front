@@ -32,7 +32,6 @@ const windowHeight = window.innerHeight;
 
 const LIMIT_GET_CANDLES = Math.ceil(windowWidth / 6);
 const DEFAULT_PERIOD = AVAILABLE_PERIODS.get('5M');
-const USER_TIMEZONE = new Date().getTimezoneOffset() / 60;
 
 let choosenInstrumentId;
 let choosenPeriod = DEFAULT_PERIOD;
@@ -50,7 +49,6 @@ const $instrumentsList = $instrumentsContainer.find('.instruments-list .list');
 const $chartsNav = $('.charts-nav');
 const $chartPeriods = $('.chart-periods div');
 const $settings = $chartsNav.find('.settings');
-const $actionsMenu = $chartsNav.find('.actions-menu');
 const $rootContainer = document.getElementsByClassName('charts')[0];
 
 const $legend = $('.legend');
@@ -117,7 +115,7 @@ $(document).ready(async () => {
 
   const resultGetLevels = await makeRequest({
     method: 'GET',
-    url: URL_GET_USER_LEVEL_BOUNDS,
+    url: `${URL_GET_USER_LEVEL_BOUNDS}?userId=${user._id}`,
   });
 
   if (!resultGetLevels || !resultGetLevels.status) {
