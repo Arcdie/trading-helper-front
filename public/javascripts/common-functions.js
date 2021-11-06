@@ -46,11 +46,13 @@ const makeRequest = async ({
 
   const objRequest = {
     method,
-
-    headers: {
-      'Content-Type': 'application/json',
-    },
   };
+
+  if (method !== 'GET') {
+    objRequest.headers = {
+      'Content-Type': 'application/json',
+    };
+  }
 
   if (body && Object.keys(body).length > 0) {
     objRequest.body = JSON.stringify(body);
