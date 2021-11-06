@@ -32,7 +32,7 @@ const initPopWindow = (str) => {
 };
 
 const makeRequest = async ({
-  url, method, body,
+  url, method, body, settings,
 }) => {
   if (!url) {
     alert('No url');
@@ -54,6 +54,12 @@ const makeRequest = async ({
 
   if (body && Object.keys(body).length > 0) {
     objRequest.body = JSON.stringify(body);
+  }
+
+  if (settings && Object.keys(settings).length > 0) {
+    Object.keys(settings).forEach(key => {
+      objRequest[key] = settings[key];
+    });
   }
 
   const response = await fetch(url, objRequest);

@@ -132,6 +132,8 @@
       }
 
       &.bids {
+        margin-bottom: 10px;
+
         .price {
           background-color: #a2ff9c96;
         }
@@ -165,7 +167,38 @@
     }
 
     .chart {
+      width: 100%;
+      position: relative;
 
+      .charts-nav {
+        position: absolute;
+        z-index: 999;
+        top: 15px;
+        left: 15px;
+
+        .row {
+          display: flex;
+          align-items: center;
+        }
+      }
+
+      .legend {
+        p.values {
+          span {
+            color: #000FFF;
+            margin-left: 2px;
+            margin-right: 5px;
+          }
+        }
+      }
+
+      .chart-candles {
+        width: 100%;
+        height: 100%;
+        border: 1px solid black;
+        border-right: none;
+        box-sizing: border-box;
+      }
     }
   }
 }

@@ -48,9 +48,9 @@ const $instrumentsContainer = $('.instruments-container');
 const $instrumentsList = $instrumentsContainer.find('.instruments-list .list');
 
 const $chartsNav = $('.charts-nav');
+const $rootContainer = $('.charts');
 const $chartPeriods = $('.chart-periods div');
 const $settings = $chartsNav.find('.settings');
-const $rootContainer = document.getElementsByClassName('charts')[0];
 
 const $legend = $('.legend');
 const $open = $legend.find('span.open');
@@ -102,7 +102,7 @@ wsClient.onmessage = async data => {
 };
 
 $(document).ready(async () => {
-  $rootContainer.style.height = `${windowHeight - 20}px`;
+  $rootContainer.css({ height: windowHeight - 20 });
 
   const resultGetInstruments = await makeRequest({
     method: 'GET',
@@ -409,7 +409,7 @@ const loadChart = async ({
   chartCandles = {};
   chartVolume = {};
 
-  $($rootContainer).empty();
+  $rootContainer.empty();
 
   if (!resultGetCandles.result || !resultGetCandles.result.length) {
     isLoading = false;

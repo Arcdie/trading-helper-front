@@ -3,10 +3,23 @@ functions,
 objects */
 
 class WebsocketBinance {
-  constructor(isFutures) {
+  constructor({
+    isFutures,
+  }) {
+    this.streams = [];
+
     this.isActive = false;
     this.connection = false;
+    this.intervalPong = false;
+    this.onmessage = () => {};
+
     this.isFutures = isFutures;
+
+    if (this.isFutures) {
+      this.connectionName = 'Futures';
+    } else {
+      this.connectionName = 'Spot';
+    }
 
     this.setConnection();
   }
@@ -21,33 +34,53 @@ class WebsocketBinance {
     this.connection.onopen = () => {
       this.isActive = true;
 
-      wsBinanceFuturesClient.onmessage = data => {
-        console.log('data', data);
+      this.intervalPong = setInterval(() => {
+        if (this.connection) {
+          this.connection.send('pong');
+        }
+      }, 1000 * 60); // 1 minute;
+
+      this.streams.forEach(streamName => {
+        this.sendSubscribeRequest(streamName);
+      });
+
+      this.connection.onmessage = data => {
+        this.onmessage(data);
       };
     };
 
-    wsBinanceFuturesClient.onclose = event => {
+    this.connection.onclose = event => {
+      clearInterval(this.intervalPong);
       console.log('Соединение c binance было разорвано', event);
+      this.isActive = false;
+      this.setConnection();
     };
   }
+
+  addStream(streamName) {
+    this.streams.push(streamName);
+    this.sendSubscribeRequest(streamName);
+  }
+
+  removeStream(streamName) {
+    this.streams = this.streams
+      .filter(stream => stream !== streamName);
+    this.sendUnsubscribeRequest(streamName);
+  }
+
+  sendSubscribeRequest(streamName) {
+    this.connection.send(JSON.stringify({
+      method: 'SUBSCRIBE',
+      params: [streamName],
+      id: 1,
+    }));
+  }
+
+  sendUnsubscribeRequest(streamName) {
+    this.connection.send(JSON.stringify({
+      method: 'UNSUBSCRIBE',
+      params: [streamName],
+      id: 1,
+    }));
+  }
 }
-
-const wsConnectionPort = 3001;
-const wsConnectionLink = location.host === 'localhost:3000' ?
-  'localhost' : '91.240.242.90';
-
-const wsClient = new WebSocket(`ws://${wsConnectionLink}:${wsConnectionPort}?userId=${user._id}`);
-
-// wsClient.on('ping', () => {
-//   wsClient.send('pong');
-// });
-
-wsClient.onclose = event => {
-  alert('Соединение было разорвано, перезагрузите страницу');
-};
-
-setInterval(() => {
-  wsClient.send(JSON.stringify({
-    actionName: 'pong',
-  }));
-}, 1 * 60 * 1000); // 1 minute

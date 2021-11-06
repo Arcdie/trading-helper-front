@@ -1,6 +1,6 @@
 /* global
 functions, makeRequest, getUnix, initPopWindow,
-objects, windows, wsClient, user
+objects, WebsocketBinance, ChartCandles, windows, wsClient, user
 */
 
 /* Constants */
@@ -11,6 +11,10 @@ const URL_GET_INSTRUMENT_VOLUME_BOUNDS = '/api/instrument-volume-bounds';
 
 let instrumentsDocs = [];
 let nowTimestamp = getUnix();
+const userTimezone = -(new Date().getTimezoneOffset());
+
+const wsBinanceSpotClient = new WebsocketBinance({ isFutures: false });
+const wsBinanceFuturesClient = new WebsocketBinance({ isFutures: true });
 
 /* JQuery */
 const $listVolumesSpot = $('#spot .list-volumes');
@@ -20,6 +24,52 @@ const $listVolumesFutures = $('#futures .list-volumes');
 const $listFavoriteVolumesFutures = $('#futures .favorite-volumes');
 
 /* Functions */
+
+[wsBinanceSpotClient, wsBinanceFuturesClient].forEach(wsBinanceClient => {
+  wsBinanceClient.onmessage = data => {
+    const parsedData = JSON.parse(data.data);
+
+    if (!parsedData.s) {
+      console.log(`${wsBinanceFuturesClient.connectionName}: ${JSON.stringify(parsedData)}`);
+      return true;
+    }
+
+    const {
+      s: instrumentName,
+      k: {
+        t: startTime,
+        o: open,
+        c: close,
+        h: high,
+        l: low,
+      },
+    } = parsedData;
+
+    let targetDoc;
+
+    if (wsBinanceClient.isFutures) {
+      targetDoc = instrumentsDocs.find(doc => doc.name === `${instrumentName}PERP`);
+    } else {
+      targetDoc = instrumentsDocs.find(doc => doc.name === instrumentName);
+    }
+
+    if (!targetDoc) {
+      console.log(`Cant find instumentDoc; instrumentName: ${instrumentName}`);
+      return true;
+    }
+
+    const validTime = (startTime / 1000) + (userTimezone * 60);
+
+    targetDoc.chartCandles.drawSeries(targetDoc.chartCandles.mainSeries, {
+      open: parseFloat(open),
+      close: parseFloat(close),
+      high: parseFloat(high),
+      low: parseFloat(low),
+      time: validTime,
+    });
+  };
+});
+
 wsClient.onmessage = async data => {
   if (!instrumentsDocs.length) {
     return true;
@@ -226,8 +276,6 @@ $(document).ready(async () => {
   instrumentsDocs = resultGetInstruments.result;
   const instrumentVolumeBounds = resultGetBounds.result;
 
-  // instrumentsDocs = instrumentsDocs.filter(doc => ['BATUSDT', 'OCEANUSDT'].includes(doc.name));
-
   instrumentsDocs.forEach(doc => {
     doc.asks = instrumentVolumeBounds
       .filter(bound => bound.instrument_id.toString() === doc._id.toString() && bound.is_ask)
@@ -287,9 +335,21 @@ $(document).ready(async () => {
       const targetDoc = instrumentsDocs.find(doc => doc._id.toString() === instrumentId);
 
       targetDoc.is_favorite = false;
+      targetDoc.chartCandles = {};
+
+      if (targetDoc.is_futures) {
+        let streamName = targetDoc.name.replace('PERP', '').toLowerCase();
+        streamName = `${streamName}@kline_1m`;
+        wsBinanceFuturesClient.removeStream(streamName);
+      } else {
+        let streamName = targetDoc.name.toLowerCase();
+        streamName = `${streamName}@kline_1m`;
+        wsBinanceSpotClient.removeStream(streamName);
+      }
 
       $instrument.remove();
       addNewInstrument(targetDoc);
+      recalculateOrderVolume({ isFutures: targetDoc.is_futures });
     });
   });
 
@@ -379,7 +439,7 @@ const addNewInstrument = (instrumentDoc) => {
   });
 
   if (instrumentDoc.is_favorite) {
-    // init chart
+    loadChart(instrumentDoc);
   }
 };
 
@@ -669,6 +729,83 @@ const formatMinutesToPretty = numberMinutes => {
   return `${hours}:${minutes}`;
 };
 
+const loadChart = async (instrumentDoc) => {
+  console.log('start loading');
+
+  const resultGetCandles = await get1mCandlesCandlesFromBinance({
+    symbol: instrumentDoc.name,
+    isFutures: instrumentDoc.is_futures,
+  });
+
+  if (!resultGetCandles || !resultGetCandles.status) {
+    alert(resultGetCandles.message || 'Cant get1mCandlesCandlesFromBinance');
+    return true;
+  }
+
+  console.log('end loading');
+
+  const $rootContainer = $(`#chart-${instrumentDoc._id}`);
+
+  $rootContainer
+    .empty()
+    .css({ height: $rootContainer.width() });
+
+  const chartCandles = new ChartCandles($rootContainer, '1m');
+
+  chartCandles.setOriginalData(resultGetCandles.result);
+  chartCandles.drawSeries(chartCandles.mainSeries, chartCandles.originalData);
+
+  chartCandles.chart.applyOptions({
+    timeScale: {
+      timeVisible: true,
+    },
+  });
+
+  /*
+  chartCandles.chart.subscribeCrosshairMove((param) => {
+    if (param.time) {
+      const price = param.seriesPrices.get(chartCandles.mainSeries);
+
+      if (price) {
+        $open.text(price.open);
+        $close.text(price.close);
+        $low.text(price.low);
+        $high.text(price.high);
+      }
+    }
+  });
+  */
+
+  const validEndTime = chartCandles.originalData[chartCandles.originalData.length - 1].originalTimeUnix + 2629743;
+
+  [...instrumentDoc.asks, ...instrumentDoc.bids]
+    .forEach(volume => {
+      const volumePrice = parseFloat(volume.price);
+
+      const newExtraSeries = chartCandles.addExtraSeries();
+
+      chartCandles.drawSeries(newExtraSeries, [{
+        value: volumePrice,
+        time: volume.created_at,
+      }, {
+        value: volumePrice,
+        time: validEndTime,
+      }]);
+    });
+
+  if (instrumentDoc.is_futures) {
+    let streamName = instrumentDoc.name.replace('PERP', '').toLowerCase();
+    streamName = `${streamName}@kline_1m`;
+    wsBinanceFuturesClient.addStream(streamName);
+  } else {
+    let streamName = instrumentDoc.name.toLowerCase();
+    streamName = `${streamName}@kline_1m`;
+    wsBinanceSpotClient.addStream(streamName);
+  }
+
+  instrumentDoc.chartCandles = chartCandles;
+};
+
 const get1mCandlesCandlesFromBinance = async ({
   symbol,
   isFutures,
@@ -686,6 +823,9 @@ const get1mCandlesCandlesFromBinance = async ({
   const resultGetCandles = await makeRequest({
     method: 'GET',
     url: link,
+    // settings: {
+    //   mode: 'no-cors',
+    // },
   });
 
   if (!resultGetCandles) {
@@ -709,12 +849,13 @@ const get1mCandlesCandlesFromBinance = async ({
     ] = candle;
 
     result.push({
-      open: parseFloat(open),
-      close: parseFloat(close),
-      high: parseFloat(high),
-      low: parseFloat(low),
+      data: [
+        parseFloat(open),
+        parseFloat(close),
+        parseFloat(low),
+        parseFloat(high),
+      ],
       volume: parseFloat(volume),
-      timeUnix: startTimeBinance / 1000,
       time: new Date(startTimeBinance).toISOString(),
     });
   });

@@ -1,18 +1,15 @@
 /* global LightweightCharts */
 
 class ChartVolume {
-  constructor(rootContainer) {
+  constructor($rootContainer) {
     this.containerName = 'chart-volume';
-    this.appendChart(rootContainer);
+    this.appendChart($rootContainer);
 
-    this.containerDocument = document.getElementsByClassName(this.containerName)[0];
+    this.$containerDocument = $rootContainer.find(`.${this.containerName}`);
+    this.containerWidth = this.$containerDocument[0].clientWidth;
+    this.containerHeight = this.$containerDocument[0].clientHeight;
 
-    this.settings = {};
-
-    this.containerWidth = this.containerDocument.clientWidth;
-    this.containerHeight = this.containerDocument.clientHeight;
-
-    this.chart = LightweightCharts.createChart(this.containerDocument, {
+    this.chart = LightweightCharts.createChart(this.$containerDocument[0], {
       width: this.containerWidth,
       height: this.containerHeight,
     });
@@ -44,8 +41,8 @@ class ChartVolume {
     });
   }
 
-  appendChart(rootContainer) {
-    rootContainer.insertAdjacentHTML('beforeend', `<div class="${this.containerName}"></div>`);
+  appendChart($rootContainer) {
+    $rootContainer.append(`<div class="${this.containerName}"></div>`);
   }
 
   drawSeries(data) {

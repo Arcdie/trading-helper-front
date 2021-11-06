@@ -3,13 +3,13 @@ functions, getUnix,
 objects, moment, LightweightCharts */
 
 class ChartCandles {
-  constructor(rootContainer, period) {
+  constructor($rootContainer, period) {
     this.containerName = 'chart-candles';
-    this.appendChart(rootContainer);
+    this.appendChart($rootContainer);
 
-    this.containerDocument = document.getElementsByClassName(this.containerName)[0];
-    this.containerWidth = this.containerDocument.clientWidth;
-    this.containerHeight = this.containerDocument.clientHeight;
+    this.$containerDocument = $rootContainer.find(`.${this.containerName}`);
+    this.containerWidth = this.$containerDocument[0].clientWidth;
+    this.containerHeight = this.$containerDocument[0].clientHeight;
 
     this.addChart();
     this.addMainSeries();
@@ -25,8 +25,8 @@ class ChartCandles {
     this.originalData = [];
   }
 
-  appendChart(rootContainer) {
-    rootContainer.insertAdjacentHTML('beforeend', `<div class="${this.containerName}"></div>`);
+  appendChart($rootContainer) {
+    $rootContainer.append(`<div class="${this.containerName}"></div>`);
   }
 
   setOriginalData(instrumentData) {
@@ -36,7 +36,7 @@ class ChartCandles {
   }
 
   addChart() {
-    this.chart = LightweightCharts.createChart(this.containerDocument, {
+    this.chart = LightweightCharts.createChart(this.$containerDocument[0], {
       width: this.containerWidth,
       height: this.containerHeight,
     });
@@ -174,7 +174,7 @@ class ChartCandles {
   }
 
   prepareNewData(instrumentData) {
-    const isUnixTime = ['5m', '1h', '4h'].includes(this.period);
+    const isUnixTime = ['1m', '5m', '1h', '4h'].includes(this.period);
     const userTimezone = -(new Date().getTimezoneOffset());
 
     const validData = instrumentData
