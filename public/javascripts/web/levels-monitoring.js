@@ -400,6 +400,7 @@ const loadChart = async ({
 
   if (!resultGetCandles || !resultGetCandles.status) {
     alert(resultGetCandles.message || `Cant makeRequest ${URL_GET_CANDLES}`);
+    isLoading = false;
     return true;
   }
 
@@ -411,6 +412,7 @@ const loadChart = async ({
   $($rootContainer).empty();
 
   if (!resultGetCandles.result || !resultGetCandles.result.length) {
+    isLoading = false;
     return true;
   }
 
@@ -518,6 +520,7 @@ const loadChart = async ({
         isStartedLoad = true;
 
         if (!chartCandles.originalData.length) {
+          isLoading = false;
           return true;
         }
 
@@ -534,6 +537,7 @@ const loadChart = async ({
 
         if (!resultGetCandles || !resultGetCandles.status) {
           alert(resultGetCandles.message || `Cant makeRequest ${URL_GET_CANDLES}`);
+          isLoading = false;
           return true;
         }
 
@@ -541,6 +545,7 @@ const loadChart = async ({
 
         if (!resultGetCandles.result || !resultGetCandles.result.length) {
           isEndHistory = true;
+          isLoading = false;
           return true;
         }
 

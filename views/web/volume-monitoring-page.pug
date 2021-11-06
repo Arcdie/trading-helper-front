@@ -9,19 +9,29 @@ block content
 		#futures
 			h2 Futures
 
-			//- .settings
-			//- 	img(src="/images/settings.png", alt="settings")
+			.favorite-volumes
+			
+			.list-volumes
 
 			.container
 
 		#spot
 			h2 Spot
+
+			.favorite-volumes
 			
-			//- .settings
-			//- 	img(src="/images/settings.png", alt="settings")
+			.list-volumes
 			
+			.settings
+				img(src="/images/settings.png", alt="settings")
+
 			.container
 
 block scripts
+	script(src='/libs/moment.min.js')
+	script(src='/libs/trading-view-charts.min.js')
+
 	script(src='/javascripts/websocket.js')
+	script(src='/javascripts/chart-functions/chart-candles.js')
+
 	script(src='/javascripts/web/volume-monitoring.js')

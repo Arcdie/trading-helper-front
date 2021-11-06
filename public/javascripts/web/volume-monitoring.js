@@ -1,30 +1,23 @@
-/* global makeRequest, getUnix, initPopWindow,
-windows, wsClient */
+/* global
+functions, makeRequest, getUnix, initPopWindow,
+objects, windows, wsClient, user
+*/
 
 /* Constants */
 
+const URL_UPDATE_USER = '/api/users';
 const URL_GET_ACTIVE_INSTRUMENTS = '/api/instruments/active';
 const URL_GET_INSTRUMENT_VOLUME_BOUNDS = '/api/instrument-volume-bounds';
 
 let instrumentsDocs = [];
 let nowTimestamp = getUnix();
 
-let sortByDistaceToPrice = true;
-
-const settings = {
-  spot: {
-    sortByDistaceToPrice: true,
-    sortByLifeTimeVolume: false,
-  },
-
-  futures: {
-    sortByDistaceToPrice: true,
-    sortByLifeTimeVolume: false,
-  },
-};
-
 /* JQuery */
-const $container = $('.container');
+const $listVolumesSpot = $('#spot .list-volumes');
+const $listFavoriteVolumesSpot = $('#spot .favorite-volumes');
+
+const $listVolumesFutures = $('#futures .list-volumes');
+const $listFavoriteVolumesFutures = $('#futures .favorite-volumes');
 
 /* Functions */
 wsClient.onmessage = async data => {
@@ -113,7 +106,12 @@ wsClient.onmessage = async data => {
 
           $bound.find('.quantity span').text(formatNumberToPretty(targetBound.quantity));
           $bound.find('.price .percent').text(`${percentPerPrice.toFixed(1)}%`);
-          recalculateOrderVolume();
+
+          if (!targetDoc.is_favorite) {
+            recalculateOrderVolume({
+              isFutures: targetDoc.is_futures,
+            });
+          }
         }
 
         break;
@@ -121,7 +119,6 @@ wsClient.onmessage = async data => {
 
       case 'deactivateInstrumentVolumeBound': {
         const {
-          quantity,
           _id: boundId,
           is_ask: isAsk,
           instrument_id: instrumentId,
@@ -143,15 +140,15 @@ wsClient.onmessage = async data => {
           $(`#bound-${boundId}`).remove();
 
           if (!targetDoc.asks.length && !targetDoc.bids.length) {
-            instrumentsDocs.filter(
-              doc => doc._id.toString() !== instrumentId.toString(),
-            );
-
-            $(`#instrument-${instrumentId}`).remove();
             targetDoc.is_rendered = false;
+            $(`#instrument-${instrumentId}`).remove();
           }
 
-          recalculateOrderVolume();
+          if (!targetDoc.is_favorite) {
+            recalculateOrderVolume({
+              isFutures: targetDoc.is_futures,
+            });
+          }
         }
 
         break;
@@ -229,6 +226,8 @@ $(document).ready(async () => {
   instrumentsDocs = resultGetInstruments.result;
   const instrumentVolumeBounds = resultGetBounds.result;
 
+  // instrumentsDocs = instrumentsDocs.filter(doc => ['BATUSDT', 'OCEANUSDT'].includes(doc.name));
+
   instrumentsDocs.forEach(doc => {
     doc.asks = instrumentVolumeBounds
       .filter(bound => bound.instrument_id.toString() === doc._id.toString() && bound.is_ask)
@@ -245,103 +244,17 @@ $(document).ready(async () => {
       bound.price_original_percent = percentPerPrice;
       bound.lifetime = parseInt((nowTimestamp - bound.created_at) / 60, 10);
     });
+
+    doc.is_rendered = false;
+    doc.is_favorite = false;
   });
 
   instrumentsDocs
     .filter(doc => doc.asks.length || doc.bids.length)
-    .sort((a, b) => {
-      if (sortByDistaceToPrice) {
-        let minPercentAskA = 100;
-        let minPercentBidA = 100;
+    .forEach(doc => { addNewInstrument(doc); });
 
-        let minPercentAskB = 100;
-        let minPercentBidB = 100;
-
-        let minPercentAsk = 100;
-        let minPercentBid = 100;
-
-        if (a.asks.length) {
-          minPercentAskA = a.asks[0].price_original_percent;
-        }
-
-        if (a.bids.length) {
-          minPercentBidA = a.bids[0].price_original_percent;
-        }
-
-        if (b.asks.length) {
-          minPercentAskB = b.asks[0].price_original_percent;
-        }
-
-        if (b.bids.length) {
-          minPercentBidB = b.bids[0].price_original_percent;
-        }
-
-        minPercentAsk = minPercentAskA <= minPercentBidA ? minPercentAskA : minPercentBidA;
-        minPercentBid = minPercentAskB <= minPercentBidB ? minPercentAskB : minPercentBidB;
-
-        return minPercentAsk < minPercentBid ? -1 : 1;
-      } else {
-        let maxLifetimeAskA = 0;
-        let maxLifetimeBidA = 0;
-
-        let maxLifetimeAskB = 0;
-        let maxLifetimeBidB = 0;
-
-        let maxLifetimeAsk = 0;
-        let maxLifetimeBid = 0;
-
-        if (a.asks.length) {
-          a.asks.forEach(ask => {
-            if (ask.lifetime > maxLifetimeAskA) {
-              maxLifetimeAskA = ask.lifetime;
-            }
-          });
-        }
-
-        if (a.bids.length) {
-          a.bids.forEach(bid => {
-            if (bid.lifetime > maxLifetimeBidA) {
-              maxLifetimeBidA = bid.lifetime;
-            }
-          });
-        }
-
-        if (b.asks.length) {
-          b.asks.forEach(ask => {
-            if (ask.lifetime > maxLifetimeAskB) {
-              maxLifetimeAskB = ask.lifetime;
-            }
-          });
-        }
-
-        if (b.bids.length) {
-          b.bids.forEach(bid => {
-            if (bid.lifetime > maxLifetimeBidB) {
-              maxLifetimeBidB = bid.lifetime;
-            }
-          });
-        }
-
-        maxLifetimeAsk = maxLifetimeAskA >= maxLifetimeBidA ? maxLifetimeAskA : maxLifetimeBidA;
-        maxLifetimeBid = maxLifetimeAskB >= maxLifetimeBidB ? maxLifetimeAskB : maxLifetimeBidB;
-
-        return maxLifetimeAsk > maxLifetimeBid ? -1 : 1;
-      }
-    })
-    .forEach((doc, index) => {
-      doc.is_rendered = true;
-      doc.index_order = index;
-
-      addNewInstrument(doc);
-
-      doc.asks.forEach((bound, index) => {
-        addNewVolumeToInstrument(doc, bound, index);
-      });
-
-      doc.bids.forEach((bound, index) => {
-        addNewVolumeToInstrument(doc, bound, index);
-      });
-    });
+  recalculateOrderVolume({ isFutures: true });
+  recalculateOrderVolume({ isFutures: false });
 
   // update prices and calculate percents
   setInterval(updatePrices, 10 * 1000);
@@ -352,35 +265,86 @@ $(document).ready(async () => {
   // update timestampt
   setInterval(() => { nowTimestamp = getUnix(); }, 1000);
 
-  $container
-    .on('click', 'span.instrument-name', function () {
+  [$listVolumesSpot, $listVolumesFutures].forEach(elem => {
+    $(elem).on('click', 'span.instrument-name', function () {
       const $instrument = $(this).closest('.instrument');
 
       const instrumentId = $instrument.data('instrumentid');
       const targetDoc = instrumentsDocs.find(doc => doc._id.toString() === instrumentId);
 
-      if (targetDoc.is_monitoring) {
-        targetDoc.is_monitoring = false;
-        $instrument.removeClass('is_monitoring');
-      } else {
-        targetDoc.is_monitoring = true;
-        $instrument.addClass('is_monitoring');
-      }
+      targetDoc.is_favorite = true;
 
-      recalculateOrderVolume();
+      $instrument.remove();
+      addNewInstrument(targetDoc);
     });
+  });
+
+  [$listFavoriteVolumesSpot, $listFavoriteVolumesFutures].forEach(elem => {
+    $(elem).on('click', 'span.instrument-name', function () {
+      const $instrument = $(this).closest('.instrument-extended');
+
+      const instrumentId = $instrument.data('instrumentid');
+      const targetDoc = instrumentsDocs.find(doc => doc._id.toString() === instrumentId);
+
+      targetDoc.is_favorite = false;
+
+      $instrument.remove();
+      addNewInstrument(targetDoc);
+    });
+  });
 
   $('.settings')
     .on('click', () => {
-      initPopWindow(windows.getVolumeMonitoringSettings(settings));
+      initPopWindow(windows.getVolumeMonitoringSettings(user.volume_monitoring_settings || {}));
+    });
+
+  $('.md-content')
+    .on('click', '.volume-monitroing-settings #save-settings', async function () {
+      const doSpotSortByLifetime = $('#do_spot_sort_by_lifetime').is(':checked');
+      const doFuturesSortByLifetime = $('#do_futures_sort_by_lifetime').is(':checked');
+      const doSpotSortByDistanceToPrice = $('#do_spot_sort_by_distace_to_price').is(':checked');
+      const doFuturesSortByDistanceToPrice = $('#do_futures_sort_by_distace_to_price').is(':checked');
+
+      $(this).prop('disabled', true);
+
+      const resultUpdate = await makeRequest({
+        method: 'PATCH',
+        url: `${URL_UPDATE_USER}/${user._id}`,
+        body: {
+          doSpotSortByLifetime,
+          doFuturesSortByLifetime,
+          doSpotSortByDistanceToPrice,
+          doFuturesSortByDistanceToPrice,
+        },
+      });
+
+      if (!resultUpdate || !resultUpdate.status) {
+        alert(resultUpdate.message || 'Couldnt makeRequest URL_UPDATE_USER');
+        return false;
+      }
+
+      user.volume_monitoring_settings = {
+        do_spot_sort_by_lifetime: doSpotSortByLifetime,
+        do_futures_sort_by_lifetime: doFuturesSortByLifetime,
+        do_spot_sort_by_distace_to_price: doSpotSortByDistanceToPrice,
+        do_futures_sort_by_distace_to_price: doFuturesSortByDistanceToPrice,
+      };
+
+      recalculateOrderVolume({ isFutures: true });
+      recalculateOrderVolume({ isFutures: false });
+
+      $(this).prop('disabled', false);
+
+      $('.shadow').click();
     });
 });
 
 const addNewInstrument = (instrumentDoc) => {
-  const volumeContainer = instrumentDoc.is_futures ? 'futures' : 'spot';
+  const $container = getInstrumentContainer(instrumentDoc);
+  const typeClassForInstrument = !instrumentDoc.is_favorite ? 'instrument' : 'instrument-extended';
 
-  $(`#${volumeContainer} .container`).append(`<div
-    class="instrument"
+  $container.append(`<div
+    class="${typeClassForInstrument}"
     id="instrument-${instrumentDoc._id}"
     data-instrumentid="${instrumentDoc._id}"
     style="order: ${instrumentDoc.index_order || instrumentsDocs.length}"
@@ -400,7 +364,23 @@ const addNewInstrument = (instrumentDoc) => {
         24H объем: <span>${formatNumberToPretty(parseInt(instrumentDoc.average_volume_for_last_24_hours / 2, 10))}</span>
       </p>
     </div>
+
+    <div id="chart-${instrumentDoc._id}" class="chart"></div>
   </div>`);
+
+  instrumentDoc.is_rendered = true;
+
+  instrumentDoc.asks.forEach((bound, index) => {
+    addNewVolumeToInstrument(instrumentDoc, bound, index);
+  });
+
+  instrumentDoc.bids.forEach((bound, index) => {
+    addNewVolumeToInstrument(instrumentDoc, bound, index);
+  });
+
+  if (instrumentDoc.is_favorite) {
+    // init chart
+  }
 };
 
 const addNewVolumeToInstrument = (instrument, bound, index) => {
@@ -411,7 +391,7 @@ const addNewVolumeToInstrument = (instrument, bound, index) => {
     id="bound-${bound._id}"
   >
     <div class="quantity"><span>${formatNumberToPretty(bound.quantity)}</span></div>
-    <div class="lifetime"><span>${bound.lifetime}m</span></div>
+    <div class="lifetime"><span>${formatMinutesToPretty(bound.lifetime)}</span></div>
     <div class="price"><span class="price_original">${bound.price}</span><span class="percent">${bound.price_original_percent.toFixed(1)}%</span></div>
   </div>`;
 
@@ -521,102 +501,36 @@ const handlerNewInstrumentVolumeBound = (newBound) => {
   addNewVolumeToInstrument(instrumentDoc, newBound, indexOfElement);
 };
 
-const recalculateOrderVolume = () => {
+const recalculateOrderVolume = ({
+  isFutures,
+}) => {
   let indexOrder = 1;
 
+  let sortFunc;
+
+  if (!isFutures) {
+    if (user.volume_monitoring_settings.do_spot_sort_by_distace_to_price
+      && user.volume_monitoring_settings.do_spot_sort_by_lifetime) {
+      sortFunc = sortByDistaceToPriceAndLifetime;
+    } else if (user.volume_monitoring_settings.do_spot_sort_by_distace_to_price) {
+      sortFunc = sortByDistaceToPrice;
+    } else if (user.volume_monitoring_settings.do_spot_sort_by_lifetime) {
+      sortFunc = sortByLifeTimeVolume;
+    }
+  } else {
+    if (user.volume_monitoring_settings.do_futures_sort_by_distace_to_price
+      && user.volume_monitoring_settings.do_futures_sort_by_lifetime) {
+      sortFunc = sortByDistaceToPriceAndLifetime;
+    } else if (user.volume_monitoring_settings.do_futures_sort_by_distace_to_price) {
+      sortFunc = sortByDistaceToPrice;
+    } else if (user.volume_monitoring_settings.do_futures_sort_by_lifetime) {
+      sortFunc = sortByLifeTimeVolume;
+    }
+  }
+
   instrumentsDocs
-    .filter(doc => doc.is_monitoring)
-    .forEach(doc => {
-      if (doc.index_order !== indexOrder) {
-        doc.index_order = indexOrder;
-        const $instrument = $(`#instrument-${doc._id}`);
-        $instrument.css('order', indexOrder);
-      }
-
-      indexOrder += 1;
-    });
-
-  instrumentsDocs
-    .filter(doc => doc.is_rendered && !doc.is_monitoring)
-    .sort((a, b) => {
-      if (sortByDistaceToPrice) {
-        let minPercentAskA = 100;
-        let minPercentBidA = 100;
-
-        let minPercentAskB = 100;
-        let minPercentBidB = 100;
-
-        let minPercentAsk = 100;
-        let minPercentBid = 100;
-
-        if (a.asks.length) {
-          minPercentAskA = a.asks[0].price_original_percent;
-        }
-
-        if (a.bids.length) {
-          minPercentBidA = a.bids[0].price_original_percent;
-        }
-
-        if (b.asks.length) {
-          minPercentAskB = b.asks[0].price_original_percent;
-        }
-
-        if (b.bids.length) {
-          minPercentBidB = b.bids[0].price_original_percent;
-        }
-
-        minPercentAsk = minPercentAskA <= minPercentBidA ? minPercentAskA : minPercentBidA;
-        minPercentBid = minPercentAskB <= minPercentBidB ? minPercentAskB : minPercentBidB;
-
-        return minPercentAsk < minPercentBid ? -1 : 1;
-      } else {
-        let maxLifetimeAskA = 0;
-        let maxLifetimeBidA = 0;
-
-        let maxLifetimeAskB = 0;
-        let maxLifetimeBidB = 0;
-
-        let maxLifetimeAsk = 0;
-        let maxLifetimeBid = 0;
-
-        if (a.asks.length) {
-          a.asks.forEach(ask => {
-            if (ask.lifetime > maxLifetimeAskA) {
-              maxLifetimeAskA = ask.lifetime;
-            }
-          });
-        }
-
-        if (a.bids.length) {
-          a.bids.forEach(bid => {
-            if (bid.lifetime > maxLifetimeBidA) {
-              maxLifetimeBidA = bid.lifetime;
-            }
-          });
-        }
-
-        if (b.asks.length) {
-          b.asks.forEach(ask => {
-            if (ask.lifetime > maxLifetimeAskB) {
-              maxLifetimeAskB = ask.lifetime;
-            }
-          });
-        }
-
-        if (b.bids.length) {
-          b.bids.forEach(bid => {
-            if (bid.lifetime > maxLifetimeBidB) {
-              maxLifetimeBidB = bid.lifetime;
-            }
-          });
-        }
-
-        maxLifetimeAsk = maxLifetimeAskA >= maxLifetimeBidA ? maxLifetimeAskA : maxLifetimeBidA;
-        maxLifetimeBid = maxLifetimeAskB >= maxLifetimeBidB ? maxLifetimeAskB : maxLifetimeBidB;
-
-        return maxLifetimeAsk > maxLifetimeBid ? -1 : 1;
-      }
-    })
+    .filter(doc => doc.is_rendered && !doc.is_favorite && doc.is_futures === isFutures)
+    .sort(sortFunc)
     .forEach(doc => {
       if (doc.index_order !== indexOrder) {
         const $instrument = $(`#instrument-${doc._id}`);
@@ -627,10 +541,186 @@ const recalculateOrderVolume = () => {
     });
 };
 
+const getInstrumentContainer = (instrumentDoc) => {
+  let $container;
+
+  if (!instrumentDoc.is_futures) {
+    $container = instrumentDoc.is_favorite ? $listFavoriteVolumesSpot : $listVolumesSpot;
+  } else {
+    $container = instrumentDoc.is_favorite ? $listFavoriteVolumesFutures : $listVolumesFutures;
+  }
+
+  return $container;
+};
+
+const sortByDistaceToPrice = (a, b) => {
+  let minPercentAskA = 100;
+  let minPercentBidA = 100;
+
+  let minPercentAskB = 100;
+  let minPercentBidB = 100;
+
+  let minPercentAsk = 100;
+  let minPercentBid = 100;
+
+  if (a.asks.length) {
+    minPercentAskA = a.asks[a.asks.length - 1].price_original_percent;
+  }
+
+  if (a.bids.length) {
+    minPercentBidA = a.bids[0].price_original_percent;
+  }
+
+  if (b.asks.length) {
+    minPercentAskB = b.asks[b.asks.length - 1].price_original_percent;
+  }
+
+  if (b.bids.length) {
+    minPercentBidB = b.bids[0].price_original_percent;
+  }
+
+  minPercentAsk = minPercentAskA <= minPercentBidA ? minPercentAskA : minPercentBidA;
+  minPercentBid = minPercentAskB <= minPercentBidB ? minPercentAskB : minPercentBidB;
+
+  return minPercentAsk < minPercentBid ? -1 : 1;
+};
+
+const sortByLifeTimeVolume = (a, b) => {
+  let maxLifetimeAskA = 0;
+  let maxLifetimeBidA = 0;
+
+  let maxLifetimeAskB = 0;
+  let maxLifetimeBidB = 0;
+
+  let maxLifetimeAsk = 0;
+  let maxLifetimeBid = 0;
+
+  if (a.asks.length) {
+    a.asks.forEach(ask => {
+      if (ask.lifetime > maxLifetimeAskA) {
+        maxLifetimeAskA = ask.lifetime;
+      }
+    });
+  }
+
+  if (a.bids.length) {
+    a.bids.forEach(bid => {
+      if (bid.lifetime > maxLifetimeBidA) {
+        maxLifetimeBidA = bid.lifetime;
+      }
+    });
+  }
+
+  if (b.asks.length) {
+    b.asks.forEach(ask => {
+      if (ask.lifetime > maxLifetimeAskB) {
+        maxLifetimeAskB = ask.lifetime;
+      }
+    });
+  }
+
+  if (b.bids.length) {
+    b.bids.forEach(bid => {
+      if (bid.lifetime > maxLifetimeBidB) {
+        maxLifetimeBidB = bid.lifetime;
+      }
+    });
+  }
+
+  maxLifetimeAsk = maxLifetimeAskA >= maxLifetimeBidA ? maxLifetimeAskA : maxLifetimeBidA;
+  maxLifetimeBid = maxLifetimeAskB >= maxLifetimeBidB ? maxLifetimeAskB : maxLifetimeBidB;
+
+  return maxLifetimeAsk > maxLifetimeBid ? -1 : 1;
+};
+
+const sortByDistaceToPriceAndLifetime = (a, b) => {
+  const resultSortByDistaceToPrice = sortByDistaceToPrice(a, b);
+  const resultSortByLifeTimeVolume = sortByLifeTimeVolume(a, b);
+
+  if (resultSortByDistaceToPrice === 1 && resultSortByLifeTimeVolume === 1) {
+    return 1;
+  }
+
+  return 0;
+};
+
 const formatNumberToPretty = n => {
   if (n < 1e3) return n;
   if (n >= 1e3 && n < 1e6) return +(n / 1e3).toFixed(1) + 'K';
   if (n >= 1e6 && n < 1e9) return +(n / 1e6).toFixed(1) + 'M';
   if (n >= 1e9 && n < 1e12) return +(n / 1e9).toFixed(1) + 'B';
   if (n >= 1e12) return +(n / 1e12).toFixed(1) + 'T';
+};
+
+const formatMinutesToPretty = numberMinutes => {
+  numberMinutes = parseInt(numberMinutes, 10);
+
+  let hours = Math.floor(numberMinutes / 60);
+  let minutes = numberMinutes % 60;
+
+  if (hours.toString().length === 1) {
+    hours = `0${hours}`;
+  }
+
+  if (minutes.toString().length === 1) {
+    minutes = `0${minutes}`;
+  }
+
+  return `${hours}:${minutes}`;
+};
+
+const get1mCandlesCandlesFromBinance = async ({
+  symbol,
+  isFutures,
+}) => {
+  if (isFutures) {
+    symbol = symbol.replace('PERP', '');
+  }
+
+  const queryParams = `symbol=${symbol}&interval=1m&limit=99`;
+
+  const link = isFutures ?
+    `https://fapi.binance.com/fapi/v1/klines?${queryParams}` :
+    `https://api.binance.com/api/v3/klines?${queryParams}`;
+
+  const resultGetCandles = await makeRequest({
+    method: 'GET',
+    url: link,
+  });
+
+  if (!resultGetCandles) {
+    return {
+      status: false,
+      message: 'Cant get 1m candles',
+    };
+  }
+
+  const result = [];
+
+  resultGetCandles.forEach(candle => {
+    const [
+      startTimeBinance,
+      open,
+      high,
+      low,
+      close,
+      volume,
+      // closeTime,
+    ] = candle;
+
+    result.push({
+      open: parseFloat(open),
+      close: parseFloat(close),
+      high: parseFloat(high),
+      low: parseFloat(low),
+      volume: parseFloat(volume),
+      timeUnix: startTimeBinance / 1000,
+      time: new Date(startTimeBinance).toISOString(),
+    });
+  });
+
+  return {
+    status: true,
+    result,
+  };
 };

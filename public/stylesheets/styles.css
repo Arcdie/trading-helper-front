@@ -139,10 +139,13 @@ div.md-show.md-modal div.md-content {
     height: 200px; }
     .window.volume-monitroing-settings .volume-monitroing-settings-container h2 {
       font: 15px sans-serif;
-      border-bottom: 1px solid black; }
+      border-bottom: 1px solid black;
+      padding-bottom: 4px; }
     .window.volume-monitroing-settings .volume-monitroing-settings-container div {
       margin-top: 8px;
       margin-bottom: 8px; }
+    .window.volume-monitroing-settings .volume-monitroing-settings-container ul li {
+      margin-bottom: 3px; }
 
 .switch {
   position: relative;
@@ -453,6 +456,18 @@ input:checked + .slider:before {
 
 .volume-monitoring {
   padding: 15px; }
+  .volume-monitoring .favorite-volumes {
+    width: 100%;
+    border-bottom: 1px solid black;
+    margin-bottom: 17px;
+    display: inline-flex;
+    flex-wrap: wrap;
+    justify-content: space-around; }
+  .volume-monitoring .list-volumes {
+    width: 100%;
+    display: inline-flex;
+    flex-wrap: wrap;
+    justify-content: space-around; }
   .volume-monitoring #spot, .volume-monitoring #futures {
     width: 50%;
     float: left;
@@ -475,26 +490,26 @@ input:checked + .slider:before {
     position: absolute;
     right: 20px;
     top: 5px;
-    z-index: 9; }
+    z-index: 9;
+    cursor: pointer; }
     .volume-monitoring .settings img {
       width: 22px; }
   .volume-monitoring .container {
     display: inline-flex;
     flex-wrap: wrap; }
-  .volume-monitoring .instrument {
-    width: 260px;
+  .volume-monitoring .instrument, .volume-monitoring .instrument-extended {
+    width: 30%;
     position: relative;
     border: 1px solid black;
     padding: 10px 10px 62px;
-    margin-right: 20px;
     margin-bottom: 20px;
     display: flex;
     flex-direction: column; }
-    .volume-monitoring .instrument.is_monitoring span.instrument-name {
-      background-color: #06d73c40 !important; }
-    .volume-monitoring .instrument.not_processed {
+    .volume-monitoring .instrument.not_processed, .volume-monitoring .instrument-extended.not_processed {
       background-color: #ffca6a78; }
-    .volume-monitoring .instrument span.instrument-name {
+    .volume-monitoring .instrument.instrument-extended, .volume-monitoring .instrument-extended.instrument-extended {
+      width: 47%; }
+    .volume-monitoring .instrument span.instrument-name, .volume-monitoring .instrument-extended span.instrument-name {
       text-align: center;
       display: block;
       cursor: pointer;
@@ -502,46 +517,46 @@ input:checked + .slider:before {
       padding-bottom: 5px;
       font: 19px sans-serif;
       margin-bottom: 10px; }
-    .volume-monitoring .instrument .instrument-price {
+    .volume-monitoring .instrument .instrument-price, .volume-monitoring .instrument-extended .instrument-price {
       text-align: right;
       border-top: 1px solid black;
       border-bottom: 1px solid black; }
-      .volume-monitoring .instrument .instrument-price span {
+      .volume-monitoring .instrument .instrument-price span, .volume-monitoring .instrument-extended .instrument-price span {
         font: 18px monospace; }
-    .volume-monitoring .instrument .volume {
+    .volume-monitoring .instrument .volume, .volume-monitoring .instrument-extended .volume {
       font: 15px sans-serif;
       position: absolute;
       bottom: 15px; }
-      .volume-monitoring .instrument .volume span {
+      .volume-monitoring .instrument .volume span, .volume-monitoring .instrument-extended .volume span {
         font-weight: bold; }
-    .volume-monitoring .instrument .asks .level, .volume-monitoring .instrument .bids .level {
+    .volume-monitoring .instrument .asks .level, .volume-monitoring .instrument .bids .level, .volume-monitoring .instrument-extended .asks .level, .volume-monitoring .instrument-extended .bids .level {
       width: 100%;
       display: block;
       font: 16px monospace; }
-      .volume-monitoring .instrument .asks .level .quantity, .volume-monitoring .instrument .asks .level .lifetime, .volume-monitoring .instrument .asks .level .price, .volume-monitoring .instrument .bids .level .quantity, .volume-monitoring .instrument .bids .level .lifetime, .volume-monitoring .instrument .bids .level .price {
+      .volume-monitoring .instrument .asks .level .quantity, .volume-monitoring .instrument .asks .level .lifetime, .volume-monitoring .instrument .asks .level .price, .volume-monitoring .instrument .bids .level .quantity, .volume-monitoring .instrument .bids .level .lifetime, .volume-monitoring .instrument .bids .level .price, .volume-monitoring .instrument-extended .asks .level .quantity, .volume-monitoring .instrument-extended .asks .level .lifetime, .volume-monitoring .instrument-extended .asks .level .price, .volume-monitoring .instrument-extended .bids .level .quantity, .volume-monitoring .instrument-extended .bids .level .lifetime, .volume-monitoring .instrument-extended .bids .level .price {
         display: inline-block;
         box-sizing: border-box; }
-        .volume-monitoring .instrument .asks .level .quantity.price span.price_original, .volume-monitoring .instrument .asks .level .lifetime.price span.price_original, .volume-monitoring .instrument .asks .level .price.price span.price_original, .volume-monitoring .instrument .bids .level .quantity.price span.price_original, .volume-monitoring .instrument .bids .level .lifetime.price span.price_original, .volume-monitoring .instrument .bids .level .price.price span.price_original {
+        .volume-monitoring .instrument .asks .level .quantity.price span.price_original, .volume-monitoring .instrument .asks .level .lifetime.price span.price_original, .volume-monitoring .instrument .asks .level .price.price span.price_original, .volume-monitoring .instrument .bids .level .quantity.price span.price_original, .volume-monitoring .instrument .bids .level .lifetime.price span.price_original, .volume-monitoring .instrument .bids .level .price.price span.price_original, .volume-monitoring .instrument-extended .asks .level .quantity.price span.price_original, .volume-monitoring .instrument-extended .asks .level .lifetime.price span.price_original, .volume-monitoring .instrument-extended .asks .level .price.price span.price_original, .volume-monitoring .instrument-extended .bids .level .quantity.price span.price_original, .volume-monitoring .instrument-extended .bids .level .lifetime.price span.price_original, .volume-monitoring .instrument-extended .bids .level .price.price span.price_original {
           border-right: 1px solid black;
           margin-right: 5px;
           padding-right: 5px; }
-    .volume-monitoring .instrument .asks.asks .price, .volume-monitoring .instrument .bids.asks .price {
+    .volume-monitoring .instrument .asks.asks .price, .volume-monitoring .instrument .bids.asks .price, .volume-monitoring .instrument-extended .asks.asks .price, .volume-monitoring .instrument-extended .bids.asks .price {
       background-color: #ff9c9c96; }
-    .volume-monitoring .instrument .asks.bids .price, .volume-monitoring .instrument .bids.bids .price {
+    .volume-monitoring .instrument .asks.bids .price, .volume-monitoring .instrument .bids.bids .price, .volume-monitoring .instrument-extended .asks.bids .price, .volume-monitoring .instrument-extended .bids.bids .price {
       background-color: #a2ff9c96; }
-    .volume-monitoring .instrument .level .quantity {
-      width: 23%; }
-    .volume-monitoring .instrument .level .lifetime {
-      width: 15%;
+    .volume-monitoring .instrument .level .quantity, .volume-monitoring .instrument-extended .level .quantity {
+      width: 31%; }
+    .volume-monitoring .instrument .level .lifetime, .volume-monitoring .instrument-extended .level .lifetime {
+      width: 18%;
       text-align: right; }
-    .volume-monitoring .instrument .level .price {
-      width: 56%;
+    .volume-monitoring .instrument .level .price, .volume-monitoring .instrument-extended .level .price {
+      width: 44%;
       float: right; }
-      .volume-monitoring .instrument .level .price .price_original {
-        width: 64%;
+      .volume-monitoring .instrument .level .price .price_original, .volume-monitoring .instrument-extended .level .price .price_original {
+        width: 55%;
         display: inline-block; }
-      .volume-monitoring .instrument .level .price .percent {
-        width: 28%;
+      .volume-monitoring .instrument .level .price .percent, .volume-monitoring .instrument-extended .level .price .percent {
+        width: 35%;
         float: right; }
 
 .levels-monitoring {

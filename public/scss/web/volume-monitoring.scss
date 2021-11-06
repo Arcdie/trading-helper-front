@@ -1,6 +1,22 @@
 .volume-monitoring {
   padding: 15px;
 
+  .favorite-volumes {
+    width: 100%;
+    border-bottom: 1px solid black;
+    margin-bottom: 17px;
+    display: inline-flex;
+    flex-wrap: wrap;
+    justify-content: space-around;
+  }
+
+  .list-volumes {
+    width: 100%;
+    display: inline-flex;
+    flex-wrap: wrap;
+    justify-content: space-around;
+  }
+
   #spot, #futures {
     width: 50%;
     float: left;
@@ -30,6 +46,7 @@
     right: 20px;
     top: 5px;
     z-index: 9;
+    cursor: pointer;
 
     img {
       width: 22px;
@@ -41,23 +58,19 @@
     flex-wrap: wrap;
   }
 
-  .instrument {
-    &.is_monitoring {
-      span.instrument-name {
-        background-color: #06d73c40 !important;
-      }
-    }
-
+  .instrument, .instrument-extended {
     &.not_processed {
       background-color: #ffca6a78;
     }
 
-    width: 260px;
-    // float: left;
+    &.instrument-extended {
+      width: 47%;
+    }
+
+    width: 30%;
     position: relative;
     border: 1px solid black;
     padding: 10px 10px 62px;
-    margin-right: 20px;
     margin-bottom: 20px;
     display: flex;
     flex-direction: column;
@@ -127,29 +140,32 @@
 
     .level {
       .quantity {
-        width: 23%;
+        width: 31%;
       }
 
       .lifetime {
-        width: 15%;
+        width: 18%;
         text-align: right;
       }
 
       .price {
-        width: 56%;
+        width: 44%;
         float: right;
 
         .price_original {
-          width: 64%;
+          width: 55%;
           display: inline-block;
         }
 
         .percent {
-          width: 28%;
+          width: 35%;
           float: right;
         }
       }
     }
-  }
 
+    .chart {
+
+    }
+  }
 }

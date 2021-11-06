@@ -138,11 +138,18 @@ div.md-show.md-modal div.md-content {
       h2 {
         font: 15px sans-serif;
         border-bottom: 1px solid black;
+        padding-bottom: 4px;
       }
 
       div {
         margin-top: 8px;
         margin-bottom: 8px;
+      }
+
+      ul {
+        li {
+          margin-bottom: 3px;
+        }
       }
     }
   }
