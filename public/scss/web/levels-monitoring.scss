@@ -123,6 +123,15 @@
       }
     }
 
+    .ruler {
+      position: absolute;
+      left: -9999px;
+      top: -9999px;
+      z-index: 999;
+      font-size: 16px;
+      color: #0044e8;
+    }
+
     .actions-menu {
       margin-top: 12px;
 

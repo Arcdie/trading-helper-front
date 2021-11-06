@@ -47,6 +47,7 @@ let chartCandles = {};
 const $instrumentsContainer = $('.instruments-container');
 const $instrumentsList = $instrumentsContainer.find('.instruments-list .list');
 
+const $ruler = $('span.ruler');
 const $chartsNav = $('.charts-nav');
 const $rootContainer = $('.charts');
 const $chartPeriods = $('.chart-periods div');
@@ -466,6 +467,19 @@ const loadChart = async ({
   }
 
   chartCandles.chart.subscribeCrosshairMove((param) => {
+    if (param.point) {
+      const coordinateToPrice = chartCandles.mainSeries.coordinateToPrice(param.point.y);
+      const differenceBetweenInstrumentAndCoordinatePrices = Math.abs(targetDoc.price - coordinateToPrice);
+      const percentPerPrice = 100 / (targetDoc.price / differenceBetweenInstrumentAndCoordinatePrices);
+
+      $ruler
+        .text(`${percentPerPrice.toFixed(1)}%`)
+        .css({
+          top: param.point.y - 25,
+          left: param.point.x + 15,
+        });
+    }
+
     if (param.time) {
       const price = param.seriesPrices.get(chartCandles.mainSeries);
 

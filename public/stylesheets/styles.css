@@ -571,6 +571,13 @@ input:checked + .slider:before {
         .volume-monitoring .instrument .chart .charts-nav .row, .volume-monitoring .instrument-extended .chart .charts-nav .row {
           display: flex;
           align-items: center; }
+      .volume-monitoring .instrument .chart .ruler, .volume-monitoring .instrument-extended .chart .ruler {
+        position: absolute;
+        left: -9999px;
+        top: -9999px;
+        z-index: 999;
+        font-size: 16px;
+        color: #0044e8; }
       .volume-monitoring .instrument .chart .legend p.values span, .volume-monitoring .instrument-extended .chart .legend p.values span {
         color: #000FFF;
         margin-left: 2px;
@@ -660,6 +667,13 @@ input:checked + .slider:before {
       color: #000FFF;
       margin-left: 2px;
       margin-right: 5px; }
+    .levels-monitoring .chart-container .ruler {
+      position: absolute;
+      left: -9999px;
+      top: -9999px;
+      z-index: 999;
+      font-size: 16px;
+      color: #0044e8; }
     .levels-monitoring .chart-container .actions-menu {
       margin-top: 12px; }
       .levels-monitoring .chart-container .actions-menu button {

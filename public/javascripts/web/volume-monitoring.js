@@ -1,6 +1,6 @@
 /* global
 functions, makeRequest, getUnix, initPopWindow,
-objects, WebsocketBinance, ChartCandles, windows, wsClient, user
+objects, WebsocketBinance, ChartCandles, moment, windows, wsClient, user
 */
 
 /* Constants */
@@ -212,6 +212,8 @@ wsClient.onmessage = async data => {
 
           if (!targetDoc.asks.length && !targetDoc.bids.length) {
             targetDoc.is_rendered = false;
+            targetDoc.is_favorite = false;
+            targetDoc.is_processed = false;
             $(`#instrument-${instrumentId}`).remove();
           }
 
@@ -446,7 +448,9 @@ const addNewInstrument = (instrumentDoc) => {
       </p>
     </div>
 
-    <div id="chart-${instrumentDoc._id}" class="chart"></div>
+    <div id="chart-${instrumentDoc._id}" class="chart">
+      <span class="ruler">0%</span>
+    </div>
   </div>`);
 
   instrumentDoc.is_rendered = true;
@@ -768,9 +772,9 @@ const loadChart = async (instrumentDoc) => {
   console.log('end loading');
 
   const $rootContainer = $(`#chart-${instrumentDoc._id}`);
+  const $ruler = $rootContainer.find('span.ruler');
 
   $rootContainer
-    .empty()
     .css({ height: $rootContainer.width() });
 
   const chartCandles = new ChartCandles($rootContainer, '1m');
@@ -784,35 +788,46 @@ const loadChart = async (instrumentDoc) => {
     },
   });
 
-  /*
   chartCandles.chart.subscribeCrosshairMove((param) => {
+    if (param.point) {
+      const coordinateToPrice = chartCandles.mainSeries.coordinateToPrice(param.point.y);
+      const differenceBetweenInstrumentAndCoordinatePrices = Math.abs(instrumentDoc.price - coordinateToPrice);
+      const percentPerPrice = 100 / (instrumentDoc.price / differenceBetweenInstrumentAndCoordinatePrices);
+
+      $ruler
+        .text(`${percentPerPrice.toFixed(1)}%`)
+        .css({
+          top: param.point.y - 25,
+          left: param.point.x + 15,
+        });
+    }
+
+    /*
     if (param.time) {
       const price = param.seriesPrices.get(chartCandles.mainSeries);
 
       if (price) {
-        $open.text(price.open);
-        $close.text(price.close);
-        $low.text(price.low);
-        $high.text(price.high);
+        // $open.text(price.open);
+        // $close.text(price.close);
+        // $low.text(price.low);
+        // $high.text(price.high);
       }
     }
+    */
   });
-  */
 
   const validEndTime = chartCandles.originalData[chartCandles.originalData.length - 1].originalTimeUnix + 2629743;
 
   [...instrumentDoc.asks, ...instrumentDoc.bids]
     .forEach(volume => {
       const volumePrice = parseFloat(volume.price);
+      const startOfMinute = (volume.created_at - (volume.created_at % 60)) + (userTimezone * 60);
 
       const newExtraSeries = chartCandles.addExtraSeries();
 
-      console.log('price', volume.price);
-      console.log('created_at', volume.created_at);
-
       chartCandles.drawSeries(newExtraSeries, [{
         value: volumePrice,
-        time: volume.created_at,
+        time: startOfMinute,
       }, {
         value: volumePrice,
         time: validEndTime,
