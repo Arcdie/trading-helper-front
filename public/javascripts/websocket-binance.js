@@ -34,11 +34,13 @@ class WebsocketBinance {
     this.connection.onopen = () => {
       this.isActive = true;
 
+      /*
       this.intervalPong = setInterval(() => {
         if (this.connection) {
-          this.connection.send('pong');
+          // this.connection.send('pong');
         }
       }, 1000 * 60); // 1 minute;
+      */
 
       this.streams.forEach(streamName => {
         this.sendSubscribeRequest(streamName);
@@ -50,7 +52,7 @@ class WebsocketBinance {
     };
 
     this.connection.onclose = event => {
-      clearInterval(this.intervalPong);
+      // clearInterval(this.intervalPong);
       console.log('Соединение c binance было разорвано', event);
       this.isActive = false;
       this.setConnection();

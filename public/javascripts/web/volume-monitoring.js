@@ -65,13 +65,16 @@ const $listFavoriteVolumesFutures = $('#futures .favorite-volumes');
 
     const validTime = (startTime / 1000) + (userTimezone * 60);
 
-    targetDoc.chartCandles.drawSeries(targetDoc.chartCandles.mainSeries, {
-      open: parseFloat(open),
-      close: parseFloat(close),
-      high: parseFloat(high),
-      low: parseFloat(low),
-      time: validTime,
-    });
+    if (targetDoc.is_favorite
+      && Object.keys(targetDoc.chartCandles).length > 0) {
+      targetDoc.chartCandles.drawSeries(targetDoc.chartCandles.mainSeries, {
+        open: parseFloat(open),
+        close: parseFloat(close),
+        high: parseFloat(high),
+        low: parseFloat(low),
+        time: validTime,
+      });
+    }
   };
 });
 
@@ -803,6 +806,9 @@ const loadChart = async (instrumentDoc) => {
       const volumePrice = parseFloat(volume.price);
 
       const newExtraSeries = chartCandles.addExtraSeries();
+
+      console.log('price', volume.price);
+      console.log('created_at', volume.created_at);
 
       chartCandles.drawSeries(newExtraSeries, [{
         value: volumePrice,
