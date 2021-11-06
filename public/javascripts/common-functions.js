@@ -47,9 +47,9 @@ const makeRequest = async ({
   const objRequest = {
     method,
 
-    // headers: {
-    //   'Content-Type': 'application/json',
-    // },
+    headers: {
+      'Content-Type': 'application/json',
+    },
   };
 
   if (body && Object.keys(body).length > 0) {
