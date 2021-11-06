@@ -9,9 +9,14 @@ const URL_UPDATE_USER = '/api/users';
 const URL_GET_ACTIVE_INSTRUMENTS = '/api/instruments/active';
 const URL_GET_INSTRUMENT_VOLUME_BOUNDS = '/api/instrument-volume-bounds';
 
+const MIN_PERCENT_FOR_NOTIFICATION = 0.2;
+
 let instrumentsDocs = [];
 let nowTimestamp = getUnix();
 const userTimezone = -(new Date().getTimezoneOffset());
+
+const soundNewVolume = new Audio();
+soundNewVolume.src = '/audio/new-level.mp3';
 
 const wsBinanceSpotClient = new WebsocketBinance({ isFutures: false });
 const wsBinanceFuturesClient = new WebsocketBinance({ isFutures: true });
@@ -153,6 +158,19 @@ wsClient.onmessage = async data => {
 
           targetBound.quantity = quantity;
           targetBound.price_original_percent = percentPerPrice;
+
+          if (targetBound.is_processed
+            && percentPerPrice > MIN_PERCENT_FOR_NOTIFICATION) {
+            targetBound.is_processed = false;
+            $bound.removeClass('not_processed');
+          }
+
+          if (percentPerPrice <= MIN_PERCENT_FOR_NOTIFICATION
+            && !targetBound.is_processed) {
+            targetBound.is_processed = true;
+            $bound.addClass('not_processed');
+            soundNewVolume.play();
+          }
 
           $bound.find('.quantity span').text(formatNumberToPretty(targetBound.quantity));
           $bound.find('.price .percent').text(`${percentPerPrice.toFixed(1)}%`);
@@ -446,8 +464,10 @@ const addNewInstrument = (instrumentDoc) => {
 const addNewVolumeToInstrument = (instrument, bound, index) => {
   const $instrument = $(`#instrument-${instrument._id}`);
 
+  const isProcessed = bound.price_original_percent <= MIN_PERCENT_FOR_NOTIFICATION;
+
   const blockWithLevel = `<div
-    class="level"
+    class="level ${isProcessed ? 'not_processed' : ''}"
     id="bound-${bound._id}"
   >
     <div class="quantity"><span>${formatNumberToPretty(bound.quantity)}</span></div>

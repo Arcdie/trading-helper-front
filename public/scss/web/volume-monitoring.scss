@@ -59,10 +59,6 @@
   }
 
   .instrument, .instrument-extended {
-    &.not_processed {
-      background-color: #ffca6a78;
-    }
-
     &.instrument-extended {
       width: 47%;
     }
@@ -141,6 +137,10 @@
     }
 
     .level {
+      &.not_processed {
+        background-color: #ffca6a78;
+      }
+
       .quantity {
         width: 31%;
       }
