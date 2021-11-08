@@ -206,8 +206,6 @@ wsClient.onmessage = async data => {
               series => series.options().boundId === boundId,
             );
 
-            console.log('targetSeries', targetSeries);
-
             if (targetSeries) {
               targetDoc.chartCandles.removeSeries(targetSeries, false);
             }

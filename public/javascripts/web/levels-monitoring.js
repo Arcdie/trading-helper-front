@@ -1,6 +1,6 @@
 /* global
 functions, makeRequest, initPopWindow,
-objects, windows, moment, user, wsClient, ChartCandles, ChartVolume
+objects, windows, moment, user, wsClient, ChartCandles, ChartVolume, LightweightCharts
 */
 
 /* Constants */
@@ -97,6 +97,49 @@ wsClient.onmessage = async data => {
         break;
       }
 
+      case 'levelWasWorked': {
+        const {
+          boundId,
+          instrumentId,
+        } = parsedData.data;
+
+        const targetDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
+
+        if (!targetDoc) {
+          break;
+        }
+
+        const targetBound = targetDoc.user_level_bounds.find(
+          bound => bound.bound_id === boundId,
+        );
+
+        if (!targetBound) {
+          break;
+        }
+
+        targetDoc.worked_user_level_bounds.push({
+          worked_at: new Date(),
+          ...targetBound,
+        });
+
+        const targetSeries = chartCandles.extraSeries.find(
+          series => series.options().boundId === boundId,
+        );
+
+        if (targetSeries) {
+          targetSeries.applyOptions({
+            lineType: LightweightCharts.LineType.Simple,
+            lineStyle: LightweightCharts.LineStyle.LargeDashed,
+          });
+        }
+
+        targetDoc.user_level_bounds = targetDoc.user_level_bounds.filter(
+          bound => bound.bound_id !== boundId,
+        );
+
+        break;
+      }
+
       default: break;
     }
   }
@@ -141,17 +184,32 @@ $(document).ready(async () => {
         instrumentDoc.user_level_bounds = [];
       }
 
+      if (!instrumentDoc.worked_user_level_bounds) {
+        instrumentDoc.worked_user_level_bounds = [];
+      }
+
       const targetBounds = resultGetLevels.result.filter(
         bound => bound.instrument_id === instrumentDoc._id,
       );
 
       if (targetBounds && targetBounds.length) {
         targetBounds.forEach(bound => {
-          instrumentDoc.user_level_bounds.push({
-            level_price: bound.level_price,
-            level_timeframe: bound.level_timeframe,
-            level_start_candle_time: bound.level_start_candle_time,
-          });
+          if (!bound.is_worked) {
+            instrumentDoc.user_level_bounds.push({
+              bound_id: bound._id,
+              level_price: bound.level_price,
+              level_timeframe: bound.level_timeframe,
+              level_start_candle_time: bound.level_start_candle_time,
+            });
+          } else {
+            instrumentDoc.worked_user_level_bounds.push({
+              bound_id: bound._id,
+              worked_at: bound.worked_at,
+              level_price: bound.level_price,
+              level_timeframe: bound.level_timeframe,
+              level_start_candle_time: bound.level_start_candle_time,
+            });
+          }
         });
       }
     });
@@ -375,7 +433,56 @@ const drawLevelLines = ({
         validTime = startCandleTime.format('YYYY-MM-DD');
       }
 
-      const newExtraSeries = chartCandles.addExtraSeries();
+      const newExtraSeries = chartCandles.addExtraSeries({
+        boundId: bound.bound_id,
+      });
+
+      chartCandles.drawSeries(newExtraSeries, [{
+        value: bound.level_price,
+        time: validTime,
+      }, {
+        value: bound.level_price,
+        time: validEndTime,
+      }]);
+    });
+
+  targetInstrumentDoc.worked_user_level_bounds
+    .forEach(bound => {
+      let startCandleTime = moment(bound.level_start_candle_time).utc();
+      let endCandleTime = moment(bound.worked_at).utc();
+
+      switch (period) {
+        case '1d': {
+          startCandleTime = startCandleTime.startOf('day');
+          endCandleTime = endCandleTime.endOf('day'); break;
+        }
+
+        case '4h': {
+          startCandleTime = startCandleTime.startOf('day');
+          endCandleTime = endCandleTime.endOf('day'); break;
+        }
+
+        default: {
+          startCandleTime = startCandleTime.startOf('hour');
+          endCandleTime = endCandleTime.endOf('hour'); break;
+        }
+      }
+
+      let validTime;
+
+      if (['5m', '1h', '4h'].includes(choosenPeriod)) {
+        validTime = startCandleTime.unix();
+        validEndTime = endCandleTime.unix();
+      } else {
+        validTime = startCandleTime.format('YYYY-MM-DD');
+        validEndTime = endCandleTime.format('YYYY-MM-DD');
+      }
+
+      const newExtraSeries = chartCandles.addExtraSeries({
+        boundId: bound.bound._id,
+        lineType: LightweightCharts.LineType.Simple,
+        lineStyle: LightweightCharts.LineStyle.LargeDashed,
+      });
 
       chartCandles.drawSeries(newExtraSeries, [{
         value: bound.level_price,
@@ -625,9 +732,9 @@ const intervalCalculateLevels = (interval) => {
       bound.percent_per_price = percentPerPrice;
     });
 
-    instrumentDoc.user_level_bounds = instrumentDoc.user_level_bounds.sort((a, b) => {
-      return a.percent_per_price < b.percent_per_price ? -1 : 1;
-    });
+    instrumentDoc.user_level_bounds = instrumentDoc.user_level_bounds.sort(
+      (a, b) => a.percent_per_price < b.percent_per_price ? -1 : 1
+    );
   });
 
   const sortedInstruments = instrumentsDocs
