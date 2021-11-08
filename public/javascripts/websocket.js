@@ -2,9 +2,9 @@
 
 const wsConnectionPort = 3001;
 const wsConnectionLink = location.host === 'localhost:3000' ?
-  'localhost' : '91.240.242.90';
+  'ws://localhost' : 'wss://trading-helper.ru';
 
-const wsClient = new WebSocket(`ws://${wsConnectionLink}:${wsConnectionPort}?userId=${user._id}`);
+const wsClient = new WebSocket(`${wsConnectionLink}:${wsConnectionPort}?userId=${user._id}`);
 
 // wsClient.on('ping', () => {
 //   wsClient.send('pong');
