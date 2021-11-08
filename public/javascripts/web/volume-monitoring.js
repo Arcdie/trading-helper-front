@@ -172,7 +172,10 @@ wsClient.onmessage = async data => {
             && !targetBound.is_processed) {
             targetBound.is_processed = true;
             $bound.addClass('not_processed');
-            soundNewVolume.play();
+
+            if (!targetDoc.is_favorite) {
+              soundNewVolume.play();
+            }
           }
 
           $bound.find('.quantity span').text(formatNumberToPretty(targetBound.quantity));
@@ -198,6 +201,18 @@ wsClient.onmessage = async data => {
         const targetDoc = instrumentsDocs.find(doc => doc._id.toString() === instrumentId);
 
         if (targetDoc) {
+          if (targetDoc.is_favorite) {
+            const targetSeries = targetDoc.chartCandles.extraSeries.find(
+              series => series.options().boundId === boundId,
+            );
+
+            console.log('targetSeries', targetSeries);
+
+            if (targetSeries) {
+              targetDoc.chartCandles.removeSeries(targetSeries, false);
+            }
+          }
+
           if (isAsk) {
             targetDoc.asks = targetDoc.asks.filter(
               bound => bound._id.toString() !== boundId.toString(),
@@ -331,7 +346,7 @@ $(document).ready(async () => {
   setInterval(updatePrices, 10 * 1000);
 
   // update bounds lifetime
-  setInterval(() => updateLifetimes, 60 * 1000); // 1 minute
+  setInterval(updateLifetimes, 60 * 1000); // 1 minute
 
   // update timestampt
   setInterval(() => { nowTimestamp = getUnix(); }, 1000);
@@ -527,7 +542,7 @@ const updateLifetimes = () => {
   instrumentsDocs.forEach(doc => {
     [...doc.asks, ...doc.bids].forEach(bound => {
       bound.lifetime = parseInt((nowTimestamp - bound.created_at) / 60, 10);
-      $(`#bound-${bound._id} .lifetime span`).text(`${bound.lifetime}m`);
+      $(`#bound-${bound._id} .lifetime span`).text(formatMinutesToPretty(bound.lifetime));
     });
   });
 };
@@ -551,6 +566,23 @@ const handlerNewInstrumentVolumeBound = (newBound) => {
   if (!instrumentDoc.is_rendered) {
     addNewInstrument(instrumentDoc);
     instrumentDoc.is_rendered = true;
+  }
+
+  if (instrumentDoc.is_favorite) {
+    const startOfMinute = (newBound.created_at - (newBound.created_at % 60)) + (userTimezone * 60);
+    const validEndTime = instrumentDoc.chartCandles.originalData[instrumentDoc.chartCandles.originalData.length - 1].originalTimeUnix + 2629743;
+
+    const newExtraSeries = instrumentDoc.chartCandles.addExtraSeries({
+      boundId,
+    });
+
+    instrumentDoc.chartCandles.drawSeries(newExtraSeries, [{
+      value: newBound.price,
+      time: startOfMinute,
+    }, {
+      value: newBound.price,
+      time: validEndTime,
+    }]);
   }
 
   let indexOfElement = 0;
@@ -777,7 +809,7 @@ const loadChart = async (instrumentDoc) => {
   $rootContainer
     .css({ height: $rootContainer.width() });
 
-  const chartCandles = new ChartCandles($rootContainer, '1m');
+  const chartCandles = new ChartCandles($rootContainer, '1m', instrumentDoc);
 
   chartCandles.setOriginalData(resultGetCandles.result);
   chartCandles.drawSeries(chartCandles.mainSeries, chartCandles.originalData);
@@ -823,7 +855,9 @@ const loadChart = async (instrumentDoc) => {
       const volumePrice = parseFloat(volume.price);
       const startOfMinute = (volume.created_at - (volume.created_at % 60)) + (userTimezone * 60);
 
-      const newExtraSeries = chartCandles.addExtraSeries();
+      const newExtraSeries = chartCandles.addExtraSeries({
+        boundId: volume.bound_id,
+      });
 
       chartCandles.drawSeries(newExtraSeries, [{
         value: volumePrice,

@@ -3,7 +3,7 @@ functions, getUnix,
 objects, moment, LightweightCharts */
 
 class ChartCandles {
-  constructor($rootContainer, period) {
+  constructor($rootContainer, period, instrumentDoc) {
     this.containerName = 'chart-candles';
     this.appendChart($rootContainer);
 
@@ -12,7 +12,13 @@ class ChartCandles {
     this.containerHeight = this.$containerDocument[0].clientHeight;
 
     this.addChart();
-    this.addMainSeries();
+
+    this.addMainSeries({
+      priceFormat: {
+        minMove: ChartCandles.getMinMove(instrumentDoc.price),
+        precision: ChartCandles.getPrecision(instrumentDoc.price),
+      },
+    });
 
     this.period = period;
 
@@ -68,7 +74,7 @@ class ChartCandles {
     });
   }
 
-  addMainSeries() {
+  addMainSeries(optionalParams) {
     this.mainSeries = this.chart.addCandlestickSeries({
       upColor: '#000FFF',
       downColor: 'rgba(0, 0, 0, 0)',
@@ -98,10 +104,17 @@ class ChartCandles {
 
         return res;
       },
+
+      ...optionalParams,
     });
   }
 
-  addExtraSeries() {
+  addExtraSeries(optionalParams) {
+    const {
+      minMove,
+      precision,
+    } = this.mainSeries.options();
+
     const newExtraSeries = this.chart.addLineSeries({
       priceLineSource: false,
       priceLineVisible: false,
@@ -109,6 +122,10 @@ class ChartCandles {
       lineWidth: 1,
       priceScaleId: 'level',
 
+      minMove,
+      precision,
+
+      ...optionalParams,
       // lineType: LightweightCharts.LineType.Simple,
       // lineStyle: LightweightCharts.LineStyle.LargeDashed,
     });
@@ -204,5 +221,32 @@ class ChartCandles {
       });
 
     return validData;
+  }
+
+  static getPrecision(instrumentPrice) {
+    const dividedPrice = instrumentPrice.toString().split('.');
+
+    if (!dividedPrice[1]) {
+      return 0;
+    }
+
+    return dividedPrice[1].length;
+  }
+
+  static getMinMove(instrumentPrice) {
+    const pricePrecision = ChartCandles.getPrecision(instrumentPrice);
+
+    if (pricePrecision === 0) {
+      return 1;
+    }
+
+    let minMove = '0.';
+
+    for (let i = 0; i < pricePrecision - 1; i += 1) {
+      minMove += '0';
+    }
+
+    minMove += '1';
+    return parseFloat(minMove);
   }
 }
