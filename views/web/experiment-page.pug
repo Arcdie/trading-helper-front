@@ -18,33 +18,40 @@ block content
 						span.low 0
 						| ЗАКР
 						span.close 0
-				
+						span.percent 0%			
+
 				.row
 					.chart-periods
 						.5m(data-period='5m')
 							span 5M
-						.1h(data-period='1h')
-							span 1Ч
-						.4h(data-period='4h')
-							span 4Ч
-						.day(data-period='day')
-							span Д
-						//- .month(data-period='month')
-						//- 	span Мес
-
-					.settings
-						img(src="/images/settings.png", alt="settings")
+						//- .1h(data-period='1h')
+						//- 	span 1Ч
+						//- .4h(data-period='4h')
+						//- 	span 4Ч
+						//- .1d(data-period='1d')
+						//- 	span Д
+						
+				.actions-menu
+					.trades-slider
+						button.previous <
+						p
+							span.current-tick 0
+							| /
+							span.amount-ticks 0
+						button.next >
+					
+			span.ruler 0%
 
 			.charts
-
+		
 		.instruments-container
 			.search
 				input(type="text" placeholder="Поиск")
 		
 			.instruments-list
 				.headlines
-					span Инструмент
-				
+					span.instrument-name Инструмент
+
 				.list
 
 block scripts
@@ -54,6 +61,5 @@ block scripts
 	script(src='/javascripts/websocket.js')
 	script(src='/javascripts/chart-functions/chart-candles.js')
 	script(src='/javascripts/chart-functions/chart-volume.js')
-	script(src='/javascripts/chart-functions/chart-periods.js')
 
 	script(src='/javascripts/web/experiment.js')

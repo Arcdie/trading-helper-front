@@ -354,7 +354,7 @@ input:checked + .slider:before {
   position: relative;
   display: flex; }
   .experiment .instruments-container {
-    width: 20%;
+    width: 10%;
     overflow-y: hidden;
     display: inline-block;
     box-sizing: border-box;
@@ -377,8 +377,21 @@ input:checked + .slider:before {
         text-align: left;
         padding: 5px 10px;
         border-bottom: 1px solid black; }
+        .experiment .instruments-container .instruments-list .headlines span {
+          cursor: pointer;
+          display: inline-block;
+          box-sizing: border-box; }
+          .experiment .instruments-container .instruments-list .headlines span.is_active {
+            background-color: #00a1ff59; }
+          .experiment .instruments-container .instruments-list .headlines span.instrument-name {
+            width: 80%; }
+          .experiment .instruments-container .instruments-list .headlines span.levels {
+            width: 20%;
+            text-align: center; }
       .experiment .instruments-container .instruments-list .list {
-        overflow-y: scroll; }
+        display: flex;
+        overflow-y: scroll;
+        flex-direction: column; }
         .experiment .instruments-container .instruments-list .list .instrument {
           cursor: pointer;
           padding: 10px 10px;
@@ -387,10 +400,14 @@ input:checked + .slider:before {
             background-color: #0066ff61 !important; }
           .experiment .instruments-container .instruments-list .list .instrument:hover {
             background-color: #0066ff1f; }
-          .experiment .instruments-container .instruments-list .list .instrument:last-child {
-            border-bottom: none; }
+          .experiment .instruments-container .instruments-list .list .instrument span {
+            cursor: pointer;
+            display: inline-block;
+            box-sizing: border-box; }
+            .experiment .instruments-container .instruments-list .list .instrument span.instrument-name {
+              width: 100%; }
   .experiment .chart-container {
-    width: 80%;
+    width: 90%;
     display: inline-block;
     box-sizing: border-box;
     position: relative;
@@ -407,6 +424,29 @@ input:checked + .slider:before {
       color: #000FFF;
       margin-left: 2px;
       margin-right: 5px; }
+    .experiment .chart-container .ruler {
+      position: absolute;
+      left: -9999px;
+      top: -9999px;
+      z-index: 999;
+      font-size: 16px;
+      color: #0044e8; }
+    .experiment .chart-container .actions-menu {
+      margin-top: 12px; }
+      .experiment .chart-container .actions-menu .trades-slider p {
+        display: inline-block;
+        margin: 0 8px;
+        font: 17px sans-serif; }
+        .experiment .chart-container .actions-menu .trades-slider p span.current-tick {
+          margin-right: 3px; }
+        .experiment .chart-container .actions-menu .trades-slider p span.amount-ticks {
+          margin-left: 3px; }
+      .experiment .chart-container .actions-menu .trades-slider button {
+        display: inline-block;
+        background-color: transparent;
+        border-radius: 100px;
+        cursor: pointer;
+        font-size: 17px; }
     .experiment .chart-container .chart-periods {
       display: flex;
       margin-top: 12px; }
@@ -430,14 +470,6 @@ input:checked + .slider:before {
           margin: 8px auto;
           text-align: center;
           display: block; }
-    .experiment .chart-container .settings {
-      display: flex;
-      width: 27px;
-      margin-top: 8px;
-      margin-left: 5px;
-      cursor: pointer; }
-      .experiment .chart-container .settings img {
-        width: 100%; }
     .experiment .chart-container .chart-candles {
       width: 100%;
       height: 70%;

@@ -54,10 +54,11 @@ const $chartPeriods = $('.chart-periods div');
 const $settings = $chartsNav.find('.settings');
 
 const $legend = $('.legend');
+const $low = $legend.find('span.low');
+const $high = $legend.find('span.high');
 const $open = $legend.find('span.open');
 const $close = $legend.find('span.close');
-const $high = $legend.find('span.high');
-const $low = $legend.find('span.low');
+const $percent = $legend.find('span.percent');
 
 /* Functions */
 wsClient.onmessage = async data => {
@@ -479,7 +480,7 @@ const drawLevelLines = ({
       }
 
       const newExtraSeries = chartCandles.addExtraSeries({
-        boundId: bound.bound._id,
+        boundId: bound.bound_id,
         lineType: LightweightCharts.LineType.Simple,
         lineStyle: LightweightCharts.LineStyle.LargeDashed,
       });
@@ -591,10 +592,14 @@ const loadChart = async ({
       const price = param.seriesPrices.get(chartCandles.mainSeries);
 
       if (price) {
+        const differenceBetweenHighAndLow = price.high - price.low;
+        const percentPerPrice = 100 / (price.open / differenceBetweenHighAndLow);
+
         $open.text(price.open);
         $close.text(price.close);
         $low.text(price.low);
         $high.text(price.high);
+        $percent.text(`${percentPerPrice.toFixed(1)}%`);
       }
     }
   });

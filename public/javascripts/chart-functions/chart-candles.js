@@ -35,8 +35,8 @@ class ChartCandles {
     $rootContainer.append(`<div class="${this.containerName}"></div>`);
   }
 
-  setOriginalData(instrumentData) {
-    const preparedData = this.prepareNewData(instrumentData);
+  setOriginalData(instrumentData, doesConsiderTimezone = true) {
+    const preparedData = this.prepareNewData(instrumentData, doesConsiderTimezone);
     this.originalData.unshift(...preparedData);
     return preparedData;
   }
@@ -153,7 +153,7 @@ class ChartCandles {
       color: marker.color,
       text: marker.text,
       position: 'aboveBar',
-      shape: 'arrowDown',
+      shape: marker.shape || 'arrowDown',
     })));
   }
 
@@ -190,9 +190,14 @@ class ChartCandles {
     });
   }
 
-  prepareNewData(instrumentData) {
+  prepareNewData(instrumentData, doesConsiderTimezone = true) {
     const isUnixTime = ['1m', '5m', '1h', '4h'].includes(this.period);
-    const userTimezone = -(new Date().getTimezoneOffset());
+
+    let userTimezone = 0;
+
+    if (doesConsiderTimezone) {
+      userTimezone = -(new Date().getTimezoneOffset());
+    }
 
     const validData = instrumentData
       .map(data => {
