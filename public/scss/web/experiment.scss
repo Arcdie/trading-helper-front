@@ -131,6 +131,8 @@
       margin-top: 12px;
 
       .trades-slider {
+        display: inline-block;
+
         p {
           display: inline-block;
           margin: 0 8px;
@@ -153,6 +155,20 @@
           border-radius: 100px;
           cursor: pointer;
           font-size: 17px;
+        }
+      }
+
+      .trades-aggregate {
+        width: 16px;
+        display: inline-block;
+        margin-left: 11px;
+
+        input[type="text"] {
+          width: 100%;
+          height: 100%;
+          text-align: center;
+          position: relative;
+          bottom: 2px;
         }
       }
     }

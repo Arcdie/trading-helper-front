@@ -22,6 +22,8 @@ block content
 
 				.row
 					.chart-periods
+						.1m(data-period='1m')
+							span 1M
 						.5m(data-period='5m')
 							span 5M
 						//- .1h(data-period='1h')
@@ -40,7 +42,8 @@ block content
 							span.amount-ticks 0
 						button.next >
 					
-			span.ruler 0%
+					.trades-aggregate
+						input(type="text" value="3")
 
 			.charts
 		

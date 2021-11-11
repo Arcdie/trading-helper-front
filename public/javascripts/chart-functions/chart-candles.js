@@ -157,6 +157,10 @@ class ChartCandles {
     })));
   }
 
+  removeMarkers() {
+    this.markers = [];
+  }
+
   removeChart() {
     this.removeSeries();
     this.chart.remove();

@@ -10,6 +10,7 @@ const URL_GET_CANDLES = '/api/candles';
 const URL_GET_ACTIVE_INSTRUMENTS = '/api/instruments/active';
 
 const AVAILABLE_PERIODS = new Map([
+  ['1M', '1m'],
   ['5M', '5m'],
   ['1H', '1h'],
   ['4H', '4h'],
@@ -17,16 +18,18 @@ const AVAILABLE_PERIODS = new Map([
 ]);
 
 const WORKING_PERIODS = [
+  AVAILABLE_PERIODS.get('1M'),
   AVAILABLE_PERIODS.get('5M'),
-  AVAILABLE_PERIODS.get('1H'),
-  AVAILABLE_PERIODS.get('4H'),
-  AVAILABLE_PERIODS.get('1D'),
+  // AVAILABLE_PERIODS.get('1H'),
+  // AVAILABLE_PERIODS.get('4H'),
+  // AVAILABLE_PERIODS.get('1D'),
 ];
 
 const windowWidth = window.innerWidth;
 const windowHeight = window.innerHeight;
 
-const DEFAULT_PERIOD = AVAILABLE_PERIODS.get('5M');
+let LIMITER_FOR_AGGREGATE_TRADES = 3;
+const DEFAULT_PERIOD = AVAILABLE_PERIODS.get('1M');
 
 let choosenInstrumentId;
 let choosenPeriod = DEFAULT_PERIOD;
@@ -36,9 +39,9 @@ let chartCandles = {};
 
 let robots = [];
 let instrumentsDocs = [];
+let instrumentRobotBounds = [];
 
 /* JQuery */
-const $ruler = $('span.ruler');
 const $rootContainer = $('.charts');
 const $chartPeriods = $('.chart-periods div');
 const $instrumentsContainer = $('.instruments-container');
@@ -52,6 +55,7 @@ const $close = $legend.find('span.close');
 const $percent = $legend.find('span.percent');
 
 const $tradesSlider = $('.trades-slider');
+const $tradesAggregate = $('.trades-aggregate input');
 
 $(document).ready(async () => {
   $rootContainer.css({ height: windowHeight - 20 });
@@ -97,6 +101,11 @@ $(document).ready(async () => {
       choosenPeriod = period;
 
       if (choosenInstrumentId) {
+        await loadChart({
+          instrumentId: choosenInstrumentId,
+        });
+
+        loadMarkers(instrumentRobotBounds);
       }
     });
 
@@ -148,8 +157,10 @@ $(document).ready(async () => {
         return true;
       }
 
+      instrumentRobotBounds = resultGetTrades.result;
+
       await loadChart({ instrumentId });
-      loadMarkers(resultGetTrades.result);
+      loadMarkers(instrumentRobotBounds);
     });
 
   $tradesSlider
@@ -160,6 +171,21 @@ $(document).ready(async () => {
       }
 
       scrollTo($(this).attr('class'));
+    });
+
+  $tradesAggregate
+    .on('keyup', function () {
+      const newValue = parseInt($(this).val(), 10);
+
+      if (!Number.isNaN(newValue)
+        && newValue !== LIMITER_FOR_AGGREGATE_TRADES) {
+        LIMITER_FOR_AGGREGATE_TRADES = newValue;
+
+        if (choosenInstrumentId) {
+          $tradesSlider.find('span.current-tick').text(0);
+          loadMarkers(instrumentRobotBounds);
+        }
+      }
     });
 });
 
@@ -204,7 +230,7 @@ const loadChart = async ({
   chartCandles.drawSeries(chartCandles.mainSeries, chartCandles.originalData);
   chartVolume.drawSeries(chartCandles.originalData);
 
-  if (['5m', '1h', '4h'].includes(choosenPeriod)) {
+  if (['1m', '5m'].includes(choosenPeriod)) {
     listCharts.forEach(chartWrapper => {
       chartWrapper.chart.applyOptions({
         timeScale: {
@@ -223,19 +249,6 @@ const loadChart = async ({
   }
 
   chartCandles.chart.subscribeCrosshairMove((param) => {
-    if (param.point) {
-      const coordinateToPrice = chartCandles.mainSeries.coordinateToPrice(param.point.y);
-      const differenceBetweenInstrumentAndCoordinatePrices = Math.abs(targetDoc.price - coordinateToPrice);
-      const percentPerPrice = 100 / (targetDoc.price / differenceBetweenInstrumentAndCoordinatePrices);
-
-      $ruler
-        .text(`${percentPerPrice.toFixed(1)}%`)
-        .css({
-          top: param.point.y - 25,
-          left: param.point.x + 15,
-        });
-    }
-
     if (param.time) {
       const price = param.seriesPrices.get(chartCandles.mainSeries);
 
@@ -248,6 +261,18 @@ const loadChart = async ({
         $low.text(price.low);
         $high.text(price.high);
         $percent.text(`${percentPerPrice.toFixed(1)}%`);
+      }
+    }
+  });
+
+  chartCandles.chart.subscribeClick((param) => {
+    if (param.time) {
+      const indexRobots = robots.findIndex(robot => robot.time === param.time);
+
+      if (~indexRobots) {
+        $tradesSlider
+          .find('span.current-tick')
+          .text(indexRobots + 1);
       }
     }
   });
@@ -282,10 +307,13 @@ const loadChart = async ({
 const loadMarkers = (trades) => {
   robots = [];
   const newMarkers = [];
+  chartCandles.removeMarkers();
+
+  const divider = choosenPeriod === AVAILABLE_PERIODS.get('1M') ? 60 : 300;
 
   trades.forEach(trade => {
     const timeUnix = moment(trade.time).utc().unix();
-    const targetInterval = timeUnix - (timeUnix % 300);
+    const targetInterval = timeUnix - (timeUnix % divider);
 
     const keyMarker = `i${targetInterval}`;
     const direction = trade.is_long ? 'long' : 'short';
@@ -308,7 +336,7 @@ const loadMarkers = (trades) => {
     Object.keys(newMarkers[keyInterval]).forEach(keyQuantity => {
       const workTrades = newMarkers[keyInterval][keyQuantity];
 
-      if (workTrades.length < 3) {
+      if (workTrades.length < LIMITER_FOR_AGGREGATE_TRADES) {
         return true;
       }
 
@@ -331,18 +359,20 @@ const loadMarkers = (trades) => {
     });
   });
 
-  robots
-    .sort((a, b) => a.time < b.time ? -1 : 1)
-    .forEach(newMarker => {
-      chartCandles.addMarker(newMarker);
-    });
-
   $tradesSlider
     .find('span.amount-ticks')
     .text(robots.length);
 
-  chartCandles.drawMarkers();
-  scrollTo('next');
+  if (robots.length) {
+    robots
+      .sort((a, b) => a.time < b.time ? -1 : 1)
+      .forEach(newMarker => {
+        chartCandles.addMarker(newMarker);
+      });
+
+    chartCandles.drawMarkers();
+    scrollTo('next');
+  }
 };
 
 const renderListInstruments = targetDocs => {

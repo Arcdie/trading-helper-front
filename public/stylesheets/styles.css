@@ -433,20 +433,32 @@ input:checked + .slider:before {
       color: #0044e8; }
     .experiment .chart-container .actions-menu {
       margin-top: 12px; }
-      .experiment .chart-container .actions-menu .trades-slider p {
+      .experiment .chart-container .actions-menu .trades-slider {
+        display: inline-block; }
+        .experiment .chart-container .actions-menu .trades-slider p {
+          display: inline-block;
+          margin: 0 8px;
+          font: 17px sans-serif; }
+          .experiment .chart-container .actions-menu .trades-slider p span.current-tick {
+            margin-right: 3px; }
+          .experiment .chart-container .actions-menu .trades-slider p span.amount-ticks {
+            margin-left: 3px; }
+        .experiment .chart-container .actions-menu .trades-slider button {
+          display: inline-block;
+          background-color: transparent;
+          border-radius: 100px;
+          cursor: pointer;
+          font-size: 17px; }
+      .experiment .chart-container .actions-menu .trades-aggregate {
+        width: 16px;
         display: inline-block;
-        margin: 0 8px;
-        font: 17px sans-serif; }
-        .experiment .chart-container .actions-menu .trades-slider p span.current-tick {
-          margin-right: 3px; }
-        .experiment .chart-container .actions-menu .trades-slider p span.amount-ticks {
-          margin-left: 3px; }
-      .experiment .chart-container .actions-menu .trades-slider button {
-        display: inline-block;
-        background-color: transparent;
-        border-radius: 100px;
-        cursor: pointer;
-        font-size: 17px; }
+        margin-left: 11px; }
+        .experiment .chart-container .actions-menu .trades-aggregate input[type="text"] {
+          width: 100%;
+          height: 100%;
+          text-align: center;
+          position: relative;
+          bottom: 2px; }
     .experiment .chart-container .chart-periods {
       display: flex;
       margin-top: 12px; }
