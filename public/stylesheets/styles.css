@@ -1,4 +1,3 @@
-@charset "UTF-8";
 html, body, div, span, applet, object, iframe, h1, h2, h3, h4, h5, h6, p, blockquote, pre, a, abbr, acronym, address, big, cite, code, del, dfn, em, img, ins, kbd, q, s, samp, small, strike, strong, sub, sup, tt, var, b, u, i, center, dl, dt, dd, ol, ul, li, fieldset, form, label, legend, table, caption, tbody, tfoot, thead, tr, th, td, article, aside, canvas, details, embed, figure, figcaption, footer, header, hgroup, menu, nav, output, ruby, section, summary, time, mark, audio, video {
   margin: 0;
   padding: 0;
@@ -146,6 +145,42 @@ div.md-show.md-modal div.md-content {
       margin-bottom: 8px; }
     .window.volume-monitroing-settings .volume-monitroing-settings-container ul li {
       margin-bottom: 3px; }
+
+.loader {
+  position: absolute;
+  width: 80px;
+  height: 80px;
+  top: 5px;
+  right: 5px;
+  display: none;
+  z-index: 99999; }
+  .loader.is_active {
+    display: block; }
+
+.loader div {
+  background-color: #1400be;
+  position: absolute;
+  border: 4px solid #fff;
+  opacity: 1;
+  border-radius: 50%;
+  animation: loader 1s cubic-bezier(0, 0.2, 0.8, 1) infinite; }
+
+.loader div:nth-child(2) {
+  animation-delay: -0.5s; }
+
+@keyframes loader {
+  0% {
+    top: 36px;
+    left: 36px;
+    width: 0;
+    height: 0;
+    opacity: 1; }
+  100% {
+    top: 0px;
+    left: 0px;
+    width: 72px;
+    height: 72px;
+    opacity: 0; } }
 
 .switch {
   position: relative;
@@ -352,7 +387,10 @@ input:checked + .slider:before {
 .experiment {
   padding: 10px;
   position: relative;
-  display: flex; }
+  display: flex;
+  flex-direction: column; }
+  .experiment .row {
+    display: flex; }
   .experiment .instruments-container {
     width: 10%;
     overflow-y: hidden;
@@ -497,6 +535,18 @@ input:checked + .slider:before {
       border-top: none;
       border-right: none;
       box-sizing: border-box; }
+  .experiment .robots-container {
+    width: 100%; }
+    .experiment .robots-container table {
+      margin: 15px;
+      font: 17px sans-serif; }
+      .experiment .robots-container table tr th {
+        padding: 10px;
+        border-bottom: 1px dashed black;
+        text-align: center; }
+      .experiment .robots-container table tr td {
+        padding: 10px;
+        text-align: center; }
 
 .volume-monitoring {
   padding: 15px; }
@@ -772,34 +822,169 @@ input:checked + .slider:before {
       border-right: none;
       box-sizing: border-box; }
 
-.robots-statistics .container-instruments {
-  padding: 15px; }
-  .robots-statistics .container-instruments .instrument {
-    width: 190px;
-    height: 170px;
-    float: left;
-    cursor: pointer;
-    color: black;
-    text-decoration: none;
+.robots-statistics {
+  padding: 10px;
+  position: relative;
+  display: flex;
+  flex-direction: column; }
+  .robots-statistics .row {
+    display: flex; }
+  .robots-statistics .instruments-container {
+    width: 10%;
+    overflow-y: hidden;
+    display: inline-block;
+    box-sizing: border-box;
+    border: 1px solid black; }
+    .robots-statistics .instruments-container .search {
+      width: 100%;
+      height: 35px; }
+      .robots-statistics .instruments-container .search input[type="text"] {
+        width: 100%;
+        height: 100%;
+        box-sizing: border-box;
+        border-right: none;
+        border-top: none;
+        border-left: none;
+        padding: 0 8px;
+        outline: none; }
+    .robots-statistics .instruments-container .instruments-list {
+      width: 100%; }
+      .robots-statistics .instruments-container .instruments-list .headlines {
+        text-align: left;
+        padding: 5px 10px;
+        border-bottom: 1px solid black; }
+        .robots-statistics .instruments-container .instruments-list .headlines span {
+          cursor: pointer;
+          display: inline-block;
+          box-sizing: border-box; }
+          .robots-statistics .instruments-container .instruments-list .headlines span.is_active {
+            background-color: #00a1ff59; }
+          .robots-statistics .instruments-container .instruments-list .headlines span.instrument-name {
+            width: 80%; }
+          .robots-statistics .instruments-container .instruments-list .headlines span.levels {
+            width: 20%;
+            text-align: center; }
+      .robots-statistics .instruments-container .instruments-list .list {
+        display: flex;
+        overflow-y: scroll;
+        flex-direction: column; }
+        .robots-statistics .instruments-container .instruments-list .list .instrument {
+          cursor: pointer;
+          padding: 10px 10px;
+          border-bottom: 1px solid black; }
+          .robots-statistics .instruments-container .instruments-list .list .instrument.is_active {
+            background-color: #0066ff61 !important; }
+          .robots-statistics .instruments-container .instruments-list .list .instrument:hover {
+            background-color: #0066ff1f; }
+          .robots-statistics .instruments-container .instruments-list .list .instrument span {
+            cursor: pointer;
+            display: inline-block;
+            box-sizing: border-box; }
+            .robots-statistics .instruments-container .instruments-list .list .instrument span.instrument-name {
+              width: 100%; }
+  .robots-statistics .chart-container {
+    width: 90%;
+    display: inline-block;
+    box-sizing: border-box;
     position: relative;
-    border: 1px solid black;
-    padding: 15px 10px;
-    margin-right: 20px;
-    margin-bottom: 20px;
-    display: inline-block; }
-    .robots-statistics .container-instruments .instrument span.instrument-name {
-      text-align: center;
-      display: block;
-      margin-bottom: 15px;
-      font: 19px sans-serif; }
-    .robots-statistics .container-instruments .instrument p {
-      padding: 10px 0;
-      font: 17px ​sans-serif;
-      border-top: 1px solid black;
-      border-bottom: 1px solid black; }
-      .robots-statistics .container-instruments .instrument p span {
-        display: block;
-        margin-bottom: 5px; }
+    border-bottom: 1px solid black; }
+    .robots-statistics .chart-container .charts-nav {
+      position: absolute;
+      z-index: 999;
+      top: 15px;
+      left: 15px; }
+      .robots-statistics .chart-container .charts-nav .row {
+        display: flex;
+        align-items: center; }
+    .robots-statistics .chart-container .legend p.values span {
+      color: #000FFF;
+      margin-left: 2px;
+      margin-right: 5px; }
+    .robots-statistics .chart-container .ruler {
+      position: absolute;
+      left: -9999px;
+      top: -9999px;
+      z-index: 999;
+      font-size: 16px;
+      color: #0044e8; }
+    .robots-statistics .chart-container .actions-menu {
+      margin-top: 12px; }
+      .robots-statistics .chart-container .actions-menu .trades-slider {
+        display: inline-block; }
+        .robots-statistics .chart-container .actions-menu .trades-slider p {
+          display: inline-block;
+          margin: 0 8px;
+          font: 17px sans-serif; }
+          .robots-statistics .chart-container .actions-menu .trades-slider p span.current-tick {
+            margin-right: 3px; }
+          .robots-statistics .chart-container .actions-menu .trades-slider p span.amount-ticks {
+            margin-left: 3px; }
+        .robots-statistics .chart-container .actions-menu .trades-slider button {
+          display: inline-block;
+          background-color: transparent;
+          border-radius: 100px;
+          cursor: pointer;
+          font-size: 17px; }
+      .robots-statistics .chart-container .actions-menu .trades-aggregate {
+        width: 16px;
+        display: inline-block;
+        margin-left: 11px; }
+        .robots-statistics .chart-container .actions-menu .trades-aggregate input[type="text"] {
+          width: 100%;
+          height: 100%;
+          text-align: center;
+          position: relative;
+          bottom: 2px; }
+    .robots-statistics .chart-container .chart-periods {
+      display: flex;
+      margin-top: 12px; }
+      .robots-statistics .chart-container .chart-periods div {
+        width: 40px;
+        height: 40px;
+        cursor: pointer;
+        display: none;
+        box-sizing: border-box;
+        margin-right: 5px;
+        position: relative;
+        border: 1px dashed #d9d9d9;
+        background-color: white; }
+        .robots-statistics .chart-container .chart-periods div.is_worked {
+          display: flex;
+          justify-content: center;
+          align-items: center; }
+        .robots-statistics .chart-container .chart-periods div.is_active {
+          border-color: #00bf20; }
+        .robots-statistics .chart-container .chart-periods div span {
+          margin: 8px auto;
+          text-align: center;
+          display: block; }
+    .robots-statistics .chart-container .chart-candles {
+      width: 100%;
+      height: 70%;
+      /* height: 70%; */
+      /* height: 50%; */
+      border: 1px solid black;
+      border-right: none;
+      box-sizing: border-box; }
+    .robots-statistics .chart-container .chart-volume {
+      width: 100%;
+      height: 30%;
+      border: 1px solid black;
+      border-top: none;
+      border-right: none;
+      box-sizing: border-box; }
+  .robots-statistics .robots-container {
+    width: 100%; }
+    .robots-statistics .robots-container table {
+      margin: 15px;
+      font: 17px sans-serif; }
+      .robots-statistics .robots-container table tr th {
+        padding: 10px;
+        border-bottom: 1px dashed black;
+        text-align: center; }
+      .robots-statistics .robots-container table tr td {
+        padding: 10px;
+        text-align: center; }
 
 .instrument-tick-bounds {
   padding: 15px; }

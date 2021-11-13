@@ -2,6 +2,11 @@
   padding: 10px;
   position: relative;
   display: flex;
+  flex-direction: column;
+
+  .row {
+    display: flex;
+  }
 
   .instruments-container {
     width: 10%;
@@ -223,6 +228,28 @@
       border-top: none;
       border-right: none;
       box-sizing: border-box;
+    }
+  }
+
+  .robots-container {
+    width: 100%;
+
+    table {
+      margin: 15px;
+      font: 17px sans-serif;
+
+      tr {
+        th {
+          padding: 10px;
+          border-bottom: 1px dashed black;
+          text-align: center;
+        }
+
+        td {
+          padding: 10px;
+          text-align: center;
+        }
+      }
     }
   }
 }

@@ -6,56 +6,63 @@ block variables
 
 block content
 	.page.experiment
-		.chart-container
-			.charts-nav
-				.legend
-					p.values
-						| ОТКР
-						span.open 0
-						| МАКС
-						span.high 0
-						| МИН
-						span.low 0
-						| ЗАКР
-						span.close 0
-						span.percent 0%			
+		.row
+			.chart-container
+				.loader
+					div
+					div
 
-				.row
-					.chart-periods
-						.1m(data-period='1m')
-							span 1M
-						.5m(data-period='5m')
-							span 5M
-						//- .1h(data-period='1h')
-						//- 	span 1Ч
-						//- .4h(data-period='4h')
-						//- 	span 4Ч
-						//- .1d(data-period='1d')
-						//- 	span Д
+				.charts-nav
+					.legend
+						p.values
+							| ОТКР
+							span.open 0
+							| МАКС
+							span.high 0
+							| МИН
+							span.low 0
+							| ЗАКР
+							span.close 0
+							span.percent 0%			
+
+					.row
+						.chart-periods
+							.1m(data-period='1m')
+								span 1M
+							.5m(data-period='5m')
+								span 5M
+							//- .1h(data-period='1h')
+							//- 	span 1Ч
+							//- .4h(data-period='4h')
+							//- 	span 4Ч
+							//- .1d(data-period='1d')
+							//- 	span Д
+							
+					.actions-menu
+						.trades-slider
+							button.previous <
+							p
+								span.current-tick 0
+								| /
+								span.amount-ticks 0
+							button.next >
 						
-				.actions-menu
-					.trades-slider
-						button.previous <
-						p
-							span.current-tick 0
-							| /
-							span.amount-ticks 0
-						button.next >
-					
-					.trades-aggregate
-						input(type="text" value="3")
+						.trades-aggregate
+							input(type="text" value="3")
 
-			.charts
-		
-		.instruments-container
-			.search
-				input(type="text" placeholder="Поиск")
-		
-			.instruments-list
-				.headlines
-					span.instrument-name Инструмент
+				.charts
+			
+			.instruments-container
+				.search
+					input(type="text" placeholder="Поиск")
+			
+				.instruments-list
+					.headlines
+						span.instrument-name Инструмент
 
-				.list
+					.list
+				
+		.robots-container
 
 block scripts
 	script(src='/libs/moment.min.js')

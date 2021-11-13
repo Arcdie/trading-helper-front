@@ -6,27 +6,70 @@ block variables
 
 block content
 	.page.robots-statistics
-		.container-instruments
-			//- .instrument
-			//- 	span.instrument-name BTCUSDT
-			//- 
-			//- 	p
-			//- 		span Объем: 3000
-			//- 		span Направление: Long
-			//- 
-			//- .instrument
-			//- 	span.instrument-name BTCUSDT
-			//- 
-			//- 	p
-			//- 		span Объем: 3000
-			//- 		span Направление: Long
-			//- 
-			//- .instrument
-			//- 	span.instrument-name BTCUSDT
-			//- 
-			//- 	p
-			//- 		span Объем: 3000
-			//- 		span Направление: Long
+		.row
+			.chart-container
+				.loader
+					div
+					div
+
+				.charts-nav
+					.legend
+						p.values
+							| ОТКР
+							span.open 0
+							| МАКС
+							span.high 0
+							| МИН
+							span.low 0
+							| ЗАКР
+							span.close 0
+							span.percent 0%			
+
+					.row
+						.chart-periods
+							.1m(data-period='1m')
+								span 1M
+							.5m(data-period='5m')
+								span 5M
+							//- .1h(data-period='1h')
+							//- 	span 1Ч
+							//- .4h(data-period='4h')
+							//- 	span 4Ч
+							//- .1d(data-period='1d')
+							//- 	span Д
+							
+					.actions-menu
+						.trades-slider
+							button.previous <
+							p
+								span.current-tick 0
+								| /
+								span.amount-ticks 0
+							button.next >
+						
+						.trades-aggregate
+							input(type="text" value="3")
+
+				.charts
+			
+			.instruments-container
+				.search
+					input(type="text" placeholder="Поиск")
+			
+				.instruments-list
+					.headlines
+						span.instrument-name Инструмент
+
+					.list
+				
+		.robots-container
 
 block scripts
+	script(src='/libs/moment.min.js')
+	script(src='/libs/trading-view-charts.min.js')
+
+	script(src='/javascripts/websocket.js')
+	script(src='/javascripts/chart-functions/chart-candles.js')
+	script(src='/javascripts/chart-functions/chart-volume.js')
+
 	script(src='/javascripts/web/robots-statistics.js')

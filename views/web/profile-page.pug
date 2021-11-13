@@ -9,7 +9,6 @@ block content
 		h1(data-id= user._id) Профиль #{user.fullname}
 		
 		.links
-			//- a(href='/robots-statistics') Статистика по роботам
 			a(href='https://t.me/helperenok_bot', target="_blank") Telegram-бот
     
 		.resources
@@ -25,7 +24,10 @@ block content
 			a(href='/volume-monitoring')
 				span Плотности
 				p Находит плотности, запоминает сколько плотность уже живет. Есть графики с к-во касаний к плотности;
-				
+			
+			a(href='/robots-statistics')
+				span Статистика по роботам
+				p Графики с гибкими настройками. Пока только за последний месяц.
 
 			a(href='/utilities')
 				span Помощники для cscalp
@@ -33,10 +35,6 @@ block content
 		
 			a.soon
 				span Статистика для плотностей (скоро)
-		
-			a.soon
-				span Статистика по роботам (скоро)
-				p Развернутая статистика: сколько протолкал, время включения, с графиками, объемами.
 		
 		.donate
 			h3 Donate. Проект бесплатный, а сервера нет :)
