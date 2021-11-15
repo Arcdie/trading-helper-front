@@ -27,8 +27,6 @@ block content
 
 					.row
 						.chart-periods
-							.1m(data-period='1m')
-								span 1M
 							.5m(data-period='5m')
 								span 5M
 							//- .1h(data-period='1h')
@@ -37,18 +35,6 @@ block content
 							//- 	span 4Ч
 							//- .1d(data-period='1d')
 							//- 	span Д
-							
-					.actions-menu
-						.trades-slider
-							button.previous <
-							p
-								span.current-tick 0
-								| /
-								span.amount-ticks 0
-							button.next >
-						
-						.trades-aggregate
-							input(type="text" value="3")
 
 				.charts
 			
@@ -61,8 +47,6 @@ block content
 						span.instrument-name Инструмент
 
 					.list
-				
-		.robots-container
 
 block scripts
 	script(src='/libs/moment.min.js')

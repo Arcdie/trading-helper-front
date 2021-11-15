@@ -1,14 +1,12 @@
 /* global
 functions, makeRequest, initPopWindow,
-objects, windows, moment, user, wsClient, ChartCandles, ChartVolume, LightweightCharts
+objects, windows, moment, user,, ChartCandles, ChartVolume, LightweightCharts
 */
 
 /* Constants */
 
-const URL_GET_TRADES = '/api/trades';
 const URL_GET_CANDLES = '/api/candles';
 const URL_GET_ACTIVE_INSTRUMENTS = '/api/instruments/active';
-const URL_GET_INSTRUMENT_ROBOT_BOUNDS = '/api/instrument-robot-bounds';
 
 const AVAILABLE_PERIODS = new Map([
   ['1M', '1m'],
@@ -19,7 +17,7 @@ const AVAILABLE_PERIODS = new Map([
 ]);
 
 const WORKING_PERIODS = [
-  AVAILABLE_PERIODS.get('1M'),
+  // AVAILABLE_PERIODS.get('1M'),
   AVAILABLE_PERIODS.get('5M'),
   // AVAILABLE_PERIODS.get('1H'),
   // AVAILABLE_PERIODS.get('4H'),
@@ -29,28 +27,21 @@ const WORKING_PERIODS = [
 const windowWidth = window.innerWidth;
 const windowHeight = window.innerHeight;
 
-let LIMITER_FOR_AGGREGATE_TRADES = 3;
-const DEFAULT_PERIOD = AVAILABLE_PERIODS.get('1M');
+const DEFAULT_PERIOD = AVAILABLE_PERIODS.get('5M');
 
-let isLoading = false;
 let choosenInstrumentId;
 let choosenPeriod = DEFAULT_PERIOD;
 
 let chartVolume = {};
 let chartCandles = {};
 
-let robots = [];
-let trades = [];
 let instrumentsDocs = [];
-let instrumentRobotBounds = [];
 
 /* JQuery */
 const $rootContainer = $('.charts');
 const $chartPeriods = $('.chart-periods div');
 const $instrumentsContainer = $('.instruments-container');
 const $instrumentsList = $instrumentsContainer.find('.instruments-list .list');
-
-const $loader = $('.loader');
 
 const $legend = $('.legend');
 const $low = $legend.find('span.low');
@@ -59,17 +50,12 @@ const $open = $legend.find('span.open');
 const $close = $legend.find('span.close');
 const $percent = $legend.find('span.percent');
 
-const $tradesSlider = $('.trades-slider');
-const $tradesAggregate = $('.trades-aggregate input');
-
-const $robotsContainer = $('.robots-container');
-
 $(document).ready(async () => {
   $rootContainer.css({ height: windowHeight - 20 });
 
   const resultGetInstruments = await makeRequest({
     method: 'GET',
-    url: `${URL_GET_ACTIVE_INSTRUMENTS}?doesExistRobot=true`,
+    url: `${URL_GET_ACTIVE_INSTRUMENTS}?isOnlyFutures=true`,
   });
 
   if (!resultGetInstruments || !resultGetInstruments.status) {
@@ -97,35 +83,6 @@ $(document).ready(async () => {
     }
   });
 
-  $chartPeriods
-    .on('click', async function () {
-      if (isLoading) {
-        return true;
-      }
-
-      const $period = $(this);
-      const period = $period.data('period');
-
-      $chartPeriods.removeClass('is_active');
-      $period.addClass('is_active');
-
-      choosenPeriod = period;
-
-      if (choosenInstrumentId) {
-        isLoading = true;
-        $loader.addClass('is_active');
-
-        await loadChart({
-          instrumentId: choosenInstrumentId,
-        });
-
-        loadMarkers(trades);
-        fillRobotsInfo(instrumentRobotBounds, robots);
-
-        $loader.removeClass('is_active');
-      }
-    });
-
   $('.search input')
     .on('keyup', function () {
       const value = $(this).val().toLowerCase();
@@ -151,101 +108,16 @@ $(document).ready(async () => {
         return true;
       }
 
-      if (isLoading) {
-        return true;
-      }
-
-      isLoading = true;
-      $loader.addClass('is_active');
-
       $instrumentsList
         .find('.instrument')
         .removeClass('is_active');
 
       $instrument.addClass('is_active');
-      $tradesSlider.find('span.current-tick').text(0);
 
       choosenInstrumentId = instrumentId;
 
-      const resultGetInstrumentRobotBounds = await makeRequest({
-        method: 'GET',
-        url: `${URL_GET_INSTRUMENT_ROBOT_BOUNDS}?instrumentId=${instrumentId}`,
-      });
-
-      if (!resultGetInstrumentRobotBounds || !resultGetInstrumentRobotBounds.status) {
-        isLoading = false;
-        $loader.removeClass('is_active');
-        alert(resultGetInstrumentRobotBounds.message || 'Cant makeRequest URL_GET_INSTRUMENT_ROBOT_BOUNDS');
-        return true;
-      }
-
-      const resultGetTrades = await makeRequest({
-        method: 'GET',
-        url: `${URL_GET_TRADES}?instrumentId=${instrumentId}`,
-      });
-
-      if (!resultGetTrades || !resultGetTrades.status) {
-        isLoading = false;
-        $loader.removeClass('is_active');
-        alert(resultGetInstruments.message || 'Cant makeRequest URL_GET_TRADES');
-        return true;
-      }
-
-      if (choosenInstrumentId !== instrumentId) {
-        isLoading = false;
-        $loader.removeClass('is_active');
-        return true;
-      }
-
-      trades = resultGetTrades.result;
-      instrumentRobotBounds = resultGetInstrumentRobotBounds.result;
-
       await loadChart({ instrumentId });
-      loadMarkers(trades);
-      fillRobotsInfo(instrumentRobotBounds, robots);
-    });
-
-  $tradesSlider
-    .find('button')
-    .on('click', function () {
-      if (!choosenInstrumentId) {
-        return true;
-      }
-
-      const $amountTicks = $tradesSlider.find('span.amount-ticks');
-      const amountTicks = parseInt($amountTicks.text(), 10);
-
-      if (amountTicks === 0) {
-        return true;
-      }
-
-      scrollTo($(this).attr('class'));
-    });
-
-  $tradesAggregate
-    .on('keyup', function () {
-      const newValue = parseInt($(this).val(), 10);
-
-      if (!Number.isNaN(newValue)
-        && newValue !== LIMITER_FOR_AGGREGATE_TRADES) {
-        LIMITER_FOR_AGGREGATE_TRADES = newValue;
-
-        if (choosenInstrumentId) {
-          $tradesSlider.find('span.current-tick').text(0);
-          loadMarkers(trades);
-          fillRobotsInfo(instrumentRobotBounds, robots);
-        }
-      }
-    });
-
-  $robotsContainer
-    .on('change', '.checkbox', function () {
-      const boundId = $(this).closest('tr').data('boundid');
-
-      const targetBound = instrumentRobotBounds.find(bound => bound._id === boundId);
-      targetBound.is_active = this.checked;
-
-      loadMarkers(trades);
+      // loadMarkers(trades);
     });
 });
 
@@ -262,8 +134,6 @@ const loadChart = async ({
   });
 
   if (!resultGetCandles || !resultGetCandles.status) {
-    isLoading = false;
-    $loader.removeClass('is_active');
     alert(resultGetCandles.message || `Cant makeRequest ${URL_GET_CANDLES}`);
     return true;
   }
@@ -276,8 +146,6 @@ const loadChart = async ({
   $rootContainer.empty();
 
   if (!resultGetCandles.result || !resultGetCandles.result.length) {
-    isLoading = false;
-    $loader.removeClass('is_active');
     return true;
   }
 
@@ -294,7 +162,7 @@ const loadChart = async ({
   chartCandles.drawSeries(chartCandles.mainSeries, chartCandles.originalData);
   chartVolume.drawSeries(chartCandles.originalData);
 
-  if (['1m', '5m'].includes(choosenPeriod)) {
+  if (['5m'].includes(choosenPeriod)) {
     listCharts.forEach(chartWrapper => {
       chartWrapper.chart.applyOptions({
         timeScale: {
@@ -329,18 +197,6 @@ const loadChart = async ({
     }
   });
 
-  chartCandles.chart.subscribeClick((param) => {
-    if (param.time) {
-      const indexRobots = robots.findIndex(robot => robot.time === param.time);
-
-      if (~indexRobots) {
-        $tradesSlider
-          .find('span.current-tick')
-          .text(indexRobots + 1);
-      }
-    }
-  });
-
   let isCrossHairMoving = false;
 
   listCharts.forEach(elem => {
@@ -367,17 +223,22 @@ const loadChart = async ({
     });
   });
 
-  isLoading = false;
-  $loader.removeClass('is_active');
+  chartCandles.chart
+    .timeScale()
+    .scrollToPosition(-chartCandles.originalData.length, false);
+
+  drawLevels();
 };
 
-const loadMarkers = (trades) => {
-  robots = [];
+const drawLevels = () => {
+  const levels = [];
+
+
+};
+
+const loadMarkers = () => {
   const newMarkers = [];
   chartCandles.removeMarkers();
-
-  const divider = choosenPeriod === AVAILABLE_PERIODS.get('1M') ? 60 : 300;
-  const startTimeFirstCandle = chartCandles.originalData[0].originalTimeUnix;
 
   trades
     .forEach(trade => {
@@ -444,23 +305,6 @@ const loadMarkers = (trades) => {
       });
     });
   });
-
-  const activeRobots = robots.filter(robot => robot.is_active);
-
-  $tradesSlider
-    .find('span.amount-ticks')
-    .text(activeRobots.length);
-
-  if (activeRobots.length) {
-    activeRobots
-      .sort((a, b) => a.time < b.time ? -1 : 1)
-      .forEach(newMarker => {
-        chartCandles.addMarker(newMarker);
-      });
-
-    chartCandles.drawMarkers();
-    scrollTo('next');
-  }
 };
 
 const renderListInstruments = targetDocs => {
@@ -480,65 +324,52 @@ const renderListInstruments = targetDocs => {
     .append(appendInstrumentsStr);
 };
 
-const scrollTo = (action) => {
-  const $currentTick = $tradesSlider.find('span.current-tick');
+const getHighLevels = ({
+  candles, distanceInBars,
+}) => {
+  const levels = [];
+  const lCandles = candles.length;
+  const revercedCandles = [...candles].reverse();
 
-  let currentTick = parseInt($currentTick.text(), 10);
-  const amountTicks = parseInt($tradesSlider.find('span.amount-ticks').text(), 10);
-
-  if (action === 'next') {
-    currentTick += 1;
-  } else {
-    currentTick -= 1;
-  }
-
-  if (currentTick === 0) {
-    currentTick = amountTicks;
-  }
-
-  if (currentTick === amountTicks + 1) {
-    currentTick = 1;
-  }
-
-  $currentTick.text(currentTick);
-
-  let candlesToTargetRobot = 0;
-  const targetRobot = robots[currentTick - 1];
-
-  for (let i = chartCandles.originalData.length - 1; i >= 0; i -= 1) {
-    if (chartCandles.originalData[i].originalTimeUnix === targetRobot.time) {
-      candlesToTargetRobot = chartCandles.originalData.length - i; break;
+  candles.forEach((candle, index) => {
+    if (index < distanceInBars) {
+      return true;
     }
-  }
 
-  chartCandles.chart
-    .timeScale()
-    .scrollToPosition(-candlesToTargetRobot, false);
-};
+    let isHighest = true;
+    let isHighCrossed = false;
 
-const fillRobotsInfo = (bounds, robots) => {
-  let appendStr = `<table>
-    <tr>
-      <th>Название</th>
-      <th>К-во</th>
-      <th>Показать</th>
-    </tr>
-  `;
+    for (let i = (lCandles - index); i < lCandles; i += 1) {
+      const tmpCandle = revercedCandles[i];
 
-  bounds
-    .sort((a, b) => a.quantity > b.quantity ? -1 : 1)
-    .forEach(bound => {
-      const numberRobots = robots.filter(
-        robot => robot.quantity === bound.quantity && robot.is_long === bound.is_long,
-      ).length;
+      if (tmpCandle.high > candle.high) {
+        isHighCrossed = true;
+        break;
+      }
+    }
 
-      appendStr += `<tr data-boundid=${bound._id}>
-        <td>${bound.quantity} ${bound.is_long ? 'long' : 'short'}</td>
-        <td>${numberRobots}</td>
-        <td><input class="checkbox" type="checkbox" ${bound.is_active ? 'checked' : ''}></td>
-      </tr>`;
-    });
+    if (!isHighCrossed) {
+      for (let i = 0; i < distanceInBars; i += 1) {
+        const tmpCandle = revercedCandles[lCandles - index - i];
 
-  appendStr += '</table>';
-  $robotsContainer.empty().append(appendStr);
+        if (!tmpCandle) {
+          break;
+        }
+
+        if (tmpCandle.high > candle.high) {
+          isHighest = false;
+          break;
+        }
+      }
+    }
+
+    if (!isHighCrossed && isHighest) {
+      levels.push({
+        levelPrice: candle.high,
+        levelStartCandleTime: candle.time,
+      });
+    }
+  });
+
+  return levels;
 };

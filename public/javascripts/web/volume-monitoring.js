@@ -7,7 +7,7 @@ objects, WebsocketBinance, ChartCandles, moment, windows, wsClient, user
 
 const URL_UPDATE_USER = '/api/users';
 const URL_GET_ACTIVE_INSTRUMENTS = '/api/instruments/active';
-const URL_GET_INSTRUMENT_VOLUME_BOUNDS = '/api/instrument-volume-bounds';
+const URL_GET_ACTIVE_INSTRUMENT_VOLUME_BOUNDS = '/api/instrument-volume-bounds/active';
 
 const MIN_PERCENT_FOR_NOTIFICATION = 0.2;
 
@@ -301,11 +301,11 @@ $(document).ready(async () => {
 
   const resultGetBounds = await makeRequest({
     method: 'GET',
-    url: URL_GET_INSTRUMENT_VOLUME_BOUNDS,
+    url: URL_GET_ACTIVE_INSTRUMENT_VOLUME_BOUNDS,
   });
 
   if (!resultGetBounds || !resultGetBounds.status) {
-    alert(resultGetBounds.message || 'Cant URL_GET_INSTRUMENT_VOLUME_BOUNDS');
+    alert(resultGetBounds.message || 'Cant URL_GET_ACTIVE_INSTRUMENT_VOLUME_BOUNDS');
     return true;
   }
 

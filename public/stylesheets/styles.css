@@ -822,6 +822,153 @@ input:checked + .slider:before {
       border-right: none;
       box-sizing: border-box; }
 
+.volume-statistics {
+  padding: 10px;
+  position: relative;
+  display: flex; }
+  .volume-statistics .charts-container {
+    width: 90%;
+    display: inline-block;
+    box-sizing: border-box;
+    position: relative; }
+    .volume-statistics .charts-container .chart-container {
+      position: relative; }
+      .volume-statistics .charts-container .chart-container.is_worked .actions-menu {
+        display: block; }
+    .volume-statistics .charts-container .charts-nav {
+      position: absolute;
+      z-index: 999;
+      top: 15px;
+      left: 15px; }
+      .volume-statistics .charts-container .charts-nav .row {
+        display: flex;
+        align-items: center; }
+    .volume-statistics .charts-container .legend p.values span {
+      color: #000FFF;
+      margin-left: 2px;
+      margin-right: 5px; }
+    .volume-statistics .charts-container .ruler {
+      position: absolute;
+      left: -9999px;
+      top: -9999px;
+      z-index: 999;
+      font-size: 16px;
+      color: #0044e8; }
+    .volume-statistics .charts-container .actions-menu {
+      display: none;
+      margin-top: 12px; }
+      .volume-statistics .charts-container .actions-menu .volume-slider {
+        display: inline-block; }
+        .volume-statistics .charts-container .actions-menu .volume-slider p {
+          display: inline-block;
+          margin: 0 8px;
+          font: 17px sans-serif; }
+          .volume-statistics .charts-container .actions-menu .volume-slider p span.current-volume {
+            margin-right: 3px; }
+          .volume-statistics .charts-container .actions-menu .volume-slider p span.amount-volume {
+            margin-left: 3px; }
+        .volume-statistics .charts-container .actions-menu .volume-slider button {
+          display: inline-block;
+          background-color: transparent;
+          border-radius: 100px;
+          cursor: pointer;
+          font-size: 17px; }
+      .volume-statistics .charts-container .actions-menu .volume-timelife {
+        width: 16px;
+        display: inline-block;
+        margin-left: 11px; }
+        .volume-statistics .charts-container .actions-menu .volume-timelife input[type="text"] {
+          width: 100%;
+          height: 100%;
+          text-align: center;
+          position: relative;
+          bottom: 2px; }
+    .volume-statistics .charts-container .chart-periods {
+      display: flex;
+      margin-top: 12px; }
+      .volume-statistics .charts-container .chart-periods div {
+        width: 40px;
+        height: 40px;
+        cursor: pointer;
+        display: none;
+        box-sizing: border-box;
+        margin-right: 5px;
+        position: relative;
+        border: 1px dashed #d9d9d9;
+        background-color: white; }
+        .volume-statistics .charts-container .chart-periods div.is_worked {
+          display: flex;
+          justify-content: center;
+          align-items: center; }
+        .volume-statistics .charts-container .chart-periods div.is_active {
+          border-color: #00bf20; }
+        .volume-statistics .charts-container .chart-periods div span {
+          margin: 8px auto;
+          text-align: center;
+          display: block; }
+    .volume-statistics .charts-container .chart-candles {
+      width: 100%;
+      height: 100%;
+      border: 1px solid black;
+      border-right: none;
+      box-sizing: border-box; }
+  .volume-statistics .instruments-container {
+    width: 11%;
+    overflow-y: hidden;
+    display: inline-block;
+    box-sizing: border-box;
+    border: 1px solid black; }
+    .volume-statistics .instruments-container .search {
+      width: 100%;
+      height: 35px; }
+      .volume-statistics .instruments-container .search input[type="text"] {
+        width: 100%;
+        height: 100%;
+        box-sizing: border-box;
+        border-right: none;
+        border-top: none;
+        border-left: none;
+        padding: 0 8px;
+        outline: none; }
+    .volume-statistics .instruments-container .instruments-list {
+      width: 100%; }
+      .volume-statistics .instruments-container .instruments-list .headlines {
+        text-align: left;
+        padding: 5px 10px;
+        border-bottom: 1px solid black; }
+        .volume-statistics .instruments-container .instruments-list .headlines span {
+          cursor: pointer;
+          display: inline-block;
+          box-sizing: border-box; }
+          .volume-statistics .instruments-container .instruments-list .headlines span.is_active {
+            background-color: #00a1ff59; }
+          .volume-statistics .instruments-container .instruments-list .headlines span.instrument-name {
+            width: 80%; }
+          .volume-statistics .instruments-container .instruments-list .headlines span.amount-volume {
+            width: 18%;
+            text-align: center; }
+      .volume-statistics .instruments-container .instruments-list .list {
+        display: flex;
+        overflow-y: scroll;
+        flex-direction: column; }
+        .volume-statistics .instruments-container .instruments-list .list .instrument {
+          cursor: pointer;
+          padding: 10px 10px;
+          border-bottom: 1px solid black; }
+          .volume-statistics .instruments-container .instruments-list .list .instrument.is_active {
+            background-color: #0066ff61 !important; }
+          .volume-statistics .instruments-container .instruments-list .list .instrument:hover {
+            background-color: #0066ff1f; }
+          .volume-statistics .instruments-container .instruments-list .list .instrument span {
+            cursor: pointer;
+            display: inline-block;
+            box-sizing: border-box; }
+            .volume-statistics .instruments-container .instruments-list .list .instrument span.instrument-name {
+              width: 77%; }
+            .volume-statistics .instruments-container .instruments-list .list .instrument span.amount-volume {
+              width: 18%;
+              text-align: center; }
+
 .robots-statistics {
   padding: 10px;
   position: relative;
