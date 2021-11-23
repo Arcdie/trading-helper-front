@@ -1,6 +1,6 @@
 /* global
 functions, makeRequest, initPopWindow,
-objects, windows, moment, user, wsClient, ChartCandles, ChartVolume, LightweightCharts
+objects, windows, moment, user, wsClient, ChartCandles, IndicatorVolume, LightweightCharts
 */
 
 /* Constants */
@@ -36,8 +36,8 @@ let isLoading = false;
 let choosenInstrumentId;
 let choosenPeriod = DEFAULT_PERIOD;
 
-let chartVolume = {};
 let chartCandles = {};
+let indicatorVolume = {};
 
 let robots = [];
 let trades = [];
@@ -271,7 +271,7 @@ const loadChart = async ({
   console.log('end loading');
 
   chartCandles = {};
-  chartVolume = {};
+  indicatorVolume = {};
 
   $rootContainer.empty();
 
@@ -285,14 +285,14 @@ const loadChart = async ({
   const targetDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
 
   chartCandles = new ChartCandles($rootContainer, choosenPeriod, targetDoc);
-  chartVolume = new ChartVolume($rootContainer);
+  indicatorVolume = new IndicatorVolume($rootContainer);
 
   chartCandles.setOriginalData(resultGetCandles.result, false);
 
-  const listCharts = [chartCandles, chartVolume];
+  const listCharts = [chartCandles, indicatorVolume];
 
   chartCandles.drawSeries(chartCandles.mainSeries, chartCandles.originalData);
-  chartVolume.drawSeries(chartCandles.originalData);
+  indicatorVolume.drawSeries(chartCandles.originalData);
 
   if (['1m', '5m'].includes(choosenPeriod)) {
     listCharts.forEach(chartWrapper => {

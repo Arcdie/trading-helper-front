@@ -1,6 +1,8 @@
-/* global LightweightCharts */
+/* global
+functions,
+objects, LightweightCharts */
 
-class ChartVolume {
+class IndicatorVolume {
   constructor($rootContainer) {
     this.containerName = 'chart-volume';
     this.appendChart($rootContainer);
@@ -27,9 +29,9 @@ class ChartVolume {
         secondsVisible: false,
       },
 
-      // timeScale: {
-      //   visible: false,
-      // },
+      rightPriceScale: {
+        width: 60,
+      },
     });
 
     this.series = this.chart.addHistogramSeries({

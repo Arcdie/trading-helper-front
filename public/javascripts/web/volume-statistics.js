@@ -1,6 +1,6 @@
 /* global
 functions, makeRequest, initPopWindow, getUnix, getRandomNumber,
-objects, windows, moment, user,, ChartCandles, ChartVolume, LightweightCharts
+objects, windows, moment, user,, ChartCandles, LightweightCharts
 */
 
 /* Constants */

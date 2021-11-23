@@ -15,7 +15,7 @@ class ChartCandles {
 
     this.addMainSeries({
       priceFormat: {
-        minMove: ChartCandles.getMinMove(instrumentDoc.price),
+        minMove: instrumentDoc.tick_size,
         precision: ChartCandles.getPrecision(instrumentDoc.price),
       },
     });
@@ -70,6 +70,10 @@ class ChartCandles {
           time: true,
           price: false,
         },
+      },
+
+      rightPriceScale: {
+        width: 60,
       },
     });
   }
@@ -240,22 +244,5 @@ class ChartCandles {
     }
 
     return dividedPrice[1].length;
-  }
-
-  static getMinMove(instrumentPrice) {
-    const pricePrecision = ChartCandles.getPrecision(instrumentPrice);
-
-    if (pricePrecision === 0) {
-      return 1;
-    }
-
-    let minMove = '0.';
-
-    for (let i = 0; i < pricePrecision - 1; i += 1) {
-      minMove += '0';
-    }
-
-    minMove += '1';
-    return parseFloat(minMove);
   }
 }

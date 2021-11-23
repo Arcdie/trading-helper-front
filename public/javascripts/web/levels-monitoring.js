@@ -1,6 +1,6 @@
 /* global
 functions, makeRequest, initPopWindow,
-objects, windows, moment, user, wsClient, ChartCandles, ChartVolume, LightweightCharts
+objects, windows, moment, user, wsClient, ChartCandles, IndicatorVolume, IndicatorSuperTrend, LightweightCharts
 */
 
 /* Constants */
@@ -29,6 +29,8 @@ const WORKING_PERIODS = [
 
 const windowWidth = window.innerWidth;
 const windowHeight = window.innerHeight;
+
+// const userTimezone = 0;
 const userTimezone = -(new Date().getTimezoneOffset());
 
 const LIMIT_GET_CANDLES = Math.ceil(windowWidth / 6);
@@ -40,8 +42,10 @@ let choosenPeriod = DEFAULT_PERIOD;
 let isLoading = false;
 let instrumentsDocs = [];
 
-let chartVolume = {};
 let chartCandles = {};
+let indicatorVolume = {};
+let indicatorMicroSuperTrend = {};
+let indicatorMacroSuperTrend = {};
 
 /* JQuery */
 const $instrumentsContainer = $('.instruments-container');
@@ -516,7 +520,9 @@ const loadChart = async ({
   console.log('end loading');
 
   chartCandles = {};
-  chartVolume = {};
+  indicatorVolume = {};
+  indicatorMicroSuperTrend = {};
+  indicatorMacroSuperTrend = {};
 
   $rootContainer.empty();
 
@@ -529,14 +535,28 @@ const loadChart = async ({
   const targetDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
 
   chartCandles = new ChartCandles($rootContainer, choosenPeriod, targetDoc);
-  chartVolume = new ChartVolume($rootContainer);
+  indicatorVolume = new IndicatorVolume($rootContainer);
+
+  indicatorMicroSuperTrend = new IndicatorSuperTrend(chartCandles.chart, {
+    factor: 3,
+    artPeriod: 10,
+    candlesPeriod: choosenPeriod,
+  });
+
+  indicatorMacroSuperTrend = new IndicatorSuperTrend(chartCandles.chart, {
+    factor: 5,
+    artPeriod: 20,
+    candlesPeriod: choosenPeriod,
+  });
 
   chartCandles.setOriginalData(resultGetCandles.result);
 
-  const listCharts = [chartCandles, chartVolume];
+  const listCharts = [chartCandles, indicatorVolume];
 
   chartCandles.drawSeries(chartCandles.mainSeries, chartCandles.originalData);
-  chartVolume.drawSeries(chartCandles.originalData);
+  indicatorVolume.drawSeries(chartCandles.originalData);
+  indicatorMicroSuperTrend.calculateAndDraw(chartCandles.originalData);
+  indicatorMacroSuperTrend.calculateAndDraw(chartCandles.originalData);
 
   wsClient.send(JSON.stringify({
     actionName: 'subscribe',
@@ -678,7 +698,9 @@ const loadChart = async ({
         chartCandles.setOriginalData(resultGetCandles.result);
 
         chartCandles.drawSeries(chartCandles.mainSeries, chartCandles.originalData);
-        chartVolume.drawSeries(chartCandles.originalData);
+        indicatorVolume.drawSeries(chartCandles.originalData);
+        indicatorMicroSuperTrend.calculateAndDraw(chartCandles.originalData);
+        indicatorMacroSuperTrend.calculateAndDraw(chartCandles.originalData);
 
         drawLevelLines({
           instrumentId,
@@ -722,7 +744,7 @@ const updateLastCandle = (data, period) => {
     time: validTime,
   });
 
-  chartVolume.drawSeries({
+  indicatorVolume.drawSeries({
     volume: parseFloat(volume),
     time: validTime,
   });
