@@ -33,7 +33,8 @@ const windowHeight = window.innerHeight;
 // const userTimezone = 0;
 const userTimezone = -(new Date().getTimezoneOffset());
 
-const LIMIT_GET_CANDLES = Math.ceil(windowWidth / 6);
+const LIMIT_GET_CANDLES = 320;
+// const LIMIT_GET_CANDLES = Math.ceil(windowWidth / 6);
 const DEFAULT_PERIOD = AVAILABLE_PERIODS.get('5M');
 
 let choosenInstrumentId;
@@ -508,7 +509,13 @@ const loadChart = async ({
 
   const resultGetCandles = await makeRequest({
     method: 'GET',
-    url: `${URL_GET_CANDLES}/${choosenPeriod}?instrumentId=${instrumentId}&limit=${LIMIT_GET_CANDLES}&endTime=${endTime}`,
+    url: `${URL_GET_CANDLES}/${choosenPeriod}`,
+    query: {
+      endTime,
+      instrumentId,
+      isFirstCall: true,
+      limit: LIMIT_GET_CANDLES,
+    },
   });
 
   if (!resultGetCandles || !resultGetCandles.status) {

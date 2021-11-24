@@ -32,7 +32,7 @@ const initPopWindow = (str) => {
 };
 
 const makeRequest = async ({
-  url, method, body, settings,
+  url, method, query, body, settings,
 }) => {
   if (!url) {
     alert('No url');
@@ -56,6 +56,16 @@ const makeRequest = async ({
 
   if (body && Object.keys(body).length > 0) {
     objRequest.body = JSON.stringify(body);
+  }
+
+  if (query && Object.keys(query).length > 0) {
+    url += '?';
+
+    Object.keys(query).forEach(key => {
+      url += `${key}=${query[key]}&`;
+    });
+
+    url = url.substring(0, url.length - 1);
   }
 
   if (settings && Object.keys(settings).length > 0) {
