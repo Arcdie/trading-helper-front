@@ -44,7 +44,7 @@ class IndicatorSuperTrend {
   calculateAndDraw(inputData) {
     const topOutputData = [];
     const bottomOutputData = [];
-    const workingData = [...inputData];
+    const workingData = JSON.parse(JSON.stringify(inputData));
 
     const dataForCalculate = {
       high: [],
