@@ -12,6 +12,7 @@ const URL_GET_USER_LEVEL_BOUNDS = '/api/user-level-bounds';
 const URL_ADD_USER_LEVELS_BOUNDS = '/api/user-level-bounds/add-levels';
 
 const AVAILABLE_PERIODS = new Map([
+  ['1M', '1m'],
   ['5M', '5m'],
   ['1H', '1h'],
   ['4H', '4h'],
@@ -20,6 +21,7 @@ const AVAILABLE_PERIODS = new Map([
 ]);
 
 const WORKING_PERIODS = [
+  AVAILABLE_PERIODS.get('1M'),
   AVAILABLE_PERIODS.get('5M'),
   AVAILABLE_PERIODS.get('1H'),
   AVAILABLE_PERIODS.get('4H'),
@@ -86,6 +88,7 @@ wsClient.onmessage = async data => {
         break;
       }
 
+      case 'candle1mData': updateLastCandle(parsedData.data, '1m'); break;
       case 'candle5mData': updateLastCandle(parsedData.data, '5m'); break;
       case 'candle1hData': updateLastCandle(parsedData.data, '1h'); break;
       case 'candle4hData': updateLastCandle(parsedData.data, '4h'); break;
@@ -408,7 +411,7 @@ const drawLevelLines = ({
     .unix(instrumentData[instrumentData.length - 1].originalTimeUnix)
     .add(1, 'M');
 
-  if (['5m', '1h', '4h'].includes(choosenPeriod)) {
+  if (['1m', '5m', '1h', '4h'].includes(choosenPeriod)) {
     validEndTime = endTime.unix();
   } else {
     validEndTime = endTime.format('YYYY-MM-DD');
@@ -433,7 +436,7 @@ const drawLevelLines = ({
 
       let validTime;
 
-      if (['5m', '1h', '4h'].includes(choosenPeriod)) {
+      if (['1m', '5m', '1h', '4h'].includes(choosenPeriod)) {
         validTime = startCandleTime.unix();
       } else {
         validTime = startCandleTime.format('YYYY-MM-DD');
@@ -476,7 +479,7 @@ const drawLevelLines = ({
 
       let validTime;
 
-      if (['5m', '1h', '4h'].includes(choosenPeriod)) {
+      if (['1m', '5m', '1h', '4h'].includes(choosenPeriod)) {
         validTime = startCandleTime.unix();
         validEndTime = endCandleTime.unix();
       } else {
@@ -583,7 +586,7 @@ const loadChart = async ({
     period: choosenPeriod,
   });
 
-  if (['5m', '1h', '4h'].includes(choosenPeriod)) {
+  if (['1m', '5m', '1h', '4h'].includes(choosenPeriod)) {
     listCharts.forEach(chartWrapper => {
       chartWrapper.chart.applyOptions({
         timeScale: {
@@ -739,7 +742,7 @@ const updateLastCandle = (data, period) => {
 
   let validTime = (startTime / 1000) + (userTimezone * 60);
 
-  if ([!'5m', '1h', '4h'].includes(choosenPeriod)) {
+  if (!['1m', '5m', '1h', '4h'].includes(choosenPeriod)) {
     validTime = moment.unix(validTime).format('YYYY-MM-DD');
   }
 

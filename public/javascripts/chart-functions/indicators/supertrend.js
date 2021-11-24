@@ -99,6 +99,7 @@ class IndicatorSuperTrend {
       data.topBand = topBand;
       data.bottomBand = bottomBand;
       data.superTrend = superTrend;
+      data.isLong = direction < 0;
 
       if (direction < 0) {
         bottomOutputData.push({
@@ -114,6 +115,8 @@ class IndicatorSuperTrend {
         });
       }
     });
+
+    console.log('workingData[last]', workingData[workingData.length - 1]);
 
     const newTopSeries = [];
     const newBottomSeries = [];
