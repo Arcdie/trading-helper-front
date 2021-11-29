@@ -3,7 +3,7 @@ functions, getUnix,
 objects, moment, LightweightCharts */
 
 class ChartCandles {
-  constructor($rootContainer, period, instrumentDoc) {
+  constructor($rootContainer, period, instrumentDoc, doUseAutoscale = true) {
     this.containerName = 'chart-candles';
     this.appendChart($rootContainer);
 
@@ -18,7 +18,7 @@ class ChartCandles {
         minMove: instrumentDoc.tick_size,
         precision: ChartCandles.getPrecision(instrumentDoc.price),
       },
-    });
+    }, { doUseAutoscale });
 
     this.period = period;
 
@@ -78,39 +78,43 @@ class ChartCandles {
     });
   }
 
-  addMainSeries(optionalParams) {
+  addMainSeries(optionalParams, settings = {}) {
     this.mainSeries = this.chart.addCandlestickSeries({
       upColor: '#000FFF',
       downColor: 'rgba(0, 0, 0, 0)',
       borderDownColor: '#000FFF',
       wickColor: '#000000',
 
-      autoscaleInfoProvider: original => {
-        const res = original();
-
-        if (res && res.priceRange) {
-          let wereChanges = false;
-
-          if (this.maxTopPriceValue !== res.priceRange.maxValue) {
-            wereChanges = true;
-            this.maxTopPriceValue = res.priceRange.maxValue;
-          }
-
-          if (this.maxBottomPriceValue !== res.priceRange.minValue) {
-            wereChanges = true;
-            this.maxBottomPriceValue = res.priceRange.minValue;
-          }
-
-          if (wereChanges) {
-            this.changePriceRangeForExtraSeries(res.priceRange);
-          }
-        }
-
-        return res;
-      },
-
       ...optionalParams,
     });
+
+    if (settings.doUseAutoscale) {
+      this.mainSeries.applyOptions({
+        autoscaleInfoProvider: original => {
+          const res = original();
+
+          if (res && res.priceRange) {
+            let wereChanges = false;
+
+            if (this.maxTopPriceValue !== res.priceRange.maxValue) {
+              wereChanges = true;
+              this.maxTopPriceValue = res.priceRange.maxValue;
+            }
+
+            if (this.maxBottomPriceValue !== res.priceRange.minValue) {
+              wereChanges = true;
+              this.maxBottomPriceValue = res.priceRange.minValue;
+            }
+
+            if (wereChanges) {
+              this.changePriceRangeForExtraSeries(res.priceRange);
+            }
+          }
+
+          return res;
+        },
+      });
+    }
   }
 
   addExtraSeries(optionalParams) {
@@ -124,7 +128,6 @@ class ChartCandles {
       priceLineVisible: false,
       lastValueVisible: true,
       lineWidth: 1,
-      priceScaleId: 'level',
 
       minMove,
       precision,

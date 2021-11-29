@@ -572,6 +572,7 @@ const handlerNewInstrumentVolumeBound = (newBound) => {
 
     const newExtraSeries = instrumentDoc.chartCandles.addExtraSeries({
       boundId,
+      priceScaleId: 'level',
     });
 
     instrumentDoc.chartCandles.drawSeries(newExtraSeries, [{
@@ -854,6 +855,7 @@ const loadChart = async (instrumentDoc) => {
       const startOfMinute = (volume.created_at - (volume.created_at % 60)) + (userTimezone * 60);
 
       const newExtraSeries = chartCandles.addExtraSeries({
+        priceScaleId: 'level',
         boundId: volume.bound_id,
       });
 

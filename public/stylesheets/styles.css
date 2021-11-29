@@ -825,7 +825,11 @@ input:checked + .slider:before {
 .volume-statistics {
   padding: 10px;
   position: relative;
-  display: flex; }
+  display: flex;
+  flex-direction: column; }
+  .volume-statistics .row {
+    display: flex;
+    margin-bottom: 15px; }
   .volume-statistics .charts-container {
     width: 90%;
     display: inline-block;
@@ -857,17 +861,17 @@ input:checked + .slider:before {
     .volume-statistics .charts-container .actions-menu {
       display: none;
       margin-top: 12px; }
-      .volume-statistics .charts-container .actions-menu .volume-slider {
+      .volume-statistics .charts-container .actions-menu .chart-slider {
         display: inline-block; }
-        .volume-statistics .charts-container .actions-menu .volume-slider p {
+        .volume-statistics .charts-container .actions-menu .chart-slider p {
           display: inline-block;
           margin: 0 8px;
           font: 17px sans-serif; }
-          .volume-statistics .charts-container .actions-menu .volume-slider p span.current-volume {
+          .volume-statistics .charts-container .actions-menu .chart-slider p span.current-slide {
             margin-right: 3px; }
-          .volume-statistics .charts-container .actions-menu .volume-slider p span.amount-volume {
+          .volume-statistics .charts-container .actions-menu .chart-slider p span.amount-slides {
             margin-left: 3px; }
-        .volume-statistics .charts-container .actions-menu .volume-slider button {
+        .volume-statistics .charts-container .actions-menu .chart-slider button {
           display: inline-block;
           background-color: transparent;
           border-radius: 100px;
@@ -914,7 +918,7 @@ input:checked + .slider:before {
       box-sizing: border-box; }
   .volume-statistics .instruments-container {
     width: 11%;
-    overflow-y: hidden;
+    overflow-y: scroll;
     display: inline-block;
     box-sizing: border-box;
     border: 1px solid black; }
@@ -965,9 +969,13 @@ input:checked + .slider:before {
             box-sizing: border-box; }
             .volume-statistics .instruments-container .instruments-list .list .instrument span.instrument-name {
               width: 77%; }
-            .volume-statistics .instruments-container .instruments-list .list .instrument span.amount-volume {
+            .volume-statistics .instruments-container .instruments-list .list .instrument span.amount {
               width: 18%;
               text-align: center; }
+  .volume-statistics .settings div {
+    margin-bottom: 10px; }
+    .volume-statistics .settings div p {
+      margin-bottom: 3px; }
 
 .robots-statistics {
   padding: 10px;
@@ -1132,9 +1140,3 @@ input:checked + .slider:before {
       .robots-statistics .robots-container table tr td {
         padding: 10px;
         text-align: center; }
-
-.instrument-tick-bounds {
-  padding: 15px; }
-  .instrument-tick-bounds h1 {
-    border-bottom: 1px solid black;
-    padding-bottom: 15px; }

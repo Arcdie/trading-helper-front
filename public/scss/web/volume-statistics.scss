@@ -2,6 +2,12 @@
   padding: 10px;
   position: relative;
   display: flex;
+  flex-direction: column;
+
+  .row {
+    display: flex;
+    margin-bottom: 15px;
+  }
 
   .charts-container {
     width: 90%;
@@ -54,7 +60,7 @@
       display: none;
       margin-top: 12px;
 
-      .volume-slider {
+      .chart-slider {
         display: inline-block;
 
         p {
@@ -63,11 +69,11 @@
           font: 17px sans-serif;
 
           span {
-            &.current-volume {
+            &.current-slide {
               margin-right: 3px;
             }
 
-            &.amount-volume {
+            &.amount-slides {
               margin-left: 3px;
             }
           }
@@ -141,7 +147,7 @@
 
   .instruments-container {
     width: 11%;
-    overflow-y: hidden;
+    overflow-y: scroll;
     display: inline-block;
     box-sizing: border-box;
     border: 1px solid black;
@@ -217,12 +223,26 @@
               width: 77%;
             }
 
-            &.amount-volume {
+            &.amount {
               width: 18%;
               text-align: center;
             }
           }
         }
+      }
+    }
+  }
+
+  .settings {
+    div {
+      margin-bottom: 10px;
+
+      p {
+        margin-bottom: 3px;
+      }
+
+      input[type="text"] {
+
       }
     }
   }

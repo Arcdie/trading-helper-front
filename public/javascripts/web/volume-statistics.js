@@ -1,6 +1,6 @@
 /* global
 functions, makeRequest, initPopWindow, getUnix, getRandomNumber,
-objects, windows, moment, user,, ChartCandles, LightweightCharts
+objects, windows, moment, user, ChartCandles, LightweightCharts
 */
 
 /* Constants */
@@ -392,6 +392,7 @@ const drawVolumes = (chartWrapper, bounds, limiter) => {
 
     const volumePrice = parseFloat(bound.price);
     const newExtraSeries = chartWrapper.addExtraSeries({
+      priceScaleId: 'level',
       lastValueVisible: false,
     });
 

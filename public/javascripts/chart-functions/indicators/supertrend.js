@@ -41,9 +41,7 @@ class IndicatorSuperTrend {
     });
   }
 
-  calculateAndDraw(inputData) {
-    const topOutputData = [];
-    const bottomOutputData = [];
+  calculateData(inputData) {
     const workingData = JSON.parse(JSON.stringify(inputData));
 
     const dataForCalculate = {
@@ -100,23 +98,32 @@ class IndicatorSuperTrend {
       data.bottomBand = bottomBand;
       data.superTrend = superTrend;
       data.isLong = direction < 0;
+    });
 
-      if (direction < 0) {
+    return workingData;
+  }
+
+  calculateAndDraw(inputData) {
+    const workingData = this.calculateData(inputData);
+
+    const topOutputData = [];
+    const bottomOutputData = [];
+
+    workingData.forEach(data => {
+      if (data.isLong) {
         bottomOutputData.push({
-          value: superTrend,
           time: data.time,
+          value: data.superTrend,
           originalTimeUnix: data.originalTimeUnix,
         });
       } else {
         topOutputData.push({
-          value: superTrend,
           time: data.time,
+          value: data.superTrend,
           originalTimeUnix: data.originalTimeUnix,
         });
       }
     });
-
-    console.log('workingData[last]', workingData[workingData.length - 1]);
 
     const newTopSeries = [];
     const newBottomSeries = [];

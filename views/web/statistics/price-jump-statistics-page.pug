@@ -1,0 +1,47 @@
+extends ../../app
+
+block variables
+	-
+		const pageTitle = 'Статистика по изменению цены';
+
+block content
+	.page.price-jump-statistics
+		.row
+			.charts-container
+
+			.instruments-container
+				.search
+					input(type="text" placeholder="Поиск")
+			
+				.instruments-list
+					.headlines
+						span.instrument-name Инструмент
+						span.amount К-во
+
+					.list
+		
+		.row
+			.settings
+				div
+					p Lifetime (m)
+					input.lifetime(type="text")
+					
+				.distance
+					p Distance (%)
+					input.distance(type="text")
+					
+				.number-touches
+					p Touches
+					input.number-touches(type="text")
+
+block scripts
+	script(src='/libs/moment.min.js')
+	script(src='/libs/file-saver.min.js')
+	script(src='/libs/trading-view-charts.min.js')
+	script(src='/libs/technical-indicators.min.js')
+
+	script(src='/javascripts/chart-functions/chart-candles.js')
+	script(src='/javascripts/chart-functions/indicators/volume.js')
+	script(src='/javascripts/chart-functions/indicators/supertrend.js')
+
+	script(src='/javascripts/statistics/price-jump-statistics.js')

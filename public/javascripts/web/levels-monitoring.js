@@ -444,6 +444,7 @@ const drawLevelLines = ({
 
       const newExtraSeries = chartCandles.addExtraSeries({
         boundId: bound.bound_id,
+        priceScaleId: 'level',
       });
 
       chartCandles.drawSeries(newExtraSeries, [{
@@ -488,6 +489,7 @@ const drawLevelLines = ({
       }
 
       const newExtraSeries = chartCandles.addExtraSeries({
+        priceScaleId: 'level',
         boundId: bound.bound_id,
         lineType: LightweightCharts.LineType.Simple,
         lineStyle: LightweightCharts.LineStyle.LargeDashed,

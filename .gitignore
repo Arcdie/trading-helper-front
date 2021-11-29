@@ -14,6 +14,7 @@ Thumbs.db
 atom-sftp-sync.json
 off-atom-sftp-sync.json
 
+/public/files
 /logs
 /files
 .env
