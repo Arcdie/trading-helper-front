@@ -15,26 +15,30 @@ const AVAILABLE_PERIODS = new Map([
 
 const DEFAULT_PERIOD = AVAILABLE_PERIODS.get('1M');
 
-let limiterLifetime = 2;
+let limiterLifetime = 0;
 let limiterDistance = 0.05;
 let limiterNumberTouches = 1;
+let considerBtcMircoTrend = false;
+let considerFuturesMircoTrend = true;
+let stopLossPercent = 0.3;
 
 const windowHeight = window.innerHeight;
 
 let choosenInstrumentId;
 
 let instrumentsDocs = [];
+let targetInstrumentVolumeBounds = [];
 
 const startTime = moment().utc()
   .startOf('day')
   // .add(-1, 'days');
-  .add(-7, 'days');
+  .add(-2, 'days');
 
-const endTime = moment.utc()
-  .add(-1, 'hours')
-  .endOf('hour');
+const endTime = moment(startTime)
+  .endOf('day');
 
 /* JQuery */
+const $report = $('.report table');
 const $chartsContainer = $('.charts-container');
 
 const $instrumentsContainer = $('.instruments-container');
@@ -50,7 +54,13 @@ $(document).ready(async () => {
 
   $settings.find('.lifetime').val(limiterLifetime);
   $settings.find('.distance').val(limiterDistance);
+  $settings.find('.stoploss-percent').val(stopLossPercent);
   $settings.find('.number-touches').val(limiterNumberTouches);
+  $settings.find('#consider-btc-mirco-trend').prop('checked', considerBtcMircoTrend);
+  $settings.find('#consider-futures-mirco-trend').prop('checked', considerFuturesMircoTrend);
+
+  const urlSearchParams = new URLSearchParams(window.location.search);
+  const params = Object.fromEntries(urlSearchParams.entries());
 
   // loading data
 
@@ -74,10 +84,15 @@ $(document).ready(async () => {
     endTime: endTime.toISOString(),
     startTime: startTime.toISOString(),
   });
+  // */
 
   // main logic
 
-  renderListInstruments(instrumentsDocs);
+  if (!params.symbol) {
+    renderListInstruments(instrumentsDocs);
+  } else {
+    renderListInstruments(instrumentsDocs.filter(doc => doc.name === params.symbol));
+  }
 
   $('.search input')
     .on('keyup', function () {
@@ -134,6 +149,12 @@ $(document).ready(async () => {
       }
 
       await loadCharts({ instrumentId });
+
+      targetInstrumentVolumeBounds = getTargetInstrumentVolumes({ instrumentId });
+
+      drawVolumes({ instrumentId }, targetInstrumentVolumeBounds);
+      drawMarkers({ instrumentId }, targetInstrumentVolumeBounds);
+      makeReport({ instrumentId }, targetInstrumentVolumeBounds);
     });
 
   $chartsContainer
@@ -151,7 +172,9 @@ $(document).ready(async () => {
         return true;
       }
 
-      scrollTo($(this).attr('class'), choosenInstrumentId);
+      scrollTo($(this).attr('class'), {
+        instrumentId: choosenInstrumentId,
+      }, targetInstrumentVolumeBounds);
     });
 
   $settings
@@ -167,15 +190,54 @@ $(document).ready(async () => {
       switch (className) {
         case 'lifetime': limiterLifetime = newValue; break;
         case 'distance': limiterDistance = newValue; break;
+        case 'stoploss-percent': stopLossPercent = newValue; break;
         case 'number-touches': limiterNumberTouches = newValue; break;
         default: break;
       }
 
       if (choosenInstrumentId) {
-        drawVolumes({
-          instrumentId: choosenInstrumentId,
-        });
+        const instrumentId = choosenInstrumentId;
+
+        targetInstrumentVolumeBounds = getTargetInstrumentVolumes({ instrumentId });
+        drawVolumes({ instrumentId }, targetInstrumentVolumeBounds);
+        drawMarkers({ instrumentId }, targetInstrumentVolumeBounds);
+        makeReport({ instrumentId }, targetInstrumentVolumeBounds);
       }
+    });
+
+  $settings
+    .find('input[type="checkbox"]')
+    .on('change', function () {
+      const id = $(this).attr('id');
+      const newValue = $(this).is(':checked');
+
+      switch (id) {
+        case 'consider-btc-mirco-trend': considerBtcMircoTrend = newValue; break;
+        case 'consider-futures-mirco-trend': considerFuturesMircoTrend = newValue; break;
+        default: break;
+      }
+
+      if (choosenInstrumentId) {
+        const instrumentId = choosenInstrumentId;
+
+        targetInstrumentVolumeBounds = getTargetInstrumentVolumes({ instrumentId });
+        drawVolumes({ instrumentId }, targetInstrumentVolumeBounds);
+        drawMarkers({ instrumentId }, targetInstrumentVolumeBounds);
+        makeReport({ instrumentId }, targetInstrumentVolumeBounds);
+      }
+    });
+
+  $report
+    .on('click', 'tr', function () {
+      const index = $(this).index();
+
+      if (!index) {
+        return true;
+      }
+
+      scrollTo(index, {
+        instrumentId: choosenInstrumentId,
+      }, targetInstrumentVolumeBounds);
     });
 });
 
@@ -305,12 +367,15 @@ const loadCharts = async ({
     chartCandles.chartKey = chartKey;
     chartCandles.setOriginalData(chartKeyDoc.original_data, false);
     chartCandles.drawSeries(chartCandles.mainSeries, chartCandles.originalData);
-    indicatorMicroSuperTrend.calculateAndDraw(chartCandles.originalData);
+    const calculatedData = indicatorMicroSuperTrend.calculateAndDraw(chartCandles.originalData);
+
     // indicatorMacroSuperTrend.calculateAndDraw(chartCandles.originalData);
 
     chartKeyDoc.chart_candles = chartCandles;
     chartKeyDoc.indicator_micro_supertrend = indicatorMicroSuperTrend;
     // chartKeyDoc.indicator_macro_supertrend = indicatorMacroSuperTrend;
+
+    chartKeyDoc.indicator_micro_supertrend_data = calculatedData;
 
     const $ruler = $chartContainer.find('span.ruler');
     const $legend = $chartContainer.find('.legend');
@@ -352,10 +417,10 @@ const loadCharts = async ({
 
     if (chartKey === 'spot') {
       chartCandles.chart.subscribeClick((param) => {
-        if (param.time && targetDoc.target_instrument_volume_bounds.length) {
+        if (param.time && targetInstrumentVolumeBounds.length) {
           let nearestBoundIndex = -1;
 
-          targetDoc.target_instrument_volume_bounds.forEach((bound, index) => {
+          targetInstrumentVolumeBounds.forEach((bound, index) => {
             if (bound.volume_ended_at_unix < param.time) {
               nearestBoundIndex = index;
             }
@@ -408,24 +473,125 @@ const loadCharts = async ({
       },
     });
   });
-
-  drawVolumes({ instrumentId });
-  drawMarkers({ instrumentId });
 };
 
-const drawVolumes = ({ instrumentId }) => {
+const drawVolumes = ({ instrumentId }, targetInstrumentVolumeBounds = []) => {
   const targetDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
+
   const chartWrapper = targetDoc.chart_candles;
 
   chartWrapper.extraSeries.forEach(series => {
     chartWrapper.removeSeries(series, false);
   });
 
-  targetDoc.target_instrument_volume_bounds = [];
+  if (!targetInstrumentVolumeBounds.length) {
+    return true;
+  }
+
+  const lTargetInstrumentVolumeBounds = targetInstrumentVolumeBounds.length;
+
+  if (lTargetInstrumentVolumeBounds) {
+    targetInstrumentVolumeBounds.forEach(bound => {
+      const newExtraSeries = chartWrapper.addExtraSeries({
+        lastValueVisible: false,
+      });
+
+      chartWrapper.drawSeries(newExtraSeries, [{
+        value: bound.price,
+        time: bound.volume_started_at_unix,
+      }, {
+        value: bound.price,
+        time: bound.volume_ended_at_unix,
+      }]);
+    });
+
+    const $slider = $chartsContainer.find('.chart-slider.is_worked');
+
+    $slider
+      .find('span.amount-slides')
+      .text(lTargetInstrumentVolumeBounds);
+
+    scrollTo('next', { instrumentId }, targetInstrumentVolumeBounds);
+  }
+};
+
+const drawMarkers = ({ instrumentId }, targetInstrumentVolumeBounds = []) => {
+  const targetDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
+  const chartWrapper = targetDoc.chart_candles;
+
+  chartWrapper.removeMarkers();
+
+  if (!targetInstrumentVolumeBounds.length) {
+    return true;
+  }
+
+  targetInstrumentVolumeBounds.forEach(bound => {
+    let color, text;
+
+    const lifetime = parseInt((bound.volume_ended_at_unix - bound.volume_started_at_unix) / 60, 10);
+
+    text = `l: ${lifetime}`;
+
+    if (bound.is_ask) {
+      color = '#4CAF50';
+    } else {
+      color = '#FF5252';
+    }
+
+    chartWrapper.addMarker({
+      // shape: 'square',
+      color,
+      time: bound.volume_started_at_unix,
+      text,
+    });
+  });
+
+  chartWrapper.drawMarkers();
+};
+
+const getTargetInstrumentVolumes = ({ instrumentId }) => {
+  const targetDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
+
+  const btcDoc = instrumentsDocs.find(doc => doc.name === 'BTCUSDTPERP');
+
+  const futuresDoc = instrumentsDocs.find(
+    doc => doc.name === `${targetDoc.name}PERP`,
+  );
+
+  const targetInstrumentVolumeBounds = [];
 
   targetDoc.instrument_volume_bounds.forEach(bound => {
-    const volumeStartedAtUnix = moment(bound.volume_started_at).utc().startOf('minute').unix();
-    const volumeEndedAtUnix = moment(bound.volume_ended_at).utc().endOf('minute').add(1, 'seconds').unix();
+    const volumeStartedAtUnix = moment(bound.volume_started_at).utc()
+      .startOf('minute').unix();
+
+    const volumeEndedAtUnix = moment(bound.volume_ended_at).utc()
+      .endOf('minute').unix() + 1;
+
+    const targetBtcCandle = btcDoc.indicator_micro_supertrend_data
+      .find(data => data.originalTimeUnix === volumeStartedAtUnix);
+
+    const targetFuturesCandle = futuresDoc.indicator_micro_supertrend_data
+      .find(data => data.originalTimeUnix === volumeStartedAtUnix);
+
+    let isGreenLight = true;
+
+    if (considerBtcMircoTrend) {
+      if ((targetBtcCandle.isLong && bound.is_ask)
+        || (!targetBtcCandle.isLong && !bound.is_ask)) {
+        isGreenLight = false;
+      }
+    }
+
+    if (considerFuturesMircoTrend) {
+      if ((targetFuturesCandle.isLong && bound.is_ask)
+        || (!targetFuturesCandle.isLong && !bound.is_ask)) {
+        isGreenLight = false;
+      }
+    }
+
+    if (!isGreenLight) {
+      return true;
+    }
 
     const differenceBetweenEndAndStart = volumeEndedAtUnix - volumeStartedAtUnix;
 
@@ -459,7 +625,7 @@ const drawVolumes = ({ instrumentId }) => {
       return true;
     }
 
-    targetDoc.target_instrument_volume_bounds.push({
+    targetInstrumentVolumeBounds.push({
       ...bound,
 
       volume_ended_at_unix: volumeEndedAtUnix,
@@ -469,68 +635,14 @@ const drawVolumes = ({ instrumentId }) => {
     });
   });
 
-  const lTargetInstrumentVolumeBounds = targetDoc.target_instrument_volume_bounds.length;
-
-  if (lTargetInstrumentVolumeBounds) {
-    targetDoc.target_instrument_volume_bounds.forEach(bound => {
-      const newExtraSeries = chartWrapper.addExtraSeries({
-        lastValueVisible: false,
-      });
-
-      chartWrapper.drawSeries(newExtraSeries, [{
-        value: bound.price,
-        time: bound.volume_started_at_unix,
-      }, {
-        value: bound.price,
-        time: bound.volume_ended_at_unix,
-      }]);
-    });
-
-    const $slider = $chartsContainer.find('.chart-slider.is_worked');
-
-    $slider
-      .find('span.amount-slides')
-      .text(lTargetInstrumentVolumeBounds);
-
-    scrollTo('next', instrumentId);
-  }
+  return targetInstrumentVolumeBounds;
 };
 
-const drawMarkers = ({ instrumentId }) => {
-  const targetDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
-  const chartWrapper = targetDoc.chart_candles;
-
-  chartWrapper.removeMarkers();
-
-  if (!targetDoc.target_instrument_volume_bounds || !targetDoc.target_instrument_volume_bounds.length) {
+const scrollTo = (action, { instrumentId }, targetInstrumentVolumeBounds = []) => {
+  if (!targetInstrumentVolumeBounds.length) {
     return true;
   }
 
-  targetDoc.target_instrument_volume_bounds.forEach(bound => {
-    let color, text;
-
-    const lifetime = parseInt((bound.volume_ended_at_unix - bound.volume_started_at_unix) / 60, 10);
-
-    text = `l: ${lifetime}`;
-
-    if (bound.is_ask) {
-      color = '#4CAF50';
-    } else {
-      color = '#FF5252';
-    }
-
-    chartWrapper.addMarker({
-      // shape: 'square',
-      color,
-      time: bound.volume_started_at_unix,
-      text,
-    });
-  });
-
-  chartWrapper.drawMarkers();
-};
-
-const scrollTo = (action, instrumentId) => {
   const targetDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
   const chartWrapper = targetDoc.chart_candles;
 
@@ -541,7 +653,9 @@ const scrollTo = (action, instrumentId) => {
   let currentSlide = parseInt($currentSlide.text(), 10);
   const amountSlides = parseInt($amountSlides.text(), 10);
 
-  if (action === 'next') {
+  if (Number.isInteger(action)) {
+    currentSlide = action;
+  } else if (action === 'next') {
     currentSlide += 1;
   } else {
     currentSlide -= 1;
@@ -558,7 +672,7 @@ const scrollTo = (action, instrumentId) => {
   $currentSlide.text(currentSlide);
 
   let barsToTargetCandle = 0;
-  const targetSlide = targetDoc.target_instrument_volume_bounds[currentSlide - 1].first_candle;
+  const targetSlide = targetInstrumentVolumeBounds[currentSlide - 1].first_candle;
   const timeUnix = getUnix(targetSlide.time);
 
   for (let i = chartWrapper.originalData.length - 1; i >= 0; i -= 1) {
@@ -607,4 +721,172 @@ const getCandlesData = async ({
   console.log('end loading');
 
   return resultGetCandles.result;
+};
+
+const makeReport = ({ instrumentId }, targetInstrumentVolumeBounds = []) => {
+  if (!targetInstrumentVolumeBounds.length) {
+    return true;
+  }
+
+  const targetDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
+  const futuresDoc = instrumentsDocs.find(doc => doc.name === `${targetDoc.name}PERP`);
+
+  const chartCandles = targetDoc.chart_candles;
+  const futuresChartCandles = futuresDoc.chart_candles;
+
+  let appendStr = `<tr>
+    <th>#</th>
+    <th>Timelife</th>
+    <th>Touches</th>
+    <th>MaxProfit</th>
+  </tr>`;
+
+  targetInstrumentVolumeBounds.forEach((bound, index) => {
+    // timelife
+    const differenceBetweenEndAndStart = bound.volume_ended_at_unix - bound.volume_started_at_unix;
+    const timelife = parseInt(differenceBetweenEndAndStart / 60, 10);
+
+    const volumePrice = parseFloat(bound.price);
+
+    let targetCandlesPeriod = chartCandles.originalData
+      .filter(data =>
+        data.originalTimeUnix >= bound.volume_started_at_unix
+        && data.originalTimeUnix <= bound.volume_ended_at_unix,
+      );
+
+    let numberTouches = 0;
+    let indexCandleWhereWereEnouthTouches = false;
+    const lTargetPeriod = targetCandlesPeriod.length;
+
+    for (let i = 0; i < lTargetPeriod; i += 1) {
+      const { low, high } = targetCandlesPeriod[i];
+
+      const calculatingValue = bound.is_ask ? high : low;
+
+      const differenceBetweenPrices = Math.abs(calculatingValue - volumePrice);
+      const percentPerPrice = 100 / (calculatingValue / differenceBetweenPrices);
+
+      if (percentPerPrice <= limiterDistance) {
+        numberTouches += 1;
+
+        if (numberTouches === limiterNumberTouches) {
+          indexCandleWhereWereEnouthTouches = i;
+        }
+      }
+    }
+
+    if (indexCandleWhereWereEnouthTouches === false) {
+      appendStr += `<tr">
+        <td>${index + 1}</td>
+        <td>${timelife}</td>
+        <td>${numberTouches}</td>
+        <td>0%</td>
+      </tr>`;
+
+      return true;
+    }
+
+    targetCandlesPeriod = targetCandlesPeriod.slice(indexCandleWhereWereEnouthTouches, lTargetPeriod);
+
+    const tmpArr = [targetCandlesPeriod[0]];
+
+    if (targetCandlesPeriod[1]) {
+      tmpArr.push(targetCandlesPeriod[1]);
+    }
+
+    const targetFuturesCandlesPeriod = futuresChartCandles.originalData
+      .filter(fData => tmpArr.some(sData => sData.originalTimeUnix === fData.originalTimeUnix))
+      .sort((a, b) => a.originalTimeUnix < b.originalTimeUnix ? -1 : 1);
+
+    let indexStartCandle = futuresChartCandles.originalData.findIndex(
+      fData => fData.originalTimeUnix === targetCandlesPeriod[0].originalTimeUnix,
+    );
+
+    let isFinish = false;
+    let startPrice = bound.is_ask ?
+      targetFuturesCandlesPeriod[0].high : targetFuturesCandlesPeriod[0].low;
+
+    if (bound.is_ask && targetCandlesPeriod[0].high > volumePrice) {
+      if (!targetFuturesCandlesPeriod[1]) {
+        isFinish = true;
+      } else {
+        indexStartCandle += 1;
+        startPrice = targetFuturesCandlesPeriod[1].high;
+      }
+    } else if (!bound.is_ask && targetCandlesPeriod[0].low < volumePrice) {
+      if (!targetFuturesCandlesPeriod[1]) {
+        isFinish = true;
+      } else {
+        indexStartCandle += 1;
+        startPrice = targetFuturesCandlesPeriod[1].low;
+      }
+    }
+
+    if (isFinish) {
+      appendStr += `<tr">
+        <td>${index + 1}</td>
+        <td>${timelife}</td>
+        <td>${numberTouches}</td>
+        <td>0%</td>
+      </tr>`;
+
+      return true;
+    }
+
+    console.log('start', futuresChartCandles.originalData[indexStartCandle]);
+
+    let minLow = startPrice;
+    let maxHigh = startPrice;
+    const lDataLength = futuresChartCandles.originalData.length;
+
+    const sumPerPrice = startPrice * (stopLossPercent / 100);
+    const startPriceWithStopLoss = bound.is_ask ?
+      (startPrice + sumPerPrice) : (startPrice - sumPerPrice);
+
+    for (let i = indexStartCandle; i < lDataLength; i += 1) {
+      const { low, high } = futuresChartCandles.originalData[i];
+
+      if ((bound.is_ask && high > startPriceWithStopLoss)
+        || (!bound.is_ask && low < startPriceWithStopLoss)) {
+        console.log('end', futuresChartCandles.originalData[i]);
+        break;
+      }
+
+      if (low < minLow) {
+        minLow = low;
+      }
+
+      if (high > maxHigh) {
+        maxHigh = high;
+      }
+    }
+
+    let maxProfit;
+
+    if (bound.is_ask) {
+      const differenceBetweenPrices = startPrice - minLow;
+
+      maxProfit = differenceBetweenPrices < 0 ?
+        0 : 100 / (startPrice / differenceBetweenPrices);
+    } else {
+      const differenceBetweenPrices = maxHigh - startPrice;
+
+      maxProfit = differenceBetweenPrices < 0 ?
+        0 : 100 / (startPrice / differenceBetweenPrices);
+    }
+
+    console.log('startPrice', startPrice);
+    console.log('startPriceWithStopLoss', startPriceWithStopLoss);
+
+    console.log(bound.is_ask, minLow, maxHigh);
+
+    appendStr += `<tr">
+      <td>${index + 1}</td>
+      <td>${timelife}</td>
+      <td>${numberTouches}</td>
+      <td>${maxProfit.toFixed(2)}%</td>
+    </tr>`;
+  });
+
+  $report.empty().append(appendStr);
 };

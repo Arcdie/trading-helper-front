@@ -829,7 +829,11 @@ input:checked + .slider:before {
   flex-direction: column; }
   .volume-statistics .row {
     display: flex;
-    margin-bottom: 15px; }
+    border-top: 1px solid black;
+    margin-top: 15px; }
+    .volume-statistics .row:first-child {
+      margin-top: 0px;
+      border-top: none; }
   .volume-statistics .charts-container {
     width: 90%;
     display: inline-block;
@@ -972,10 +976,25 @@ input:checked + .slider:before {
             .volume-statistics .instruments-container .instruments-list .list .instrument span.amount {
               width: 18%;
               text-align: center; }
-  .volume-statistics .settings div {
-    margin-bottom: 10px; }
-    .volume-statistics .settings div p {
-      margin-bottom: 3px; }
+  .volume-statistics .settings {
+    padding-top: 15px; }
+    .volume-statistics .settings div {
+      margin-bottom: 10px; }
+      .volume-statistics .settings div p {
+        margin-bottom: 3px; }
+  .volume-statistics .report {
+    padding-top: 15px; }
+    .volume-statistics .report table tr:hover {
+      background-color: #cccccc80; }
+    .volume-statistics .report table tr th {
+      padding: 10px;
+      border-bottom: 1px solid black; }
+    .volume-statistics .report table tr td {
+      cursor: pointer;
+      padding: 10px;
+      text-align: center;
+      border-bottom: 1px solid black;
+      border-right: 1px dashed black; }
 
 .robots-statistics {
   padding: 10px;

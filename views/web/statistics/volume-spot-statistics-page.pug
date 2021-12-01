@@ -33,6 +33,45 @@ block content
 				.number-touches
 					p Touches
 					input.number-touches(type="text")
+					
+				.stoploss-percent
+					p StopLoss %
+					input.stoploss-percent(type="text")
+					
+				.consider-btc-mirco-trend
+					label(for='consider-btc-mirco-trend') BTC micro-trend
+					input#consider-btc-mirco-trend(type='checkbox')
+					
+				.consider-futures-mirco-trend
+					label(for='consider-futures-mirco-trend') Futures micro-trend
+					input#consider-futures-mirco-trend(type='checkbox')
+
+		.row
+			.report
+				table
+					//- tr
+					//- 	th #
+					//- 	th Timelife
+					//- 	th Touches
+					//- 	th MaxProfit
+					//- 
+					//- tr
+					//- 	td 1
+					//- 	td 10m
+					//- 	td 15
+					//- 	td 3%
+					//- 
+					//- tr
+					//- 	td 2
+					//- 	td 15m
+					//- 	td 3
+					//- 	td 0.3%
+					//- 
+					//- tr
+					//- 	td 3
+					//- 	td 7m
+					//- 	td 2
+					//- 	td 1.3%
 
 block scripts
 	script(src='/libs/moment.min.js')

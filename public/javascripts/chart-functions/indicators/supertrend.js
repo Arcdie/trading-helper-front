@@ -204,6 +204,8 @@ class IndicatorSuperTrend {
 
     this.topSeries.unshift(...newTopSeries);
     this.bottomSeries.unshift(...newBottomSeries);
+
+    return workingData;
   }
 
   drawSeries(series, data) {

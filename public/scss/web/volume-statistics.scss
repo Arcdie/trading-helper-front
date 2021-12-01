@@ -6,7 +6,13 @@
 
   .row {
     display: flex;
-    margin-bottom: 15px;
+    border-top: 1px solid black;
+    margin-top: 15px;
+
+    &:first-child {
+      margin-top: 0px;
+      border-top: none;
+    }
   }
 
   .charts-container {
@@ -234,6 +240,8 @@
   }
 
   .settings {
+    padding-top: 15px;
+
     div {
       margin-bottom: 10px;
 
@@ -243,6 +251,35 @@
 
       input[type="text"] {
 
+      }
+    }
+  }
+
+  .report {
+    padding-top: 15px;
+
+    table {
+      tr {
+        &:hover {
+          background-color: #cccccc80;
+        }
+
+        th {
+          padding: 10px;
+          border-bottom: 1px solid black;
+        }
+
+        td {
+          cursor: pointer;
+          padding: 10px;
+          text-align: center;
+          border-bottom: 1px solid black;
+          border-right: 1px dashed black;
+
+          // &:last-child {
+          //   border-right: none;
+          // }
+        }
       }
     }
   }
