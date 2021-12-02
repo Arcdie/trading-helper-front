@@ -1,255 +1,121 @@
 .experiment {
   padding: 10px;
   position: relative;
-  display: flex;
-  flex-direction: column;
 
   .row {
     display: flex;
   }
 
-  .instruments-container {
-    width: 10%;
-    overflow-y: hidden;
-    display: inline-block;
-    box-sizing: border-box;
-    border: 1px solid black;
-    // border-top: 1px solid black;
-    // border-right: 1px solid black;
-    // border-bottom: 1px solid black;
-
-    .search {
-      width: 100%;
-      height: 35px;
-
-      input[type="text"] {
-        width: 100%;
-        height: 100%;
-        box-sizing: border-box;
-        border-right: none;
-        border-top: none;
-        border-left: none;
-        padding: 0 8px;
-        outline: none;
-      }
-    }
-
-    .instruments-list {
-      width: 100%;
-
-      .headlines {
-        text-align: left;
-        padding: 5px 10px;
-        border-bottom: 1px solid black;
-
-        span {
-          cursor: pointer;
-          display: inline-block;
-          box-sizing: border-box;
-
-          &.is_active {
-            background-color: #00a1ff59;
-          }
-
-          &.instrument-name {
-            width: 80%;
-          }
-
-          &.levels {
-            width: 20%;
-            text-align: center;
-          }
-        }
-      }
-
-      .list {
-        display: flex;
-        overflow-y: scroll;
-        flex-direction: column;
-
-        .instrument {
-          &.is_active {
-            background-color: #0066ff61 !important;
-          }
-
-          &:hover {
-            background-color: #0066ff1f;
-          }
-
-          cursor: pointer;
-          padding: 10px 10px;
-          border-bottom: 1px solid black;
-
-          span {
-            cursor: pointer;
-            display: inline-block;
-            box-sizing: border-box;
-
-            &.instrument-name {
-              width: 100%;
-            }
-          }
-        }
-      }
-    }
-  }
-
-  .chart-container {
-    width: 90%;
-    display: inline-block;
-    box-sizing: border-box;
-    position: relative;
-    border-bottom: 1px solid black;
-
-    .charts-nav {
-      position: absolute;
-      z-index: 999;
-      top: 15px;
-      left: 15px;
-
-      .row {
-        display: flex;
-        align-items: center;
-      }
-    }
-
-    .legend {
-      p.values {
-        span {
-          color: #000FFF;
-          margin-left: 2px;
-          margin-right: 5px;
-        }
-      }
-    }
-
-    .ruler {
-      position: absolute;
-      left: -9999px;
-      top: -9999px;
-      z-index: 999;
-      font-size: 16px;
-      color: #0044e8;
-    }
-
-    .actions-menu {
-      margin-top: 12px;
-
-      .trades-slider {
-        display: inline-block;
-
-        p {
-          display: inline-block;
-          margin: 0 8px;
-          font: 17px sans-serif;
-
-          span {
-            &.current-tick {
-              margin-right: 3px;
-            }
-
-            &.amount-ticks {
-              margin-left: 3px;
-            }
-          }
-        }
-
-        button {
-          display: inline-block;
-          background-color: transparent;
-          border-radius: 100px;
-          cursor: pointer;
-          font-size: 17px;
-        }
-      }
-
-      .trades-aggregate {
-        width: 16px;
-        display: inline-block;
-        margin-left: 11px;
-
-        input[type="text"] {
-          width: 100%;
-          height: 100%;
-          text-align: center;
-          position: relative;
-          bottom: 2px;
-        }
-      }
-    }
-
-    .chart-periods {
-      display: flex;
-      margin-top: 12px;
-
-      div {
-        &.is_worked {
-          display: flex;
-          justify-content: center;
-          align-items: center;
-        }
-
-        &.is_active {
-          border-color: #00bf20;
-        }
-
-        width: 40px;
-        height: 40px;
-        cursor: pointer;
-        display: none;
-        box-sizing: border-box;
-        margin-right: 5px;
-        position: relative;
-        border: 1px dashed #d9d9d9;
-        background-color: white;
-
-        span {
-          margin: 8px auto;
-          text-align: center;
-          display: block;
-        }
-      }
-    }
-
-    .chart-candles {
-      width: 100%;
-      height: 70%;
-      /* height: 70%; */
-      /* height: 50%; */
-      border: 1px solid black;
-      border-right: none;
-      box-sizing: border-box;
-    }
-
-    .chart-volume {
-      width: 100%;
-      height: 30%;
-      border: 1px solid black;
-      border-top: none;
-      border-right: none;
-      box-sizing: border-box;
-    }
-  }
-
-  .robots-container {
+  table.main-table {
     width: 100%;
 
-    table {
-      margin: 15px;
-      font: 17px sans-serif;
+    td {
+      &.red {
+        background-color: #ff000047;
+      }
 
+      &.green {
+        background-color: #07c007b0;
+      }
+    }
+
+    th.date {
+      width: 23%;
+      padding-bottom: 10px;
+      border-bottom: 1px solid black;
+    }
+
+    th.instrument-name {
+      padding-bottom: 10px;
+      border-bottom: 1px solid black;
+    }
+
+    tr.instrument {
+      border-bottom: 1px solid black;
+
+      td.instrument-name {
+        text-align: center;
+        border-right: 1px solid black;
+      }
+
+      td.period {
+        border-right: 1px solid black;
+
+        &:last-child {
+          border-right: none;
+        }
+
+        table {
+          width: 100%;
+          // border-spacing: 0px 15px;
+          // border-collapse: separate;
+
+          tr {
+            &:last-child {
+              td {
+                border-bottom: none;
+              }
+            }
+
+            text-align: center;
+
+            th {
+              padding: 10px 0px;
+              border-bottom: 1px solid black;
+            }
+
+            td {
+              &:last-child {
+                border-right: none;
+              }
+
+              padding: 10px 0px;
+              border-bottom: 1px solid black;
+              border-right: 1px solid black;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  /*
+  .period {
+    margin-right: 30px;
+    display: flex;
+    align-items: flex-start;
+  }
+
+  .instrument {
+    margin-bottom: 10px;
+
+    p {
+
+    }
+
+    table {
       tr {
         th {
           padding: 10px;
-          border-bottom: 1px dashed black;
-          text-align: center;
+          border-bottom: 1px solid black;
         }
 
         td {
           padding: 10px;
           text-align: center;
+          border-bottom: 1px solid black;
+          border-right: 1px dashed black;
+
+          &.red {
+            background-color: #ff000047;
+          }
+
+          &.green {
+            background-color: #07c007b0;
+          }
         }
       }
     }
   }
+  */
 }

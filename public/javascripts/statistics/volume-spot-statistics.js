@@ -1,5 +1,5 @@
 /* global
-functions, makeRequest, getUnix,
+functions, makeRequest, getUnix, sleep, saveAs,
 objects, moment, ChartCandles, IndicatorVolume, IndicatorSuperTrend
 */
 
@@ -32,10 +32,10 @@ let targetInstrumentVolumeBounds = [];
 const startTime = moment().utc()
   .startOf('day')
   // .add(-1, 'days');
-  .add(-2, 'days');
+  .add(-3, 'days');
 
-const endTime = moment(startTime)
-  .endOf('day');
+const endTime = moment()
+  .startOf('hour');
 
 /* JQuery */
 const $report = $('.report table');
@@ -87,12 +87,7 @@ $(document).ready(async () => {
   // */
 
   // main logic
-
-  if (!params.symbol) {
-    renderListInstruments(instrumentsDocs);
-  } else {
-    renderListInstruments(instrumentsDocs.filter(doc => doc.name === params.symbol));
-  }
+  renderListInstruments(instrumentsDocs);
 
   $('.search input')
     .on('keyup', function () {
@@ -111,8 +106,8 @@ $(document).ready(async () => {
     });
 
   $instrumentsList
-    .on('click', '.instrument', async function () {
-      const $instrument = $(this);
+    .on('click', '.instrument', async function (elem) {
+      const $instrument = elem.type ? $(this) : $(elem);
       const instrumentId = $instrument.data('instrumentid');
 
       if (choosenInstrumentId === instrumentId) {
@@ -239,6 +234,83 @@ $(document).ready(async () => {
         instrumentId: choosenInstrumentId,
       }, targetInstrumentVolumeBounds);
     });
+
+  if (params.symbol) {
+    const instrumentDoc = instrumentsDocs.find(doc => doc.name === params.symbol);
+
+    if (!instrumentDoc) {
+      alert('No doc with this symbol');
+    } else {
+      await $._data($($instrumentsList)
+        .get(0), 'events').click[0]
+        .handler(`#instrument-${instrumentDoc._id}`);
+    }
+  }
+
+  if (params.slide) {
+    scrollTo(parseInt(params.slide, 10), {
+      instrumentId: choosenInstrumentId,
+    }, targetInstrumentVolumeBounds);
+  }
+
+  /*
+  const statisticsArr = [];
+
+  // let i = 0;
+  for await (const doc of instrumentsDocs) {
+    // i += 1;
+    // if (i === 2) break;
+
+    if (doc.is_futures) {
+      continue;
+    }
+
+    await $._data($($instrumentsList).get(0), 'events').click[0].handler(`#instrument-${doc._id}`);
+
+    const statistics = [];
+
+    $report.find('tr').each((index, tr) => {
+      if (index === 0) {
+        return true;
+      }
+
+      const $tr = $(tr);
+      const $tds = $tr.find('td');
+
+      const time = parseInt($tr.data('time'), 10);
+      const timelife = parseInt($tds.eq(1).text(), 10);
+      const touches = parseInt($tds.eq(2).text(), 10);
+      const profit = parseFloat($tds.eq(3).text());
+
+      const isAsk = $tr.data('is-ask') === 'true';
+
+      statistics.push({
+        time,
+        timelife,
+        touches,
+        profit,
+        index,
+        isAsk,
+      });
+    });
+
+    statisticsArr.push({
+      instrumentId: doc._id,
+      instrumentName: doc.name,
+      statistics,
+    });
+
+    await sleep(1000);
+  }
+
+  const file = new File(
+    [JSON.stringify(statisticsArr)],
+    'volume-spot-statistics.json',
+    { type: 'text/plain;charset=utf-8' },
+  );
+
+  saveAs(file);
+  // */
 });
 
 const renderListInstruments = (instrumentsDocs) => {
@@ -550,28 +622,98 @@ const drawMarkers = ({ instrumentId }, targetInstrumentVolumeBounds = []) => {
 };
 
 const getTargetInstrumentVolumes = ({ instrumentId }) => {
-  const targetDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
-
   const btcDoc = instrumentsDocs.find(doc => doc.name === 'BTCUSDTPERP');
-
-  const futuresDoc = instrumentsDocs.find(
-    doc => doc.name === `${targetDoc.name}PERP`,
-  );
+  const spotDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
+  const futuresDoc = instrumentsDocs.find(doc => doc.name === `${spotDoc.name}PERP`);
 
   const targetInstrumentVolumeBounds = [];
 
-  targetDoc.instrument_volume_bounds.forEach(bound => {
+  spotDoc.instrument_volume_bounds.forEach(bound => {
     const volumeStartedAtUnix = moment(bound.volume_started_at).utc()
       .startOf('minute').unix();
 
     const volumeEndedAtUnix = moment(bound.volume_ended_at).utc()
       .endOf('minute').unix() + 1;
 
+    const differenceBetweenEndAndStart = volumeEndedAtUnix - volumeStartedAtUnix;
+
+    if (differenceBetweenEndAndStart < (limiterLifetime * 60)) {
+      return true;
+    }
+
+    let spotCandlesPeriod = spotDoc.chart_candles.originalData
+      .filter(data =>
+        data.originalTimeUnix >= volumeStartedAtUnix
+        && data.originalTimeUnix <= volumeEndedAtUnix,
+      )
+      .sort((a, b) => a.originalTimeUnix < b.originalTimeUnix ? -1 : 1);
+
+    const firstSpotCandleUnix = spotCandlesPeriod[0].originalTimeUnix;
+
+    let numberTouches = 0;
+    const volumePrice = parseFloat(bound.price);
+    let indexCandleWhereWereEnoughTouches = false;
+    const lSpotCandlesPeriod = spotCandlesPeriod.length;
+
+    for (let i = 0; i < lSpotCandlesPeriod; i += 1) {
+      const { low, high } = spotCandlesPeriod[i];
+
+      const calculatingValue = bound.is_ask ? high : low;
+
+      const differenceBetweenPrices = Math.abs(calculatingValue - volumePrice);
+      const percentPerPrice = 100 / (calculatingValue / differenceBetweenPrices);
+
+      if (percentPerPrice <= limiterDistance) {
+        numberTouches += 1;
+
+        if (numberTouches === limiterNumberTouches) {
+          indexCandleWhereWereEnoughTouches = i;
+        }
+      }
+    }
+
+    if (numberTouches < limiterNumberTouches) {
+      return true;
+    }
+
+    spotCandlesPeriod = spotCandlesPeriod.slice(
+      indexCandleWhereWereEnoughTouches, lSpotCandlesPeriod,
+    );
+
+    const tmpArr = [spotCandlesPeriod[0]];
+    let firstSpotCandleOfEntrance = spotCandlesPeriod[0];
+
+    if (spotCandlesPeriod[1]) {
+      tmpArr.push(spotCandlesPeriod[1]);
+    }
+
+    let indexStartFuturesCandle = futuresDoc.chart_candles.originalData.findIndex(
+      fData => fData.originalTimeUnix === spotCandlesPeriod[0].originalTimeUnix,
+    );
+
+    if (bound.is_ask && spotCandlesPeriod[0].high > volumePrice) {
+      if (!spotCandlesPeriod[1]) {
+        return true;
+      } else {
+        indexStartFuturesCandle += 1;
+        firstSpotCandleOfEntrance = spotCandlesPeriod[1];
+      }
+    } else if (!bound.is_ask && spotCandlesPeriod[0].low < volumePrice) {
+      if (!spotCandlesPeriod[1]) {
+        return true;
+      } else {
+        indexStartFuturesCandle += 1;
+        firstSpotCandleOfEntrance = spotCandlesPeriod[1];
+      }
+    }
+
+    const startFuturesCandle = futuresDoc.chart_candles.originalData[indexStartFuturesCandle];
+
     const targetBtcCandle = btcDoc.indicator_micro_supertrend_data
-      .find(data => data.originalTimeUnix === volumeStartedAtUnix);
+      .find(data => data.originalTimeUnix === startFuturesCandle.originalTimeUnix);
 
     const targetFuturesCandle = futuresDoc.indicator_micro_supertrend_data
-      .find(data => data.originalTimeUnix === volumeStartedAtUnix);
+      .find(data => data.originalTimeUnix === startFuturesCandle.originalTimeUnix);
 
     let isGreenLight = true;
 
@@ -593,58 +735,32 @@ const getTargetInstrumentVolumes = ({ instrumentId }) => {
       return true;
     }
 
-    const differenceBetweenEndAndStart = volumeEndedAtUnix - volumeStartedAtUnix;
-
-    if (differenceBetweenEndAndStart < (limiterLifetime * 60)) {
-      return true;
-    }
-
-    const volumePrice = parseFloat(bound.price);
-
-    const targetCandlesPeriod = targetDoc.original_data.filter(data => {
-      const timeUnix = getUnix(data.time);
-      return timeUnix >= volumeStartedAtUnix && timeUnix <= volumeEndedAtUnix;
-    });
-
-    let numberTouches = 0;
-    const lTargetPeriod = targetCandlesPeriod.length;
-
-    for (let i = 0; i < lTargetPeriod; i += 1) {
-      const [open, close, low, high] = targetCandlesPeriod[i].data;
-      const calculatingValue = bound.is_ask ? high : low;
-
-      const differenceBetweenPrices = Math.abs(calculatingValue - volumePrice);
-      const percentPerPrice = 100 / (calculatingValue / differenceBetweenPrices);
-
-      if (percentPerPrice <= limiterDistance) {
-        numberTouches += 1;
-      }
-    }
-
-    if (numberTouches < limiterNumberTouches) {
-      return true;
-    }
-
     targetInstrumentVolumeBounds.push({
       ...bound,
 
+      number_touches: numberTouches,
       volume_ended_at_unix: volumeEndedAtUnix,
       volume_started_at_unix: volumeStartedAtUnix,
+      timelife_in_seconds: differenceBetweenEndAndStart,
 
-      first_candle: targetCandlesPeriod[0],
+      // start candle of volume bound
+      first_spot_candle_unix_of_bound: firstSpotCandleUnix,
+
+      // start candle where was entrance
+      first_spot_candle_unix_of_entrance: firstSpotCandleOfEntrance.originalTimeUnix,
     });
   });
 
   return targetInstrumentVolumeBounds;
 };
 
-const scrollTo = (action, { instrumentId }, targetInstrumentVolumeBounds = []) => {
+const scrollTo = (action, { instrumentId }, instrumentVolumeBounds = []) => {
   if (!targetInstrumentVolumeBounds.length) {
     return true;
   }
 
-  const targetDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
-  const chartWrapper = targetDoc.chart_candles;
+  const spotDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
+  const spotChartCandles = spotDoc.chart_candles;
 
   const $slider = $chartsContainer.find('.chart-slider.is_worked');
   const $currentSlide = $slider.find('span.current-slide');
@@ -672,16 +788,18 @@ const scrollTo = (action, { instrumentId }, targetInstrumentVolumeBounds = []) =
   $currentSlide.text(currentSlide);
 
   let barsToTargetCandle = 0;
-  const targetSlide = targetInstrumentVolumeBounds[currentSlide - 1].first_candle;
-  const timeUnix = getUnix(targetSlide.time);
 
-  for (let i = chartWrapper.originalData.length - 1; i >= 0; i -= 1) {
-    if (chartWrapper.originalData[i].originalTimeUnix === timeUnix) {
-      barsToTargetCandle = chartWrapper.originalData.length - i; break;
+  const firstCandleOfBound = spotChartCandles.originalData.find(candle =>
+    candle.originalTimeUnix === instrumentVolumeBounds[currentSlide - 1].first_spot_candle_unix_of_bound,
+  );
+
+  for (let i = spotChartCandles.originalData.length - 1; i >= 0; i -= 1) {
+    if (spotChartCandles.originalData[i].originalTimeUnix === firstCandleOfBound.originalTimeUnix) {
+      barsToTargetCandle = spotChartCandles.originalData.length - i; break;
     }
   }
 
-  chartWrapper.chart
+  spotChartCandles.chart
     .timeScale()
     .scrollToPosition(-barsToTargetCandle, false);
 };
@@ -723,15 +841,17 @@ const getCandlesData = async ({
   return resultGetCandles.result;
 };
 
-const makeReport = ({ instrumentId }, targetInstrumentVolumeBounds = []) => {
+const makeReport = ({ instrumentId }, instrumentVolumeBounds = []) => {
+  $report.empty();
+
   if (!targetInstrumentVolumeBounds.length) {
     return true;
   }
 
-  const targetDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
-  const futuresDoc = instrumentsDocs.find(doc => doc.name === `${targetDoc.name}PERP`);
+  const spotDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
+  const futuresDoc = instrumentsDocs.find(doc => doc.name === `${spotDoc.name}PERP`);
 
-  const chartCandles = targetDoc.chart_candles;
+  const spotChartCandles = spotDoc.chart_candles;
   const futuresChartCandles = futuresDoc.chart_candles;
 
   let appendStr = `<tr>
@@ -741,99 +861,29 @@ const makeReport = ({ instrumentId }, targetInstrumentVolumeBounds = []) => {
     <th>MaxProfit</th>
   </tr>`;
 
-  targetInstrumentVolumeBounds.forEach((bound, index) => {
-    // timelife
-    const differenceBetweenEndAndStart = bound.volume_ended_at_unix - bound.volume_started_at_unix;
-    const timelife = parseInt(differenceBetweenEndAndStart / 60, 10);
+  instrumentVolumeBounds.forEach((bound, index) => {
+    const timelife = parseInt(bound.timelife_in_seconds / 60, 10);
 
-    const volumePrice = parseFloat(bound.price);
-
-    let targetCandlesPeriod = chartCandles.originalData
+    const spotCandlesPeriod = spotChartCandles.originalData
       .filter(data =>
         data.originalTimeUnix >= bound.volume_started_at_unix
         && data.originalTimeUnix <= bound.volume_ended_at_unix,
       );
 
-    let numberTouches = 0;
-    let indexCandleWhereWereEnouthTouches = false;
-    const lTargetPeriod = targetCandlesPeriod.length;
-
-    for (let i = 0; i < lTargetPeriod; i += 1) {
-      const { low, high } = targetCandlesPeriod[i];
-
-      const calculatingValue = bound.is_ask ? high : low;
-
-      const differenceBetweenPrices = Math.abs(calculatingValue - volumePrice);
-      const percentPerPrice = 100 / (calculatingValue / differenceBetweenPrices);
-
-      if (percentPerPrice <= limiterDistance) {
-        numberTouches += 1;
-
-        if (numberTouches === limiterNumberTouches) {
-          indexCandleWhereWereEnouthTouches = i;
-        }
-      }
-    }
-
-    if (indexCandleWhereWereEnouthTouches === false) {
-      appendStr += `<tr">
-        <td>${index + 1}</td>
-        <td>${timelife}</td>
-        <td>${numberTouches}</td>
-        <td>0%</td>
-      </tr>`;
-
-      return true;
-    }
-
-    targetCandlesPeriod = targetCandlesPeriod.slice(indexCandleWhereWereEnouthTouches, lTargetPeriod);
-
-    const tmpArr = [targetCandlesPeriod[0]];
-
-    if (targetCandlesPeriod[1]) {
-      tmpArr.push(targetCandlesPeriod[1]);
-    }
-
-    const targetFuturesCandlesPeriod = futuresChartCandles.originalData
-      .filter(fData => tmpArr.some(sData => sData.originalTimeUnix === fData.originalTimeUnix))
-      .sort((a, b) => a.originalTimeUnix < b.originalTimeUnix ? -1 : 1);
-
-    let indexStartCandle = futuresChartCandles.originalData.findIndex(
-      fData => fData.originalTimeUnix === targetCandlesPeriod[0].originalTimeUnix,
+    const spotCandleWhereWasEntrance = spotCandlesPeriod.find(
+      candle => candle.originalTimeUnix === bound.first_spot_candle_unix_of_entrance,
     );
 
-    let isFinish = false;
-    let startPrice = bound.is_ask ?
-      targetFuturesCandlesPeriod[0].high : targetFuturesCandlesPeriod[0].low;
+    const futuresCandleIndexWhereWasEntrance = futuresChartCandles.originalData.findIndex(
+      candle => candle.originalTimeUnix === spotCandleWhereWasEntrance.originalTimeUnix,
+    );
 
-    if (bound.is_ask && targetCandlesPeriod[0].high > volumePrice) {
-      if (!targetFuturesCandlesPeriod[1]) {
-        isFinish = true;
-      } else {
-        indexStartCandle += 1;
-        startPrice = targetFuturesCandlesPeriod[1].high;
-      }
-    } else if (!bound.is_ask && targetCandlesPeriod[0].low < volumePrice) {
-      if (!targetFuturesCandlesPeriod[1]) {
-        isFinish = true;
-      } else {
-        indexStartCandle += 1;
-        startPrice = targetFuturesCandlesPeriod[1].low;
-      }
-    }
+    const futuresCandleWhereWasEntrance = futuresChartCandles.originalData[futuresCandleIndexWhereWasEntrance];
 
-    if (isFinish) {
-      appendStr += `<tr">
-        <td>${index + 1}</td>
-        <td>${timelife}</td>
-        <td>${numberTouches}</td>
-        <td>0%</td>
-      </tr>`;
+    const startPrice = bound.is_ask ?
+      futuresCandleWhereWasEntrance.high : futuresCandleWhereWasEntrance.low;
 
-      return true;
-    }
-
-    console.log('start', futuresChartCandles.originalData[indexStartCandle]);
+    console.log('start', futuresCandleWhereWasEntrance);
 
     let minLow = startPrice;
     let maxHigh = startPrice;
@@ -843,7 +893,7 @@ const makeReport = ({ instrumentId }, targetInstrumentVolumeBounds = []) => {
     const startPriceWithStopLoss = bound.is_ask ?
       (startPrice + sumPerPrice) : (startPrice - sumPerPrice);
 
-    for (let i = indexStartCandle; i < lDataLength; i += 1) {
+    for (let i = futuresCandleIndexWhereWasEntrance; i < lDataLength; i += 1) {
       const { low, high } = futuresChartCandles.originalData[i];
 
       if ((bound.is_ask && high > startPriceWithStopLoss)
@@ -880,13 +930,16 @@ const makeReport = ({ instrumentId }, targetInstrumentVolumeBounds = []) => {
 
     console.log(bound.is_ask, minLow, maxHigh);
 
-    appendStr += `<tr">
+    appendStr += `<tr
+      data-is-ask="${bound.is_ask}"
+      data-time="${bound.volume_ended_at_unix}"
+    >
       <td>${index + 1}</td>
       <td>${timelife}</td>
-      <td>${numberTouches}</td>
+      <td>${bound.number_touches}</td>
       <td>${maxProfit.toFixed(2)}%</td>
     </tr>`;
   });
 
-  $report.empty().append(appendStr);
+  $report.append(appendStr);
 };

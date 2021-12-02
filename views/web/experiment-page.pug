@@ -6,54 +6,14 @@ block variables
 
 block content
 	.page.experiment
-		.row
-			.chart-container
-				.loader
-					div
-					div
-
-				.charts-nav
-					.legend
-						p.values
-							| ОТКР
-							span.open 0
-							| МАКС
-							span.high 0
-							| МИН
-							span.low 0
-							| ЗАКР
-							span.close 0
-							span.percent 0%			
-
-					.row
-						.chart-periods
-							.5m(data-period='5m')
-								span 5M
-							//- .1h(data-period='1h')
-							//- 	span 1Ч
-							//- .4h(data-period='4h')
-							//- 	span 4Ч
-							//- .1d(data-period='1d')
-							//- 	span Д
-
-				.charts
-			
-			.instruments-container
-				.search
-					input(type="text" placeholder="Поиск")
-			
-				.instruments-list
-					.headlines
-						span.instrument-name Инструмент
-
-					.list
+		.container
 
 block scripts
 	script(src='/libs/moment.min.js')
-	script(src='/libs/trading-view-charts.min.js')
+	//- script(src='/libs/trading-view-charts.min.js')
 	
-	script(src='/javascripts/websocket.js')
-	script(src='/javascripts/chart-functions/chart-candles.js')
-	script(src='/javascripts/chart-functions/indicators/volume.js')
+	//- script(src='/javascripts/websocket.js')
+	//- script(src='/javascripts/chart-functions/chart-candles.js')
+	//- script(src='/javascripts/chart-functions/indicators/volume.js')
 
 	script(src='/javascripts/web/experiment.js')

@@ -15,6 +15,10 @@ const $mdcontent = $('div.md-content');
 const $modalWindow = $('div.pop-up div.md-modal');
 
 /* Functions */
+const sleep = ms => {
+  return new Promise(resolve => setTimeout(resolve, ms));
+};
+
 const getRandomNumber = (min, max) => {
   return Math.floor(Math.random() * (max - min)) + min;
 };
