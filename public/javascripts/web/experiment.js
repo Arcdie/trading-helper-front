@@ -6,7 +6,7 @@ objects, moment,
 /* Constants */
 const MIN_PROFIT = 0.3;
 const MIN_GREEN_PERCENT = 80;
-const MIN_AMOUNT_STATISTICS = 5;
+const MIN_AMOUNT_STATISTICS = 1;
 
 let statisticsData = [];
 
@@ -192,14 +192,11 @@ $(document).ready(async () => {
 
         $td.empty().append(tableStr);
       }
-
-      // appendStr += `<div class="instrument">
-      //   <div class="row">
-      //     <p><span>${data.instrumentName}</span> (${data.statistics.length}, ${data.greenPercent}%)</p>
-      //   </div>
-      //
-      //   <div class="row">`;
     });
+
+  console.log(
+    JSON.stringify(statisticsData.map(data => data.instrumentId)),
+  );
 });
 
 const getFile = async name => {

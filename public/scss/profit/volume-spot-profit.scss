@@ -1,0 +1,30 @@
+.volume-spot-profit {
+  padding: 10px;
+
+  table {
+    width: 20%;
+
+    tr {
+      th {
+        text-align: center;
+        padding: 10px 0px;
+        border-bottom: 1px solid black;
+      }
+
+      td {
+        text-align: center;
+        padding: 10px 0px;
+        border-bottom: 1px solid black;
+        border-right: 1px solid black;
+
+        &.red {
+          background-color: #ff000047;
+        }
+
+        &.green {
+          background-color: #07c007b0;
+        }
+      }
+    }
+  }
+}

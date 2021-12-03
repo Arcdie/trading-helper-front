@@ -1,0 +1,19 @@
+extends ../../app
+
+block variables
+	-
+		const pageTitle = 'Профит плотностей (spot)';
+
+block content
+	.page.volume-spot-profit
+		//- table
+		//- 	tr
+		//- 		th #
+		//- 		th Instrument
+		//- 		th %
+		//- 		th Time
+
+block scripts
+	script(src='/libs/moment.min.js')
+
+	script(src='/javascripts/profit/volume-spot-profit.js')

@@ -5,7 +5,7 @@ block variables
 		const pageTitle = 'Статистика по изменению цены';
 
 block content
-	.page.price-jump-statistics
+	.page.price-jumps-statistics
 		.row
 			.charts-container
 
@@ -16,7 +16,7 @@ block content
 				.instruments-list
 					.headlines
 						span.instrument-name Инструмент
-						span.amount К-во
+						//- span.amount К-во
 
 					.list
 		
@@ -27,12 +27,28 @@ block content
 					input.lifetime(type="text")
 					
 				.distance
-					p Distance (%)
+					p Distance (ticks)
 					input.distance(type="text")
 					
 				.number-touches
 					p Touches
 					input.number-touches(type="text")
+					
+				.stoploss-percent
+					p StopLoss %
+					input.stoploss-percent(type="text")
+					
+				.consider-btc-mirco-trend
+					label(for='consider-btc-mirco-trend') BTC micro-trend
+					input#consider-btc-mirco-trend(type='checkbox')
+					
+				.consider-futures-mirco-trend
+					label(for='consider-futures-mirco-trend') Futures micro-trend
+					input#consider-futures-mirco-trend(type='checkbox')
+
+		.row
+			.report
+				table
 
 block scripts
 	script(src='/libs/moment.min.js')
@@ -44,4 +60,4 @@ block scripts
 	script(src='/javascripts/chart-functions/indicators/volume.js')
 	script(src='/javascripts/chart-functions/indicators/supertrend.js')
 
-	script(src='/javascripts/statistics/price-jump-statistics.js')
+	script(src='/javascripts/statistics/price-jumps-statistics.js')

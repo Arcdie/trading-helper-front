@@ -9,7 +9,6 @@
 @import './includes/switchers.scss';
 
 // Web
-
 @import './web/auth.scss';
 @import './web/profile.scss';
 @import './web/utilities.scss';
@@ -18,3 +17,9 @@
 @import './web/levels-monitoring.scss';
 @import './web/volume-statistics.scss';
 @import './web/robots-statistics.scss';
+
+// Profit
+@import './profit/volume-spot-profit.scss';
+
+// Statistics
+@import './statistics/price-jumps-statistics.scss';
