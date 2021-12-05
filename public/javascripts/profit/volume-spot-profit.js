@@ -64,7 +64,7 @@ $(document).ready(async () => {
   let appendStr = '';
 
   arrTimeUnix
-    .sort((a, b) => a < b ? -1 : 1)
+    .sort((a, b) => a > b ? -1 : 1)
     .forEach(timeUnix => {
       appendStr += `<div class="period p-${timeUnix}">
         <table>

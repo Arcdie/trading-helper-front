@@ -33,12 +33,13 @@ let instrumentsDocs = [];
 let targetInstrumentVolumeBounds = [];
 
 const startTime = moment().utc()
-  .startOf('day');
-  // .add(-1, 'days');
+  .startOf('day')
+  .add(-1, 'days');
   // .add(-3, 'days');
 
 const endTime = moment()
-  .startOf('minute');
+  .endOf('day');
+  // .startOf('minute');
 
 /* JQuery */
 const $report = $('.report table');
@@ -290,8 +291,17 @@ $(document).ready(async () => {
     }
   }
 
-  if (params.slide) {
-    scrollToVolume(parseInt(params.slide, 10), {
+  if (params.slideTrade) {
+    const spotDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
+    const futuresDoc = instrumentsDocs.find(doc => doc.name === `${spotDoc.name}PERP`);
+
+    scrollToTrade(parseInt(params.slideTrade, 10), {
+      instrumentId: choosenInstrumentId,
+    }, futuresDoc.user_trade_bounds);
+  }
+
+  if (params.slideVolume) {
+    scrollToVolume(parseInt(params.slideVolume, 10), {
       instrumentId: choosenInstrumentId,
     }, targetInstrumentVolumeBounds);
   }

@@ -566,7 +566,12 @@ const loadChart = async ({
   const listCharts = [chartCandles, indicatorVolume];
 
   chartCandles.drawSeries(chartCandles.mainSeries, chartCandles.originalData);
-  indicatorVolume.drawSeries(chartCandles.originalData);
+
+  indicatorVolume.drawSeries(indicatorVolume.mainSeries, chartCandles.originalData.map(e => ({
+    value: e.volume,
+    time: e.time,
+  })));
+
   indicatorMicroSuperTrend.calculateAndDraw(chartCandles.originalData);
   indicatorMacroSuperTrend.calculateAndDraw(chartCandles.originalData);
 
@@ -710,7 +715,12 @@ const loadChart = async ({
         chartCandles.setOriginalData(resultGetCandles.result);
 
         chartCandles.drawSeries(chartCandles.mainSeries, chartCandles.originalData);
-        indicatorVolume.drawSeries(chartCandles.originalData);
+
+        indicatorVolume.drawSeries(indicatorVolume.mainSeries, chartCandles.originalData.map(e => ({
+          value: e.volume,
+          time: e.time,
+        })));
+
         indicatorMicroSuperTrend.calculateAndDraw(chartCandles.originalData);
         indicatorMacroSuperTrend.calculateAndDraw(chartCandles.originalData);
 
@@ -756,8 +766,8 @@ const updateLastCandle = (data, period) => {
     time: validTime,
   });
 
-  indicatorVolume.drawSeries({
-    volume: parseFloat(volume),
+  indicatorVolume.drawSeries(indicatorVolume.mainSeries, {
+    value: parseFloat(volume),
     time: validTime,
   });
 };

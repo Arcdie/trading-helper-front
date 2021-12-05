@@ -11,6 +11,17 @@ class IndicatorVolume {
     this.containerWidth = this.$containerDocument[0].clientWidth;
     this.containerHeight = this.$containerDocument[0].clientHeight;
 
+    this.addChart();
+    this.addMainSeries({});
+
+    this.extraSeries = [];
+  }
+
+  appendChart($rootContainer) {
+    $rootContainer.append(`<div class="${this.containerName}"></div>`);
+  }
+
+  addChart() {
     this.chart = LightweightCharts.createChart(this.$containerDocument[0], {
       width: this.containerWidth,
       height: this.containerHeight,
@@ -33,31 +44,42 @@ class IndicatorVolume {
         width: 60,
       },
     });
+  }
 
-    this.series = this.chart.addHistogramSeries({
+  addMainSeries(optionalParams) {
+    this.mainSeries = this.chart.addHistogramSeries({
       color: 'rgba(12, 50, 153, .5)',
 
       priceFormat: {
         type: 'volume',
       },
+
+      ...optionalParams,
     });
   }
 
-  appendChart($rootContainer) {
-    $rootContainer.append(`<div class="${this.containerName}"></div>`);
+  addExtraSeries(optionalParams) {
+    const newExtraSeries = this.chart.addLineSeries({
+      priceLineSource: false,
+      priceLineVisible: false,
+      lastValueVisible: true,
+      lineWidth: 1,
+
+      ...optionalParams,
+      // lineType: LightweightCharts.LineType.Simple,
+      // lineStyle: LightweightCharts.LineStyle.LargeDashed,
+    });
+
+    newExtraSeries.id = new Date().getTime();
+    this.extraSeries.push(newExtraSeries);
+    return newExtraSeries;
   }
 
-  drawSeries(data) {
+  drawSeries(series, data) {
     if (Array.isArray(data)) {
-      this.series.setData(data.map(candle => ({
-        time: candle.time,
-        value: candle.volume,
-      })));
+      series.setData(data);
     } else {
-      this.series.update({
-        time: data.time,
-        value: data.volume,
-      });
+      series.update(data);
     }
   }
 }

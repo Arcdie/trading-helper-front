@@ -292,7 +292,11 @@ const loadChart = async ({
   const listCharts = [chartCandles, indicatorVolume];
 
   chartCandles.drawSeries(chartCandles.mainSeries, chartCandles.originalData);
-  indicatorVolume.drawSeries(chartCandles.originalData);
+
+  indicatorVolume.drawSeries(indicatorVolume.mainSeries, chartCandles.originalData.map(e => ({
+    value: e.volume,
+    time: e.time,
+  })));
 
   if (['1m', '5m'].includes(choosenPeriod)) {
     listCharts.forEach(chartWrapper => {

@@ -158,7 +158,7 @@ $(document).ready(async () => {
 
             tableStr += `<tr>
               <td>
-                <a href="/statistics/volume-spot?symbol=${data.instrumentName}&slide=${statistics.index}" target="_blank">${statistics.index}</a>
+                <a href="/statistics/volume-spot?symbol=${data.instrumentName}&slideVolume=${statistics.index}" target="_blank">${statistics.index}</a>
               </td>
               <td>${statistics.timelife}</td>
               <td>${statistics.touches}</td>
