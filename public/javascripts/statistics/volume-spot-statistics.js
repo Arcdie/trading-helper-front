@@ -5,7 +5,7 @@ objects, moment, ChartCandles, IndicatorVolume, IndicatorSuperTrend
 
 /* Constants */
 
-const modeSaveOn = false;
+const modeSaveOn = true;
 
 const URL_GET_CANDLES = '/api/candles';
 const URL_GET_USER_TRADE_BOUNDS = '/api/user-trade-bounds';
@@ -34,7 +34,7 @@ let targetInstrumentVolumeBounds = [];
 
 const startTime = moment().utc()
   .startOf('day')
-  .add(-1, 'days');
+  .add(-6, 'days');
   // .add(-3, 'days');
 
 const endTime = moment()
@@ -1045,7 +1045,7 @@ const getCandlesData = async ({
       instrumentId,
       startTime,
       endTime,
-      // isFirstCall: true,
+      isFirstCall: true,
     },
   });
 

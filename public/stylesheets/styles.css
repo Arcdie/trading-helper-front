@@ -254,6 +254,9 @@ input:checked + .slider:before {
     .login .common-instruction video, .registration .common-instruction video {
       margin-top: 10px; }
 
+.logs {
+  padding: 15px; }
+
 .profile {
   padding: 15px; }
   .profile h1 {
@@ -1265,15 +1268,77 @@ input:checked + .slider:before {
       .price-jumps-statistics .settings div p {
         margin-bottom: 3px; }
   .price-jumps-statistics .report {
-    padding-top: 15px; }
-    .price-jumps-statistics .report table tr:hover {
-      background-color: #cccccc80; }
-    .price-jumps-statistics .report table tr th {
-      padding: 10px;
-      border-bottom: 1px solid black; }
-    .price-jumps-statistics .report table tr td {
-      cursor: pointer;
-      padding: 10px;
-      text-align: center;
-      border-bottom: 1px solid black;
-      border-right: 1px dashed black; }
+    position: relative;
+    padding-top: 15px;
+    /*
+    table {
+      tr {
+        &:hover {
+          background-color: #cccccc80;
+        }
+
+        th {
+          padding: 10px;
+          border-bottom: 1px solid black;
+        }
+
+        td {
+          cursor: pointer;
+          padding: 10px;
+          text-align: center;
+          border-bottom: 1px solid black;
+          border-right: 1px dashed black;
+
+          &.red {
+            background-color: #ff000047;
+          }
+
+          &.green {
+            background-color: #07c007b0;
+          }
+
+          // &:last-child {
+          //   border-right: none;
+          // }
+        }
+      }
+    }
+    */ }
+    .price-jumps-statistics .report .total {
+      position: absolute;
+      right: 2px;
+      top: 14px; }
+    .price-jumps-statistics .report table.main-table {
+      width: 100%; }
+      .price-jumps-statistics .report table.main-table td.red {
+        background-color: #ff000047; }
+      .price-jumps-statistics .report table.main-table td.green {
+        background-color: #07c007b0; }
+      .price-jumps-statistics .report table.main-table th.date {
+        width: 23%;
+        padding-bottom: 10px;
+        border-bottom: 1px solid black; }
+      .price-jumps-statistics .report table.main-table tr.list {
+        border-bottom: 1px solid black; }
+        .price-jumps-statistics .report table.main-table tr.list td.period {
+          border-right: 1px solid black; }
+          .price-jumps-statistics .report table.main-table tr.list td.period:last-child {
+            border-right: none; }
+          .price-jumps-statistics .report table.main-table tr.list td.period table {
+            width: 100%; }
+            .price-jumps-statistics .report table.main-table tr.list td.period table tr {
+              cursor: pointer;
+              text-align: center; }
+              .price-jumps-statistics .report table.main-table tr.list td.period table tr:last-child td {
+                border-bottom: none; }
+              .price-jumps-statistics .report table.main-table tr.list td.period table tr.element:hover {
+                background-color: #cccccc80; }
+              .price-jumps-statistics .report table.main-table tr.list td.period table tr th {
+                padding: 10px 20px;
+                border-bottom: 1px solid black; }
+              .price-jumps-statistics .report table.main-table tr.list td.period table tr td {
+                padding: 10px 20px;
+                border-bottom: 1px solid black;
+                border-right: 1px solid black; }
+                .price-jumps-statistics .report table.main-table tr.list td.period table tr td:last-child {
+                  border-right: none; }

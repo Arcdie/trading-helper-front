@@ -5,6 +5,8 @@ objects, moment, ChartCandles, IndicatorVolume, IndicatorSuperTrend
 
 /* Constants */
 
+const modeGetCandlesFromCache = false;
+
 const URL_GET_CANDLES = '/api/candles';
 const URL_GET_ACTIVE_INSTRUMENTS = '/api/instruments/active';
 
@@ -15,21 +17,24 @@ const AVAILABLE_PERIODS = new Map([
 
 const DEFAULT_PERIOD = AVAILABLE_PERIODS.get('5M');
 
-/* Variables */
+const DISTANCE_FROM_LEFT_SIDE = 50;
+const DISTANCE_FROM_RIGHT_SIDE = 50;
 
+let limiterLifetime = 0;
+let limiterDistance = 1;
+let limiterNumberTouches = 1;
 let considerBtcMircoTrend = false;
 let considerFuturesMircoTrend = true;
-let stopLossPercent = 0.5;
-let factorForPriceChange = 2;
-let candlesForCalculateAveragePercent = 30;
+let stopLossPercent = 0.3;
 
 const windowHeight = window.innerHeight;
 
 let choosenInstrumentId;
 let choosenPeriod = DEFAULT_PERIOD;
 
-let priceJumps = [];
 let instrumentsDocs = [];
+let levels = [];
+let priceJumps = [];
 
 const startTime = moment().utc()
   .startOf('day')
@@ -39,7 +44,7 @@ const endTime = moment().utc()
   .startOf('day');
 
 /* JQuery */
-const $report = $('.report');
+const $report = $('.report table');
 const $chartsContainer = $('.charts-container');
 
 const $instrumentsContainer = $('.instruments-container');
@@ -53,10 +58,10 @@ $(document).ready(async () => {
   $instrumentsContainer
     .css({ maxHeight: windowHeight });
 
+  $settings.find('.lifetime').val(limiterLifetime);
+  $settings.find('.distance').val(limiterDistance);
   $settings.find('.stoploss-percent').val(stopLossPercent);
-  $settings.find('.factor-for-price-change').val(factorForPriceChange);
-  $settings.find('.candles-for-calculate-average-percent').val(candlesForCalculateAveragePercent);
-
+  $settings.find('.number-touches').val(limiterNumberTouches);
   $settings.find('#consider-btc-mirco-trend').prop('checked', considerBtcMircoTrend);
   $settings.find('#consider-futures-mirco-trend').prop('checked', considerFuturesMircoTrend);
 
@@ -88,6 +93,7 @@ $(document).ready(async () => {
     endTime: endTime.toISOString(),
     startTime: startTime.toISOString(),
   });
+  // */
 
   // main logic
   renderListInstruments(instrumentsDocs);
@@ -127,13 +133,10 @@ $(document).ready(async () => {
 
       await loadCharts({ instrumentId });
 
-      splitDays({ instrumentId });
-
+      levels = drawLevels({ instrumentId });
+      drawLevelsForVolumeIndicator({ instrumentId });
       priceJumps = calculatePriceJumps({ instrumentId });
       drawMarkersForPriceJumps({ instrumentId }, priceJumps);
-
-      const calculatedProfit = calculateProfit({ instrumentId }, priceJumps);
-      makeReport({ instrumentId }, calculatedProfit);
     });
 
   $chartsContainer
@@ -170,30 +173,21 @@ $(document).ready(async () => {
       }
 
       switch (className) {
+        case 'lifetime': limiterLifetime = newValue; break;
+        case 'distance': limiterDistance = newValue; break;
         case 'stoploss-percent': stopLossPercent = newValue; break;
-        case 'factor-for-price-change': factorForPriceChange = newValue; break;
-
-        case 'candles-for-calculate-average-percent': {
-          candlesForCalculateAveragePercent = newValue; break;
-        }
-
+        case 'number-touches': limiterNumberTouches = newValue; break;
         default: break;
       }
 
       if (choosenInstrumentId) {
         const instrumentId = choosenInstrumentId;
-
-        priceJumps = calculatePriceJumps({ instrumentId });
-        drawMarkersForPriceJumps({ instrumentId }, priceJumps);
-
-        const calculatedProfit = calculateProfit({ instrumentId }, priceJumps);
-        makeReport({ instrumentId }, calculatedProfit);
       }
     });
 
   $settings
     .find('input[type="checkbox"]')
-    .on('change', async function () {
+    .on('change', function () {
       const id = $(this).attr('id');
       const newValue = $(this).is(':checked');
 
@@ -205,26 +199,7 @@ $(document).ready(async () => {
 
       if (choosenInstrumentId) {
         const instrumentId = choosenInstrumentId;
-
-        await loadCharts({ instrumentId });
-
-        priceJumps = calculatePriceJumps({ instrumentId });
-        drawMarkersForPriceJumps({ instrumentId }, priceJumps);
-
-        const calculatedProfit = calculateProfit({ instrumentId }, priceJumps);
-        makeReport({ instrumentId }, calculatedProfit);
       }
-    });
-
-  $report
-    .on('click', 'tr.element', function () {
-      const index = $(this).data('index');
-
-      window.scrollTo(0, 0);
-
-      scrollToPriceJump(parseInt(index, 10) + 1, {
-        instrumentId: choosenInstrumentId,
-      }, priceJumps);
     });
 
   if (params.symbol) {
@@ -268,19 +243,46 @@ const loadCharts = async ({
   const futuresDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
 
   if (!futuresDoc.original_data || !futuresDoc.original_data.length) {
-    futuresDoc.original_data = await getCandlesData({
-      period: DEFAULT_PERIOD,
-      instrumentId: futuresDoc._id,
-      endTime: endTime.toISOString(),
-      startTime: startTime.toISOString(),
-    });
+    if (!modeGetCandlesFromCache) {
+      futuresDoc.original_data = await getCandlesData({
+        period: DEFAULT_PERIOD,
+        instrumentId: futuresDoc._id,
+        endTime: endTime.toISOString(),
+        startTime: startTime.toISOString(),
+      });
+
+      /*
+      const file = new File(
+        [JSON.stringify({ [`${futuresDoc.name}_${choosenPeriod}`]: futuresDoc.original_data })],
+        'price-jumps-statistics-cache.json',
+        { type: 'text/plain;charset=utf-8' },
+      );
+
+      saveAs(file);
+      // */
+    } else {
+      const resultGetFile = await getFile({
+        fileName: 'price-jumps-statistics-cache.json',
+      });
+
+      if (!resultGetFile) {
+        alert('Cant get cache file');
+        return true;
+      }
+
+      const key = `${futuresDoc.name}_${choosenPeriod}`;
+
+      if (!resultGetFile[key]) {
+        alert('No candles for instrument in cache');
+        return true;
+      }
+
+      futuresDoc.original_data = resultGetFile[key];
+    }
   }
 
-  const chartKeys = ['futures'];
-
-  if (considerBtcMircoTrend) {
-    chartKeys.push('btc');
-  }
+  // const chartKeys = ['futures'];
+  const chartKeys = ['futures', 'btc'];
 
   let appendStr = '';
 
@@ -466,10 +468,119 @@ const loadCharts = async ({
   });
 };
 
-const splitDays = ({ instrumentId }) => {
+const drawLevels = ({ instrumentId }) => {
   const futuresDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
 
   const futuresChartCandles = futuresDoc.chart_candles;
+  const futuresOriginalData = futuresChartCandles.originalData;
+
+  if (!futuresOriginalData || !futuresOriginalData.length) {
+    return true;
+  }
+
+  const levels = [];
+  const lCandles = futuresOriginalData.length;
+
+  for (let i = 0; i < lCandles; i += 1) {
+    const workingData = futuresOriginalData.slice(0, i + 1);
+
+    const highLevels = getHighLevels({
+      candles: workingData,
+      distanceFromLeftSide: DISTANCE_FROM_LEFT_SIDE,
+      distanceFromRightSide: DISTANCE_FROM_RIGHT_SIDE,
+    });
+
+    // const lowLevels = [];
+
+    const lowLevels = getLowLevels({
+      candles: workingData,
+      distanceFromLeftSide: DISTANCE_FROM_LEFT_SIDE,
+      distanceFromRightSide: DISTANCE_FROM_RIGHT_SIDE,
+    });
+
+    if ((!highLevels || !highLevels.length)
+      && (!lowLevels || !lowLevels.length)) {
+      continue;
+    }
+
+    lowLevels.forEach(level => {
+      const doesExistLevelWithThisPrice = levels.some(l => l.levelPrice === level.levelPrice);
+
+      if (!doesExistLevelWithThisPrice) {
+        const candleIndex = futuresOriginalData.findIndex(
+          candle => candle.originalTimeUnix === level.startOfLevelUnix,
+        );
+
+        let endOfLevelUnix = getUnix();
+
+        for (let j = candleIndex; j < lCandles; j += 1) {
+          if (futuresOriginalData[j].low < level.levelPrice) {
+            endOfLevelUnix = futuresOriginalData[j].originalTimeUnix;
+            break;
+          }
+        }
+
+        levels.push({
+          ...level,
+          isLong: false,
+          endOfLevelUnix,
+        });
+      }
+    });
+
+    highLevels.forEach(level => {
+      const doesExistLevelWithThisPrice = levels.some(l => l.levelPrice === level.levelPrice);
+
+      if (!doesExistLevelWithThisPrice) {
+        const candleIndex = futuresOriginalData.findIndex(
+          candle => candle.originalTimeUnix === level.startOfLevelUnix,
+        );
+
+        let endOfLevelUnix = getUnix();
+
+        for (let j = candleIndex; j < lCandles; j += 1) {
+          if (futuresOriginalData[j].high > level.levelPrice) {
+            endOfLevelUnix = futuresOriginalData[j].originalTimeUnix;
+            break;
+          }
+        }
+
+        levels.push({
+          ...level,
+          isLong: true,
+          endOfLevelUnix,
+        });
+      }
+    });
+  }
+
+  levels.forEach(level => {
+    const newCandleExtraSeries = futuresChartCandles.addExtraSeries({
+      // priceScaleId: 'level',
+      lastValueVisible: false,
+    });
+
+    futuresChartCandles.drawSeries(newCandleExtraSeries, [{
+      value: level.levelPrice,
+      time: level.startOfLevelUnix,
+    }, {
+      value: level.levelPrice,
+      time: level.endOfLevelUnix,
+    }]);
+  });
+
+  futuresChartCandles.chart
+    .timeScale()
+    .scrollToPosition(-futuresOriginalData.length, false);
+
+  return levels;
+};
+
+const drawLevelsForVolumeIndicator = ({ instrumentId }) => {
+  const futuresDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
+
+  const futuresChartCandles = futuresDoc.chart_candles;
+  const futuresIndicatorVolume = futuresDoc.indicator_volume;
   let futuresOriginalData = futuresChartCandles.originalData;
 
   if (!futuresOriginalData || !futuresOriginalData.length) {
@@ -501,41 +612,101 @@ const splitDays = ({ instrumentId }) => {
     futuresOriginalData = futuresOriginalData.slice(startIndex, futuresOriginalData.length);
   }
 
-  const intervals = [];
-  let newInterval = [futuresOriginalData[0]];
-  const lOriginalData = futuresOriginalData.length;
+  let limiter;
+  const limiterCandlesWithMaxVolumeForPeriod = 5;
 
-  let day = new Date(futuresOriginalData[0].originalTime).getUTCDate();
-
-  for (let i = 1; i < lOriginalData; i += 1) {
-    const dayOfCandle = new Date(futuresOriginalData[i].originalTime).getUTCDate();
-
-    if (dayOfCandle !== day) {
-      day = dayOfCandle;
-
-      intervals.push({
-        startOfPeriodUnix: newInterval[0].originalTimeUnix,
-        endOfPeriodUnix: newInterval[newInterval.length - 1].originalTimeUnix,
-      });
-
-      newInterval = [futuresOriginalData[i]];
-      continue;
+  switch (choosenPeriod) {
+    case AVAILABLE_PERIODS.get('1M'): {
+      limiter = 60 * 24;
+      break;
     }
 
-    newInterval.push(futuresOriginalData[i]);
+    case AVAILABLE_PERIODS.get('5M'): {
+      limiter = (24 * 60) / 5;
+      break;
+    }
+
+    default: {
+      alert('Need to set limiter for this timeframe');
+      return true;
+    }
+  }
+
+  const intervals = [];
+  const lOriginalData = futuresOriginalData.length;
+
+  let targetIndex = 0;
+  const numberIterations = Math.ceil(lOriginalData / limiter);
+
+  for (let i = 0; i < numberIterations; i += 1) {
+    const newQueue = [];
+
+    let conditionValue = limiter;
+
+    if (i === (numberIterations - 1)) {
+      conditionValue = lOriginalData - targetIndex;
+    }
+
+    for (let j = 0; j < conditionValue; j += 1) {
+      const candle = futuresOriginalData[targetIndex];
+
+      newQueue.push({
+        volume: candle.volume,
+        originalTime: candle.originalTime,
+        originalTimeUnix: candle.originalTimeUnix,
+      });
+
+      targetIndex += 1;
+    }
+
+    const firstCandleInQueue = newQueue[0];
+    const lastCandleInQueue = newQueue[newQueue.length - 1];
+
+    intervals.push({
+      index: i,
+      candles: newQueue,
+      startOfPeriodUnix: firstCandleInQueue.originalTimeUnix,
+      endOfPeriodUnix: lastCandleInQueue.originalTimeUnix,
+    });
   }
 
   intervals.forEach(interval => {
+    const { candles } = interval;
+    const lCandlesInInterval = candles.length;
+
+    const intervalSortedByVolume = JSON.parse(JSON.stringify(candles))
+      .sort((a, b) => a.volume > b.volume ? -1 : 1)
+      .slice(0, limiterCandlesWithMaxVolumeForPeriod);
+
+    const sumMaxVolume = intervalSortedByVolume
+      .reduce((currentValue, e) => e.volume + currentValue, 0);
+
+    const averageVolume = parseInt(sumMaxVolume / limiterCandlesWithMaxVolumeForPeriod, 10);
+    interval.averageVolume = averageVolume;
+
     const newCandleExtraSeries = futuresChartCandles.addExtraSeries({
       lastValueVisible: false,
     });
 
     futuresChartCandles.drawSeries(newCandleExtraSeries, [{
       value: 0,
-      time: interval.startOfPeriodUnix,
+      time: candles[0].originalTimeUnix,
     }, {
       value: futuresDoc.price * 5,
-      time: interval.startOfPeriodUnix,
+      time: candles[0].originalTimeUnix,
+    }]);
+
+    const newVolumeExtraSeries = futuresIndicatorVolume.addExtraSeries({
+      lastValueVisible: false,
+      color: 'black',
+    });
+
+    futuresIndicatorVolume.drawSeries(newVolumeExtraSeries, [{
+      value: averageVolume,
+      time: candles[0].originalTimeUnix,
+    }, {
+      value: averageVolume,
+      time: candles[lCandlesInInterval - 1].originalTimeUnix,
     }]);
   });
 };
@@ -544,7 +715,7 @@ const calculatePriceJumps = ({ instrumentId }) => {
   const btcDoc = instrumentsDocs.find(doc => doc.name === 'BTCUSDTPERP');
   const futuresDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
 
-  const priceJumps = [];
+  const priceChanges = [];
   const futuresChartCandles = futuresDoc.chart_candles;
 
   const futuresOriginalData = futuresChartCandles.originalData;
@@ -554,35 +725,66 @@ const calculatePriceJumps = ({ instrumentId }) => {
     return true;
   }
 
+  const limiterDistanceForLevel = 1; // %
+  const candlesForCalculateAveragePercent = 20;
+
   for (let i = candlesForCalculateAveragePercent; i < lOriginalData; i += 1) {
     let averagePercent = 0;
 
     for (let j = i - candlesForCalculateAveragePercent; j < i; j += 1) {
       const candle = futuresOriginalData[j];
-      const isLong = candle.close > candle.open;
-
-      const differenceBetweenPrices = isLong ?
-        candle.high - candle.open : candle.open - candle.low;
-      const percentPerPrice = 100 / (candle.open / differenceBetweenPrices);
+      const differenceBetweenHighAndLow = candle.high - candle.low;
+      const percentPerPrice = 100 / (candle.low / differenceBetweenHighAndLow);
 
       averagePercent += percentPerPrice;
     }
 
     averagePercent = parseFloat((averagePercent / candlesForCalculateAveragePercent).toFixed(2));
 
+    const prevCandle = futuresOriginalData[i - 1];
     const currentCandle = futuresOriginalData[i];
-    const differenceBetweenPrices = Math.abs(currentCandle.open - currentCandle.close);
-    const percentPerPrice = 100 / (currentCandle.open / differenceBetweenPrices);
 
-    if (percentPerPrice > (averagePercent * factorForPriceChange)) {
+    const prevCandleClose = prevCandle.close;
+    const currentCandleClose = currentCandle.close;
+
+    const differenceBetweenPrices = Math.abs(prevCandleClose - currentCandleClose);
+    const percentPerPrice = 100 / (prevCandleClose / differenceBetweenPrices);
+
+    if (percentPerPrice > (averagePercent * 2)) {
       const isLong = currentCandle.close > currentCandle.open;
+
+      /*
+      const nearestLevels = levels.filter(
+        level =>
+          isLong === level.isLong
+          && currentCandle.originalTimeUnix > level.startOfLevelUnix
+          && currentCandle.originalTimeUnix < level.endOfLevelUnix,
+      );
+
+      if (!nearestLevels.length) {
+        continue;
+      }
+
+      const doesExistLevelWithTargetDistance = nearestLevels.find(level => {
+        const differenceBetweenPrices = Math.abs(level.levelPrice - currentCandleClose);
+        const percentPerPrice = 100 / (currentCandleClose / differenceBetweenPrices);
+        return percentPerPrice <= limiterDistanceForLevel;
+      });
+
+      if (doesExistLevelWithTargetDistance) {
+        priceChanges.push(currentCandle);
+      }
+      */
+
+      const targetBtcCandle = btcDoc.indicator_micro_supertrend_data
+        .find(data => data.originalTimeUnix === currentCandle.originalTimeUnix);
+
+      const targetFuturesCandle = futuresDoc.indicator_micro_supertrend_data
+        .find(data => data.originalTimeUnix === currentCandle.originalTimeUnix);
 
       let isGreenLight = true;
 
       if (considerBtcMircoTrend) {
-        const targetBtcCandle = btcDoc.indicator_micro_supertrend_data
-          .find(data => data.originalTimeUnix === currentCandle.originalTimeUnix);
-
         if ((targetBtcCandle.isLong && !isLong)
           || (!targetBtcCandle.isLong && isLong)) {
           isGreenLight = false;
@@ -590,9 +792,6 @@ const calculatePriceJumps = ({ instrumentId }) => {
       }
 
       if (considerFuturesMircoTrend) {
-        const targetFuturesCandle = futuresDoc.indicator_micro_supertrend_data
-          .find(data => data.originalTimeUnix === currentCandle.originalTimeUnix);
-
         if ((targetFuturesCandle.isLong && !isLong)
           || (!targetFuturesCandle.isLong && isLong)) {
           isGreenLight = false;
@@ -603,14 +802,11 @@ const calculatePriceJumps = ({ instrumentId }) => {
         continue;
       }
 
-      priceJumps.push({
-        ...currentCandle,
-        averagePercent,
-      });
+      priceChanges.push(currentCandle);
     }
   }
 
-  return priceJumps;
+  return priceChanges;
 };
 
 const drawMarkersForPriceJumps = ({ instrumentId }, priceJumps = []) => {
@@ -640,170 +836,7 @@ const drawMarkersForPriceJumps = ({ instrumentId }, priceJumps = []) => {
     .find('span.amount-slides')
     .text(priceJumps.length);
 
-  scrollToPriceJump(1, { instrumentId }, priceJumps);
-};
-
-const calculateProfit = ({ instrumentId }, priceJumps = []) => {
-  if (!priceJumps.length) {
-    return [];
-  }
-
-  const calculatedProfit = [];
-  const futuresDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
-  const futuresChartCandles = futuresDoc.chart_candles;
-
-  const futuresOriginalData = futuresChartCandles.originalData;
-
-  priceJumps.forEach((candle, index) => {
-    const isLong = candle.close > candle.open;
-
-    const targetPercent = (candle.averagePercent * factorForPriceChange) / 100;
-
-    let startPrice = isLong ?
-      candle.open + (candle.open * targetPercent) : candle.open - (candle.open * targetPercent);
-    startPrice = parseFloat(startPrice.toFixed(futuresDoc.price_precision));
-
-    const lOriginalData = futuresOriginalData.length;
-    const indexOfCandle = futuresOriginalData.findIndex(c => c.originalTimeUnix === candle.originalTimeUnix);
-
-    let minLow = startPrice;
-    let maxHigh = startPrice;
-
-    const sumPerPrice = startPrice * (stopLossPercent / 100);
-    const startPriceWithStopLoss = isLong ?
-      (startPrice - sumPerPrice) : (startPrice + sumPerPrice);
-
-    // ! ignore current candle !
-    for (let i = indexOfCandle + 1; i < lOriginalData; i += 1) {
-      const { low, high } = futuresOriginalData[i];
-
-      if ((isLong && low < startPriceWithStopLoss)
-        || (!isLong && high > startPriceWithStopLoss)) {
-        // console.log('end', futuresChartCandles.originalData[i]);
-        break;
-      }
-
-      if (low < minLow) {
-        minLow = low;
-      }
-
-      if (high > maxHigh) {
-        maxHigh = high;
-      }
-    }
-
-    let maxProfit;
-
-    if (!isLong) {
-      const differenceBetweenPrices = startPrice - minLow;
-
-      maxProfit = differenceBetweenPrices < 0 ?
-        0 : 100 / (startPrice / differenceBetweenPrices);
-    } else {
-      const differenceBetweenPrices = maxHigh - startPrice;
-
-      maxProfit = differenceBetweenPrices < 0 ?
-        0 : 100 / (startPrice / differenceBetweenPrices);
-    }
-
-    calculatedProfit.push({
-      index,
-      startPrice,
-      maxProfit,
-      originalTimeUnix: candle.originalTimeUnix,
-    });
-  });
-
-  return calculatedProfit;
-};
-
-const makeReport = ({ instrumentId }, calculatedProfit = []) => {
-  const $table = $report.find('table');
-  const $total = $report.find('.total span');
-
-  $table.empty();
-  $total.text('0%');
-
-  if (!calculatedProfit.length) {
-    return true;
-  }
-
-  let mainPeriods = [];
-
-  calculatedProfit.forEach(elem => {
-    const divider = elem.originalTimeUnix % 86400;
-    const startOfDayUnix = elem.originalTimeUnix - divider;
-
-    elem.startOfDayUnix = startOfDayUnix;
-
-    if (!mainPeriods.includes(startOfDayUnix)) {
-      mainPeriods.push(startOfDayUnix);
-    }
-  });
-
-  mainPeriods = mainPeriods.sort((a, b) => a < b ? -1 : 1);
-
-  let profitStr = '';
-  let periodsStr = '';
-
-  let totalResultPercent = 0;
-
-  mainPeriods.forEach(period => {
-    const validDate = moment(period * 1000).format('DD.MM');
-    periodsStr += `<th class="date">${validDate}</th>`;
-
-    let appendStr = '';
-    let resultPercent = 0;
-    const targetElements = calculatedProfit.filter(elem => elem.startOfDayUnix === period);
-
-    targetElements.forEach((elem, index) => {
-      const isGreen = elem.maxProfit >= (stopLossPercent * 2);
-      const validTime = moment(elem.originalTimeUnix * 1000).format('HH:mm');
-
-      if (elem.maxProfit < stopLossPercent) {
-        elem.maxProfit = -stopLossPercent;
-        resultPercent -= stopLossPercent;
-      } else {
-        resultPercent += elem.maxProfit;
-      }
-
-      appendStr += `<tr
-        class="element"
-        data-index="${elem.index}"
-      >
-        <td>${index + 1}</td>
-        <td class="${isGreen ? 'green' : 'red'}">${elem.maxProfit.toFixed(2)}%</td>
-        <td>${validTime}</td>
-      </tr>`;
-    });
-
-    totalResultPercent += resultPercent;
-
-    appendStr += `<tr>
-      <td></td>
-      <td>${resultPercent.toFixed(2)}%</td>
-      <td></td>
-    </tr>`;
-
-    profitStr += `<td class="period">
-      <table>
-        <tr>
-          <th>#</th>
-          <th>MaxProfit</th>
-          <th>Time</th>
-        </tr>
-
-        ${appendStr}
-      </table>
-    </td>`;
-  });
-
-  $table.append(`
-    <tr>${periodsStr}</tr>
-    <tr class="list">${profitStr}</tr>
-  `);
-
-  $total.text(`${totalResultPercent.toFixed(2)}%`);
+  scrollToPriceJump('next', { instrumentId }, priceJumps);
 };
 
 const scrollToPriceJump = (action, { instrumentId }, priceJumps = []) => {
@@ -856,6 +889,116 @@ const scrollToPriceJump = (action, { instrumentId }, priceJumps = []) => {
     .scrollToPosition(-barsToTargetCandle, false);
 };
 
+const getHighLevels = ({
+  candles,
+  distanceFromLeftSide,
+  distanceFromRightSide,
+}) => {
+  if (!candles || !candles.length) {
+    return [];
+  }
+
+  const levels = [];
+  const lCandles = candles.length;
+
+  candles.forEach((candle, index) => {
+    if ((lCandles - index) < distanceFromRightSide) {
+      return true;
+    }
+
+    let isHighest = true;
+    let isHighCrossed = false;
+
+    for (let i = index; i < lCandles; i += 1) {
+      const tmpCandle = candles[i];
+
+      if (tmpCandle.high > candle.high) {
+        isHighCrossed = true;
+        break;
+      }
+    }
+
+    if (!isHighCrossed) {
+      for (let i = 1; i < distanceFromLeftSide + 1; i += 1) {
+        const tmpCandle = candles[index - i];
+
+        if (!tmpCandle) {
+          break;
+        }
+
+        if (tmpCandle.high > candle.high) {
+          isHighest = false;
+          break;
+        }
+      }
+    }
+
+    if (!isHighCrossed && isHighest) {
+      levels.push({
+        levelPrice: candle.high,
+        startOfLevelUnix: candle.originalTimeUnix,
+      });
+    }
+  });
+
+  return levels;
+};
+
+const getLowLevels = ({
+  candles,
+  distanceFromLeftSide,
+  distanceFromRightSide,
+}) => {
+  if (!candles || !candles.length) {
+    return [];
+  }
+
+  const levels = [];
+  const lCandles = candles.length;
+
+  candles.forEach((candle, index) => {
+    if ((lCandles - index) < distanceFromRightSide) {
+      return true;
+    }
+
+    let isLowest = true;
+    let isLowCrossed = false;
+
+    for (let i = index; i < lCandles; i += 1) {
+      const tmpCandle = candles[i];
+
+      if (tmpCandle.low < candle.low) {
+        isLowCrossed = true;
+        break;
+      }
+    }
+
+    if (!isLowCrossed) {
+      for (let i = 1; i < distanceFromLeftSide + 1; i += 1) {
+        const tmpCandle = candles[index - i];
+
+        if (!tmpCandle) {
+          break;
+        }
+
+        if (tmpCandle.low < candle.low) {
+          isLowest = false;
+          break;
+        }
+      }
+    }
+
+    if (!isLowCrossed && isLowest) {
+      levels.push({
+        levelPrice: candle.low,
+        startOfLevelUnix: candle.originalTimeUnix,
+      });
+    }
+  });
+
+  return levels;
+};
+
 const getCandlesData = async ({
   instrumentId,
   period,
@@ -876,7 +1019,7 @@ const getCandlesData = async ({
     instrumentId,
     startTime,
     endTime,
-    isFirstCall: false,
+    isFirstCall: modeGetCandlesFromCache,
   };
 
   const resultGetCandles = await makeRequest({
@@ -893,4 +1036,186 @@ const getCandlesData = async ({
   console.log('end loading');
 
   return resultGetCandles.result;
+};
+
+const getFile = async ({
+  fileName,
+}) => {
+  console.log('start loading');
+
+  const resultGetFile = await makeRequest({
+    method: 'GET',
+    url: `/files/${fileName}`,
+  });
+
+  if (!resultGetFile) {
+    alert('Cant makeRequest getFile');
+    return false;
+  }
+
+  console.log('end loading');
+
+  return resultGetFile;
+};
+
+// deprecated but still can be useful
+// calculate volumes
+const calculatePriceJumpsOld = ({ instrumentId }) => {
+  const btcDoc = instrumentsDocs.find(doc => doc.name === 'BTCUSDTPERP');
+  const futuresDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
+
+  const priceJumps = [];
+  const futuresChartCandles = futuresDoc.chart_candles;
+  const futuresIndicatorVolume = futuresDoc.indicator_volume;
+  let futuresOriginalData = futuresChartCandles.originalData;
+
+  if (!futuresOriginalData || !futuresOriginalData.length) {
+    return true;
+  }
+
+  const getIntervalIndex = timeUnix =>
+    intervals.findIndex(
+      interval => interval.startOfPeriodUnix <= timeUnix && interval.endOfPeriodUnix >= timeUnix,
+    );
+
+  const firstCandle = futuresOriginalData[0];
+
+  // skip not full hour
+  const divider = firstCandle.originalTimeUnix % 86400;
+
+  if (divider !== 0) {
+    const startOfNextDayUnix = (firstCandle.originalTimeUnix - divider) + 86400;
+
+    let increment = 1;
+    let startIndex = false;
+
+    while (1) {
+      const { originalTimeUnix } = futuresOriginalData[increment];
+
+      if (originalTimeUnix === startOfNextDayUnix) {
+        startIndex = increment;
+        break;
+      }
+
+      increment += 1;
+    }
+
+    futuresOriginalData = futuresOriginalData.slice(startIndex, futuresOriginalData.length);
+  }
+
+  let limiter;
+  const limiterCandlesWithMaxVolumeForPeriod = 5;
+
+  switch (choosenPeriod) {
+    case AVAILABLE_PERIODS.get('1M'): {
+      limiter = 60 * 24;
+      break;
+    }
+
+    case AVAILABLE_PERIODS.get('5M'): {
+      limiter = (24 * 60) / 5;
+      break;
+    }
+
+    default: {
+      alert('Need to set limiter for this timeframe');
+      return true;
+    }
+  }
+
+  const intervals = [];
+  const lOriginalData = futuresOriginalData.length;
+
+  let targetIndex = 0;
+  const numberIterations = Math.ceil(lOriginalData / limiter);
+
+  for (let i = 0; i < numberIterations; i += 1) {
+    const newQueue = [];
+
+    let conditionValue = limiter;
+
+    if (i === (numberIterations - 1)) {
+      conditionValue = lOriginalData - targetIndex;
+    }
+
+    for (let j = 0; j < conditionValue; j += 1) {
+      const candle = futuresOriginalData[targetIndex];
+
+      newQueue.push({
+        volume: candle.volume,
+        originalTime: candle.originalTime,
+        originalTimeUnix: candle.originalTimeUnix,
+      });
+
+      targetIndex += 1;
+    }
+
+    const firstCandleInQueue = newQueue[0];
+    const lastCandleInQueue = newQueue[newQueue.length - 1];
+
+    intervals.push({
+      index: i,
+      candles: newQueue,
+      startOfPeriodUnix: firstCandleInQueue.originalTimeUnix,
+      endOfPeriodUnix: lastCandleInQueue.originalTimeUnix,
+    });
+  }
+
+  intervals.forEach(interval => {
+    const { candles } = interval;
+    const lCandlesInInterval = candles.length;
+
+    const intervalSortedByVolume = JSON.parse(JSON.stringify(candles))
+      .sort((a, b) => a.volume > b.volume ? -1 : 1)
+      .slice(0, limiterCandlesWithMaxVolumeForPeriod);
+
+    const sumMaxVolume = intervalSortedByVolume
+      .reduce((currentValue, e) => e.volume + currentValue, 0);
+
+    const averageVolume = parseInt(sumMaxVolume / limiterCandlesWithMaxVolumeForPeriod, 10);
+    interval.averageVolume = averageVolume;
+
+    const newCandleExtraSeries = futuresChartCandles.addExtraSeries({
+      lastValueVisible: false,
+    });
+
+    futuresChartCandles.drawSeries(newCandleExtraSeries, [{
+      value: 0,
+      time: candles[0].originalTimeUnix,
+    }, {
+      value: futuresDoc.price * 5,
+      time: candles[0].originalTimeUnix,
+    }]);
+
+    const newVolumeExtraSeries = futuresIndicatorVolume.addExtraSeries({
+      lastValueVisible: false,
+      color: 'black',
+    });
+
+    futuresIndicatorVolume.drawSeries(newVolumeExtraSeries, [{
+      value: averageVolume,
+      time: candles[0].originalTimeUnix,
+    }, {
+      value: averageVolume,
+      time: candles[lCandlesInInterval - 1].originalTimeUnix,
+    }]);
+  });
+
+  /*
+  futuresOriginalData.forEach(candle => {
+    const intervalIndex = getIntervalIndex(candle.originalTimeUnix);
+
+    if (intervalIndex === 0) {
+      return true;
+    }
+
+    const previousIntervalAverageVolume = intervals[intervalIndex - 1].averageVolume;
+
+    if (candle.volume > previousIntervalAverageVolume) {
+      priceJumps.push(candle);
+    }
+  });
+  */
+
+  return priceJumps;
 };

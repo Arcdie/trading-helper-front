@@ -265,8 +265,88 @@
   }
 
   .report {
+    position: relative;
     padding-top: 15px;
 
+    .total {
+      position: absolute;
+      right: 2px;
+      top: 14px;
+
+      span {
+
+      }
+    }
+
+    table.main-table {
+      width: 100%;
+
+      td {
+        &.red {
+          background-color: #ff000047;
+        }
+
+        &.green {
+          background-color: #07c007b0;
+        }
+      }
+
+      th.date {
+        width: 23%;
+        padding-bottom: 10px;
+        border-bottom: 1px solid black;
+      }
+
+      tr.list {
+        border-bottom: 1px solid black;
+
+        td.period {
+          border-right: 1px solid black;
+
+          &:last-child {
+            border-right: none;
+          }
+
+          table {
+            width: 100%;
+            // border-spacing: 0px 15px;
+            // border-collapse: separate;
+
+            tr {
+              &:last-child {
+                td {
+                  border-bottom: none;
+                }
+              }
+
+              &.element:hover {
+                background-color: #cccccc80;
+              }
+
+              cursor: pointer;
+              text-align: center;
+
+              th {
+                padding: 10px 20px;
+                border-bottom: 1px solid black;
+              }
+
+              td {
+                &:last-child   {
+                  border-right: none;
+                }
+
+                padding: 10px 20px;
+                border-bottom: 1px solid black;
+                border-right: 1px solid black;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    /*
     table {
       tr {
         &:hover {
@@ -285,11 +365,20 @@
           border-bottom: 1px solid black;
           border-right: 1px dashed black;
 
+          &.red {
+            background-color: #ff000047;
+          }
+
+          &.green {
+            background-color: #07c007b0;
+          }
+
           // &:last-child {
           //   border-right: none;
           // }
         }
       }
     }
+    */
   }
 }

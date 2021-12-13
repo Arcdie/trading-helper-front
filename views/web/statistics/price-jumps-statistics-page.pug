@@ -16,24 +16,19 @@ block content
 				.instruments-list
 					.headlines
 						span.instrument-name Инструмент
-						//- span.amount К-во
 
 					.list
 		
 		.row
 			.settings
-				div
-					p Lifetime (m)
-					input.lifetime(type="text")
+				.candles-for-calculate-average-percent
+					p Number candles for calculate average percent
+					input.candles-for-calculate-average-percent(type="text")
 					
-				.distance
-					p Distance (ticks)
-					input.distance(type="text")
-					
-				.number-touches
-					p Touches
-					input.number-touches(type="text")
-					
+				.factor-for-price-change
+					p In how many times price of candle must be changed
+					input.factor-for-price-change(type="text")
+			
 				.stoploss-percent
 					p StopLoss %
 					input.stoploss-percent(type="text")
@@ -48,11 +43,12 @@ block content
 
 		.row
 			.report
-				table
+				table.main-table
+				.total
+					span
 
 block scripts
 	script(src='/libs/moment.min.js')
-	script(src='/libs/file-saver.min.js')
 	script(src='/libs/trading-view-charts.min.js')
 	script(src='/libs/technical-indicators.min.js')
 
