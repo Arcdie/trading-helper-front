@@ -1,6 +1,6 @@
 /* global user */
 
-const wsConnectionPort = 3001;
+const wsConnectionPort = 3100;
 const wsConnectionLink = location.host === 'localhost:3000' ?
   'ws://localhost' : 'wss://trading-helper.ru';
 

@@ -1,5 +1,5 @@
 /* global
-functions, makeRequest, initPopWindow,
+functions, makeRequest, initPopWindow, getUnix,
 objects, windows, moment, user, wsClient, ChartCandles, IndicatorVolume, IndicatorSuperTrend, LightweightCharts
 */
 
@@ -88,11 +88,11 @@ wsClient.onmessage = async data => {
         break;
       }
 
-      case 'candle1mData': updateLastCandle(parsedData.data, '1m'); break;
-      case 'candle5mData': updateLastCandle(parsedData.data, '5m'); break;
-      case 'candle1hData': updateLastCandle(parsedData.data, '1h'); break;
-      case 'candle4hData': updateLastCandle(parsedData.data, '4h'); break;
-      case 'candle1dData': updateLastCandle(parsedData.data, '1d'); break;
+      case 'futuresCandle1mData': updateLastCandle(parsedData.data, '1m'); break;
+      case 'futuresCandle5mData': updateLastCandle(parsedData.data, '5m'); break;
+      case 'futuresCandle1hData': updateLastCandle(parsedData.data, '1h'); break;
+      case 'futuresCandle4hData': updateLastCandle(parsedData.data, '4h'); break;
+      case 'futuresCandle1dData': updateLastCandle(parsedData.data, '1d'); break;
 
       case 'levelsLoaded': {
         const $amountLoadedLevels = $('#amount-loaded-levels');
@@ -578,7 +578,7 @@ const loadChart = async ({
   wsClient.send(JSON.stringify({
     actionName: 'subscribe',
     data: {
-      subscriptionName: `candle${choosenPeriod}Data`,
+      subscriptionName: `futuresCandle${choosenPeriod}Data`,
       instrumentId: targetDoc._id,
     },
   }));
@@ -752,7 +752,7 @@ const updateLastCandle = (data, period) => {
     volume,
   } = data;
 
-  let validTime = (startTime / 1000) + (userTimezone * 60);
+  let validTime = getUnix(startTime) + (userTimezone * 60);
 
   if (!['1m', '5m', '1h', '4h'].includes(choosenPeriod)) {
     validTime = moment.unix(validTime).format('YYYY-MM-DD');
