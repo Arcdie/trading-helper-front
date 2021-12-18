@@ -1,0 +1,21 @@
+.strategy-choice {
+  padding: 15px;
+
+  ul {
+    margin-bottom: 30px;
+    border-bottom: 1px solid black;
+
+    li {
+      margin-bottom: 15px;
+
+      a {
+        &:hover {
+          color: rgba(0, 0, 0, .6);
+        }
+
+        color: black;
+        text-decoration: none;
+      }
+    }
+  }
+}

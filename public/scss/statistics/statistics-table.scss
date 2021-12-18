@@ -1,0 +1,121 @@
+.statistics-table {
+  padding: 10px;
+  position: relative;
+
+  .row {
+    display: flex;
+  }
+
+  table.main-table {
+    width: 100%;
+
+    td {
+      &.red {
+        background-color: #ff000047;
+      }
+
+      &.green {
+        background-color: #07c007b0;
+      }
+    }
+
+    th.date {
+      width: 23%;
+      padding-bottom: 10px;
+      border-bottom: 1px solid black;
+    }
+
+    th.instrument-name {
+      padding-bottom: 10px;
+      border-bottom: 1px solid black;
+    }
+
+    tr.instrument {
+      border-bottom: 1px solid black;
+
+      td.instrument-name {
+        text-align: center;
+        border-right: 1px solid black;
+      }
+
+      td.period {
+        border-right: 1px solid black;
+
+        &:last-child {
+          border-right: none;
+        }
+
+        table {
+          width: 100%;
+          // border-spacing: 0px 15px;
+          // border-collapse: separate;
+
+          tr {
+            &:last-child {
+              td {
+                border-bottom: none;
+              }
+            }
+
+            text-align: center;
+
+            th {
+              padding: 10px 0px;
+              border-bottom: 1px solid black;
+            }
+
+            td {
+              &:last-child {
+                border-right: none;
+              }
+
+              padding: 10px 0px;
+              border-bottom: 1px solid black;
+              border-right: 1px solid black;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  /*
+  .period {
+    margin-right: 30px;
+    display: flex;
+    align-items: flex-start;
+  }
+
+  .instrument {
+    margin-bottom: 10px;
+
+    p {
+
+    }
+
+    table {
+      tr {
+        th {
+          padding: 10px;
+          border-bottom: 1px solid black;
+        }
+
+        td {
+          padding: 10px;
+          text-align: center;
+          border-bottom: 1px solid black;
+          border-right: 1px dashed black;
+
+          &.red {
+            background-color: #ff000047;
+          }
+
+          &.green {
+            background-color: #07c007b0;
+          }
+        }
+      }
+    }
+  }
+  */
+}

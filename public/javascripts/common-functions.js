@@ -14,6 +14,13 @@ const classie = {
 const $mdcontent = $('div.md-content');
 const $modalWindow = $('div.pop-up div.md-modal');
 
+/* Variables */
+const constants = {
+  RED_COLOR: '#FF5252',
+  GREEN_COLOR: '#4CAF50',
+  YELLOW_COLOR: '#FFE002',
+};
+
 /* Functions */
 const sleep = ms => {
   return new Promise(resolve => setTimeout(resolve, ms));

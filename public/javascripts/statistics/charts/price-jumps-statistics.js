@@ -1,6 +1,6 @@
 /* global
 functions, makeRequest, getUnix, sleep, saveAs,
-objects, moment, ChartCandles, IndicatorVolume, IndicatorSuperTrend
+objects, constants, moment, ChartCandles, IndicatorVolume, IndicatorSuperTrend
 */
 
 /* Constants */
@@ -9,7 +9,6 @@ const URL_GET_CANDLES = '/api/candles';
 const URL_GET_ACTIVE_INSTRUMENTS = '/api/instruments/active';
 
 const AVAILABLE_PERIODS = new Map([
-  ['1M', '1m'],
   ['5M', '5m'],
 ]);
 
@@ -21,12 +20,11 @@ let considerBtcMircoTrend = false;
 let considerFuturesMircoTrend = true;
 let stopLossPercent = 0.5;
 let factorForPriceChange = 2;
-let candlesForCalculateAveragePercent = 30;
+let candlesForCalculateAveragePercent = 36; // 3 hours (5m)
 
 const windowHeight = window.innerHeight;
 
 let choosenInstrumentId;
-let choosenPeriod = DEFAULT_PERIOD;
 
 let priceJumps = [];
 let instrumentsDocs = [];
@@ -292,7 +290,6 @@ const loadCharts = async ({
         </div>
         <div class="row">
           <div class="chart-periods">
-            <div class="1m is_worked" data-period="1m"><span>1M</span></div>
             <div class="5m is_worked is_active" data-period="5m"><span>5M</span></div>
           </div>
         </div>
@@ -653,6 +650,7 @@ const calculateProfit = ({ instrumentId }, priceJumps = []) => {
   const futuresChartCandles = futuresDoc.chart_candles;
 
   const futuresOriginalData = futuresChartCandles.originalData;
+  const lOriginalData = futuresOriginalData.length;
 
   priceJumps.forEach((candle, index) => {
     const isLong = candle.close > candle.open;
@@ -663,11 +661,16 @@ const calculateProfit = ({ instrumentId }, priceJumps = []) => {
       candle.open + (candle.open * targetPercent) : candle.open - (candle.open * targetPercent);
     startPrice = parseFloat(startPrice.toFixed(futuresDoc.price_precision));
 
-    const lOriginalData = futuresOriginalData.length;
     const indexOfCandle = futuresOriginalData.findIndex(c => c.originalTimeUnix === candle.originalTimeUnix);
 
     let minLow = startPrice;
     let maxHigh = startPrice;
+
+    let indexCandleWithMinLow = indexOfCandle + 1;
+    let indexCandleWithMaxHigh = indexOfCandle + 1;
+
+    let indexCandleWhereWasStop = indexOfCandle + 1;
+    let indexCandleWhereWasTP = indexOfCandle + 1;
 
     const sumPerPrice = startPrice * (stopLossPercent / 100);
     const startPriceWithStopLoss = isLong ?
@@ -679,37 +682,53 @@ const calculateProfit = ({ instrumentId }, priceJumps = []) => {
 
       if ((isLong && low < startPriceWithStopLoss)
         || (!isLong && high > startPriceWithStopLoss)) {
+        indexCandleWhereWasStop = i;
         // console.log('end', futuresChartCandles.originalData[i]);
         break;
       }
 
       if (low < minLow) {
         minLow = low;
+        indexCandleWithMinLow = i;
       }
 
       if (high > maxHigh) {
         maxHigh = high;
+        indexCandleWithMaxHigh = i;
       }
     }
 
-    let maxProfit;
+    let maxProfitPrice;
 
     if (!isLong) {
-      const differenceBetweenPrices = startPrice - minLow;
+      // const differenceBetweenPrices = startPrice - minLow;
 
-      maxProfit = differenceBetweenPrices < 0 ?
-        0 : 100 / (startPrice / differenceBetweenPrices);
+      // maxProfit = differenceBetweenPrices < 0 ?
+      //   0 : 100 / (startPrice / differenceBetweenPrices);
+
+      maxProfitPrice = minLow;
+      indexCandleWhereWasTP = indexCandleWithMinLow;
     } else {
-      const differenceBetweenPrices = maxHigh - startPrice;
+      // const differenceBetweenPrices = maxHigh - startPrice;
 
-      maxProfit = differenceBetweenPrices < 0 ?
-        0 : 100 / (startPrice / differenceBetweenPrices);
+      // maxProfit = differenceBetweenPrices < 0 ?
+      //   0 : 100 / (startPrice / differenceBetweenPrices);
+
+      maxProfitPrice = maxHigh;
+      indexCandleWhereWasTP = indexCandleWithMaxHigh;
     }
 
     calculatedProfit.push({
       index,
+      isLong,
       startPrice,
-      maxProfit,
+
+      indexCandleWhereWasTP,
+      indexCandleWhereWasStop,
+
+      maxProfitPrice,
+      stopLossPrice: startPriceWithStopLoss,
+
       originalTimeUnix: candle.originalTimeUnix,
     });
   });
@@ -728,6 +747,10 @@ const makeReport = ({ instrumentId }, calculatedProfit = []) => {
     return true;
   }
 
+  const futuresDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
+  const futuresChartCandles = futuresDoc.chart_candles;
+  const futuresOriginalData = futuresChartCandles.originalData;
+
   let mainPeriods = [];
 
   calculatedProfit.forEach(elem => {
@@ -739,6 +762,49 @@ const makeReport = ({ instrumentId }, calculatedProfit = []) => {
     if (!mainPeriods.includes(startOfDayUnix)) {
       mainPeriods.push(startOfDayUnix);
     }
+
+    // draw trading lines
+    const newStopExtraSeries = futuresChartCandles.addExtraSeries({
+      color: constants.RED_COLOR,
+      lastValueVisible: false,
+    });
+
+    const newBuyExtraSeries = futuresChartCandles.addExtraSeries({
+      color: constants.YELLOW_COLOR,
+      lastValueVisible: false,
+    });
+
+    const newProfitExtraSeries = futuresChartCandles.addExtraSeries({
+      color: constants.GREEN_COLOR,
+      lastValueVisible: false,
+    });
+
+    const timeUnixProfitCandle = futuresOriginalData[elem.indexCandleWhereWasTP].originalTimeUnix;
+    const timeUnixStopCandle = futuresOriginalData[elem.indexCandleWhereWasStop].originalTimeUnix;
+
+    futuresChartCandles.drawSeries(newStopExtraSeries, [{
+      value: elem.stopLossPrice,
+      time: elem.originalTimeUnix,
+    }, {
+      value: elem.stopLossPrice,
+      time: timeUnixStopCandle,
+    }]);
+
+    futuresChartCandles.drawSeries(newBuyExtraSeries, [{
+      value: elem.startPrice,
+      time: elem.originalTimeUnix,
+    }, {
+      value: elem.startPrice,
+      time: timeUnixStopCandle,
+    }]);
+
+    futuresChartCandles.drawSeries(newProfitExtraSeries, [{
+      value: elem.maxProfitPrice,
+      time: elem.originalTimeUnix,
+    }, {
+      value: elem.maxProfitPrice,
+      time: timeUnixProfitCandle,
+    }]);
   });
 
   mainPeriods = mainPeriods.sort((a, b) => a < b ? -1 : 1);
@@ -757,14 +823,28 @@ const makeReport = ({ instrumentId }, calculatedProfit = []) => {
     const targetElements = calculatedProfit.filter(elem => elem.startOfDayUnix === period);
 
     targetElements.forEach((elem, index) => {
-      const isGreen = elem.maxProfit >= (stopLossPercent * 2);
+      let maxProfitPercent;
+
+      if (!elem.isLong) {
+        const differenceBetweenPrices = elem.startPrice - elem.maxProfitPrice;
+
+        maxProfitPercent = differenceBetweenPrices < 0 ?
+          0 : 100 / (elem.startPrice / differenceBetweenPrices);
+      } else {
+        const differenceBetweenPrices = elem.maxProfitPrice - elem.startPrice;
+
+        maxProfitPercent = differenceBetweenPrices < 0 ?
+          0 : 100 / (elem.startPrice / differenceBetweenPrices);
+      }
+
+      const isGreen = maxProfitPercent >= (stopLossPercent * 2);
       const validTime = moment(elem.originalTimeUnix * 1000).format('HH:mm');
 
-      if (elem.maxProfit < stopLossPercent) {
-        elem.maxProfit = -stopLossPercent;
+      if (maxProfitPercent < stopLossPercent) {
+        maxProfitPercent = -stopLossPercent;
         resultPercent -= stopLossPercent;
       } else {
-        resultPercent += elem.maxProfit;
+        resultPercent += maxProfitPercent;
       }
 
       appendStr += `<tr
@@ -772,7 +852,7 @@ const makeReport = ({ instrumentId }, calculatedProfit = []) => {
         data-index="${elem.index}"
       >
         <td>${index + 1}</td>
-        <td class="${isGreen ? 'green' : 'red'}">${elem.maxProfit.toFixed(2)}%</td>
+        <td class="${isGreen ? 'green' : 'red'}">${maxProfitPercent.toFixed(2)}%</td>
         <td>${validTime}</td>
       </tr>`;
     });

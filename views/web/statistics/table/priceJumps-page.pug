@@ -1,0 +1,13 @@
+extends ../app
+
+block variables
+	-
+		const pageTitle = 'Статистика priceJumps (Таблица)';
+
+block content
+	.page.statistics-table
+		.container
+
+block scripts
+	script(src='/libs/moment.min.js')
+	script(src='/javascripts/statistics/table/price-jumps-statistics.js')

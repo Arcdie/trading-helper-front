@@ -1100,6 +1100,101 @@ input:checked + .slider:before {
       .volume-spot-profit table tr td.green {
         background-color: #07c007b0; }
 
+.strategy-choice {
+  padding: 15px; }
+  .strategy-choice ul {
+    margin-bottom: 30px;
+    border-bottom: 1px solid black; }
+    .strategy-choice ul li {
+      margin-bottom: 15px; }
+      .strategy-choice ul li a {
+        color: black;
+        text-decoration: none; }
+        .strategy-choice ul li a:hover {
+          color: rgba(0, 0, 0, 0.6); }
+
+.statistics-table {
+  padding: 10px;
+  position: relative;
+  /*
+  .period {
+    margin-right: 30px;
+    display: flex;
+    align-items: flex-start;
+  }
+
+  .instrument {
+    margin-bottom: 10px;
+
+    p {
+
+    }
+
+    table {
+      tr {
+        th {
+          padding: 10px;
+          border-bottom: 1px solid black;
+        }
+
+        td {
+          padding: 10px;
+          text-align: center;
+          border-bottom: 1px solid black;
+          border-right: 1px dashed black;
+
+          &.red {
+            background-color: #ff000047;
+          }
+
+          &.green {
+            background-color: #07c007b0;
+          }
+        }
+      }
+    }
+  }
+  */ }
+  .statistics-table .row {
+    display: flex; }
+  .statistics-table table.main-table {
+    width: 100%; }
+    .statistics-table table.main-table td.red {
+      background-color: #ff000047; }
+    .statistics-table table.main-table td.green {
+      background-color: #07c007b0; }
+    .statistics-table table.main-table th.date {
+      width: 23%;
+      padding-bottom: 10px;
+      border-bottom: 1px solid black; }
+    .statistics-table table.main-table th.instrument-name {
+      padding-bottom: 10px;
+      border-bottom: 1px solid black; }
+    .statistics-table table.main-table tr.instrument {
+      border-bottom: 1px solid black; }
+      .statistics-table table.main-table tr.instrument td.instrument-name {
+        text-align: center;
+        border-right: 1px solid black; }
+      .statistics-table table.main-table tr.instrument td.period {
+        border-right: 1px solid black; }
+        .statistics-table table.main-table tr.instrument td.period:last-child {
+          border-right: none; }
+        .statistics-table table.main-table tr.instrument td.period table {
+          width: 100%; }
+          .statistics-table table.main-table tr.instrument td.period table tr {
+            text-align: center; }
+            .statistics-table table.main-table tr.instrument td.period table tr:last-child td {
+              border-bottom: none; }
+            .statistics-table table.main-table tr.instrument td.period table tr th {
+              padding: 10px 0px;
+              border-bottom: 1px solid black; }
+            .statistics-table table.main-table tr.instrument td.period table tr td {
+              padding: 10px 0px;
+              border-bottom: 1px solid black;
+              border-right: 1px solid black; }
+              .statistics-table table.main-table tr.instrument td.period table tr td:last-child {
+                border-right: none; }
+
 .price-jumps-statistics {
   padding: 10px;
   position: relative;

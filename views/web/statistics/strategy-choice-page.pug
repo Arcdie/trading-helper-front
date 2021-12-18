@@ -1,0 +1,27 @@
+extends ../../app
+
+block variables
+	-
+		const pageTitle = 'Меню выбора стратегии';
+
+block content
+	.page.strategy-choice
+		ul
+			li
+				a(href='/statistics/priceJumps/table') Price Jumps (Table)
+			li
+				a(href='/statistics/priceJumps/charts') Price Jumps (Charts)
+				
+		ul
+			li
+				a(href='/statistics/spotVolumes/table') Spot Volumes (Table)
+			li
+				a(href='/statistics/spotVolumes/charts') Spot Volumes (Charts)
+				
+		ul
+			li
+				a(href='/statistics/futuresVolumes/table') Futures Volumes (Table)
+			li
+				a(href='/statistics/futuresVolumes/charts') Futures Volumes (Charts)
+
+block scripts
