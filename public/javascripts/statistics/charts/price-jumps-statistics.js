@@ -1,5 +1,5 @@
 /* global
-functions, makeRequest, getUnix, sleep, saveAs,
+functions, makeRequest, getUnix, sleep,
 objects, constants, moment, ChartCandles, IndicatorVolume, IndicatorSuperTrend
 */
 
@@ -7,6 +7,7 @@ objects, constants, moment, ChartCandles, IndicatorVolume, IndicatorSuperTrend
 
 const URL_GET_CANDLES = '/api/candles';
 const URL_GET_ACTIVE_INSTRUMENTS = '/api/instruments/active';
+const URL_GET_CONSTANTS = '/api/strategies/priceJumps/constants';
 
 const AVAILABLE_PERIODS = new Map([
   ['5M', '5m'],
@@ -16,11 +17,11 @@ const DEFAULT_PERIOD = AVAILABLE_PERIODS.get('5M');
 
 /* Variables */
 
-let considerBtcMircoTrend = false;
-let considerFuturesMircoTrend = true;
-let stopLossPercent = 0.5;
-let factorForPriceChange = 2;
-let candlesForCalculateAveragePercent = 36; // 3 hours (5m)
+let considerBtcMircoTrend;
+let considerFuturesMircoTrend;
+let stopLossPercent;
+let factorForPriceChange;
+let candlesForCalculateAveragePercent; // 3 hours (5m)
 
 const windowHeight = window.innerHeight;
 
@@ -47,6 +48,22 @@ const $settings = $('.settings');
 
 $(document).ready(async () => {
   // start settings
+
+  const resultGetConstants = await makeRequest({
+    method: 'GET',
+    url: URL_GET_CONSTANTS,
+  });
+
+  if (!resultGetConstants || !resultGetConstants.status) {
+    alert(resultGetConstants.message || 'Cant makeRequest URL_GET_CONSTANTS');
+    return true;
+  }
+
+  considerBtcMircoTrend = resultGetConstants.result.DOES_CONSIDER_BTC_MICRO_TREND;
+  considerFuturesMircoTrend = resultGetConstants.result.DOES_CONSIDER_FUTURES_MICRO_TREND;
+  stopLossPercent = resultGetConstants.result.STOPLOSS_PERCENT;
+  factorForPriceChange = resultGetConstants.result.FACTOR_FOR_PRICE_CHANGE;
+  candlesForCalculateAveragePercent = resultGetConstants.result.NUMBER_CANDLES_FOR_CALCULATE_AVERAGE_PERCENT;
 
   $instrumentsContainer
     .css({ maxHeight: windowHeight });
@@ -652,6 +669,10 @@ const calculateProfit = ({ instrumentId }, priceJumps = []) => {
   const futuresOriginalData = futuresChartCandles.originalData;
   const lOriginalData = futuresOriginalData.length;
 
+  futuresChartCandles.extraSeries.forEach(extraSeries => {
+    futuresChartCandles.removeSeries(extraSeries, false);
+  });
+
   priceJumps.forEach((candle, index) => {
     const isLong = candle.close > candle.open;
 
@@ -701,19 +722,9 @@ const calculateProfit = ({ instrumentId }, priceJumps = []) => {
     let maxProfitPrice;
 
     if (!isLong) {
-      // const differenceBetweenPrices = startPrice - minLow;
-
-      // maxProfit = differenceBetweenPrices < 0 ?
-      //   0 : 100 / (startPrice / differenceBetweenPrices);
-
       maxProfitPrice = minLow;
       indexCandleWhereWasTP = indexCandleWithMinLow;
     } else {
-      // const differenceBetweenPrices = maxHigh - startPrice;
-
-      // maxProfit = differenceBetweenPrices < 0 ?
-      //   0 : 100 / (startPrice / differenceBetweenPrices);
-
       maxProfitPrice = maxHigh;
       indexCandleWhereWasTP = indexCandleWithMaxHigh;
     }
