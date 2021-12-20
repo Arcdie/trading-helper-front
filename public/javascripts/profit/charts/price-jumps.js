@@ -29,7 +29,7 @@ const startTime = moment().utc()
   .startOf('day');
 
 const endTime = moment().utc()
-  .startOf('hour');
+  .startOf('minute');
 
 /* JQuery */
 const $chartsContainer = $('.charts-container');
@@ -539,7 +539,7 @@ const drawTrades = ({ instrumentId }) => {
       bound.trade_ended_at_unix = nextIntervalForEndedAtUnix;
     }
 
-    const keyAction = bound.isLong ? 'buy_price' : 'sell_price';
+    const keyAction = bound.is_long ? 'buy_price' : 'sell_price';
 
     [
       { key: keyAction, color: constants.YELLOW_COLOR },
@@ -637,7 +637,7 @@ const scrollToTrade = (action, { instrumentId }, userTradeBounds = []) => {
   let barsToTargetCandle = 0;
 
   const firstCandle = futuresChartCandles.originalData.find(candle =>
-    candle.originalTimeUnix === userTradeBounds[currentSlide - 1].trade_ended_at_unix,
+    candle.originalTimeUnix === userTradeBounds[currentSlide - 1].trade_started_at_unix,
   );
 
   for (let i = futuresChartCandles.originalData.length - 1; i >= 0; i -= 1) {
