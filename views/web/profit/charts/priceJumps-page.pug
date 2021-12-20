@@ -1,0 +1,32 @@
+extends ../../../app
+
+block variables
+	-
+		const pageTitle = 'Профит для priceJumps (Charts)';
+
+block content
+	.page.price-jumps-statistics
+		.row
+			.charts-container
+
+			.instruments-container
+				.search
+					input(type="text" placeholder="Поиск")
+			
+				.instruments-list
+					.headlines
+						span.instrument-name Инструмент
+						span.amount К-во
+
+					.list
+
+block scripts
+	script(src='/libs/moment.min.js')
+	script(src='/libs/trading-view-charts.min.js')
+	script(src='/libs/technical-indicators.min.js')
+
+	script(src='/javascripts/chart-functions/chart-candles.js')
+	script(src='/javascripts/chart-functions/indicators/volume.js')
+	script(src='/javascripts/chart-functions/indicators/supertrend.js')
+
+	script(src='/javascripts/profit/charts/price-jumps.js')

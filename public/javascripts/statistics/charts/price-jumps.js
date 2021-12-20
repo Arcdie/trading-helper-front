@@ -35,7 +35,7 @@ const startTime = moment().utc()
   .add(-7, 'days');
 
 const endTime = moment().utc()
-  .startOf('day');
+  .startOf('hour');
 
 /* JQuery */
 const $report = $('.report');
@@ -502,14 +502,22 @@ const splitDays = ({ instrumentId }) => {
     let startIndex = false;
 
     while (1) {
-      const { originalTimeUnix } = futuresOriginalData[increment];
+      const candle = futuresOriginalData[increment];
 
-      if (originalTimeUnix === startOfNextDayUnix) {
+      if (!candle) {
+        break;
+      }
+
+      if (candle.originalTimeUnix === startOfNextDayUnix) {
         startIndex = increment;
         break;
       }
 
       increment += 1;
+    }
+
+    if (!startIndex) {
+      return true;
     }
 
     futuresOriginalData = futuresOriginalData.slice(startIndex, futuresOriginalData.length);

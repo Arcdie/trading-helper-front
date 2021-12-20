@@ -1082,6 +1082,24 @@ input:checked + .slider:before {
         padding: 10px;
         text-align: center; }
 
+.profit-table {
+  padding: 10px; }
+  .profit-table table {
+    width: 20%; }
+    .profit-table table tr th {
+      text-align: center;
+      padding: 10px 0px;
+      border-bottom: 1px solid black; }
+    .profit-table table tr td {
+      text-align: center;
+      padding: 10px 0px;
+      border-bottom: 1px solid black;
+      border-right: 1px solid black; }
+      .profit-table table tr td.red {
+        background-color: #ff000047; }
+      .profit-table table tr td.green {
+        background-color: #07c007b0; }
+
 .volume-spot-profit {
   padding: 10px; }
   .volume-spot-profit table {
@@ -1102,11 +1120,17 @@ input:checked + .slider:before {
 
 .strategy-choice {
   padding: 15px; }
-  .strategy-choice ul {
+  .strategy-choice div.section {
     margin-bottom: 30px;
-    border-bottom: 1px solid black; }
+    border-bottom: 1px solid black;
+    padding-bottom: 15px; }
+    .strategy-choice div.section p {
+      font: 25px sans-serif; }
+  .strategy-choice ul {
+    margin-top: 10px;
+    font: 15px sans-serif; }
     .strategy-choice ul li {
-      margin-bottom: 15px; }
+      margin-bottom: 10px; }
       .strategy-choice ul li a {
         color: black;
         text-decoration: none; }

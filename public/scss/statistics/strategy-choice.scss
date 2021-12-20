@@ -1,12 +1,22 @@
 .strategy-choice {
   padding: 15px;
 
-  ul {
+  div.section {
     margin-bottom: 30px;
     border-bottom: 1px solid black;
+    padding-bottom: 15px;
+
+    p {
+      font: 25px sans-serif
+    }
+  }
+
+  ul {
+    margin-top: 10px;
+    font: 15px sans-serif;
 
     li {
-      margin-bottom: 15px;
+      margin-bottom: 10px;
 
       a {
         &:hover {

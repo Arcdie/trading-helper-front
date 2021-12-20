@@ -8,11 +8,11 @@ objects, moment,
 const URL_GET_USER_TRADE_BOUNDS = '/api/user-trade-bounds';
 const URL_GET_ACTIVE_INSTRUMENTS = '/api/instruments/active';
 
-const TYPE_TRADE = 'INSTRUMENT_VOLUME_BOUND';
+const TYPE_TRADE = 'PRICE_JUMP';
 
 /* JQuery */
 
-const $profitContainer = $('.volume-spot-profit');
+const $profitContainer = $('.profit-table');
 
 $(document).ready(async () => {
   const resultGetInstruments = await makeRequest({
