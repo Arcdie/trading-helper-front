@@ -671,7 +671,7 @@ const getCandlesData = async ({
     instrumentId,
     startTime,
     endTime,
-    isFirstCall: true,
+    isFirstCall: false,
   };
 
   const resultGetCandles = await makeRequest({
