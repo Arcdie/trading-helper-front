@@ -61,6 +61,8 @@ $(document).ready(async () => {
     return true;
   }
 
+  const isTest = params.isTest && params.isTest === 'true';
+
   const resultGetUserTradeBounds = await makeRequest({
     method: 'GET',
     url: URL_GET_USER_TRADE_BOUNDS,
@@ -68,6 +70,7 @@ $(document).ready(async () => {
       endDate: endTime.toISOString(),
       startDate: startTime.toISOString(),
       typeTrade: 'PRICE_JUMP',
+      isTest,
     },
   });
 

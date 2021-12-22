@@ -27,6 +27,9 @@ const endDate = moment().utc()
 const $profitContainer = $('.container');
 
 $(document).ready(async () => {
+  const urlSearchParams = new URLSearchParams(window.location.search);
+  const params = Object.fromEntries(urlSearchParams.entries());
+
   const resultGetConstants = await makeRequest({
     method: 'GET',
     url: URL_GET_CONSTANTS,
@@ -48,10 +51,13 @@ $(document).ready(async () => {
     return true;
   }
 
+  const isTest = params.isTest && params.isTest === 'true';
+
   const resultGetUserTradeBounds = await makeRequest({
     method: 'GET',
     url: URL_GET_USER_TRADE_BOUNDS,
     query: {
+      isTest,
       typeTrade: TYPE_TRADE,
 
       startDate: startDate.toISOString(),
