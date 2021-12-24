@@ -70,7 +70,7 @@ $(document).ready(async () => {
     query: {
       endDate: endTime.toISOString(),
       startDate: startTime.toISOString(),
-      typeTrade: 'PRICE_JUMP',
+      typeTrade: 'PRICE_REBOUND',
       isTest,
     },
   });

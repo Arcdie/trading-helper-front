@@ -10,25 +10,30 @@ const URL_GET_ACTIVE_INSTRUMENTS = '/api/instruments/active';
 const URL_GET_CONSTANTS = '/api/strategies/priceJumps/constants';
 
 // const WORK_AMOUNT = 10;
-const TYPE_TRADE = 'PRICE_JUMP';
+let TYPE_TRADE = 'PRICE_JUMP';
 
 /* Variables */
 
 let instrumentsDocs = [];
 
 const startDate = moment().utc()
-  .startOf('day').add(-6, 'days');
+  .utc().startOf('day');
+  // .add(-1, 'days');
 
 const endDate = moment().utc()
   .startOf('minute');
+
+const urlSearchParams = new URLSearchParams(window.location.search);
+const params = Object.fromEntries(urlSearchParams.entries());
 
 /* JQuery */
 
 const $profitContainer = $('.container');
 
 $(document).ready(async () => {
-  const urlSearchParams = new URLSearchParams(window.location.search);
-  const params = Object.fromEntries(urlSearchParams.entries());
+  if (params.typeTrade) {
+    TYPE_TRADE = params.typeTrade;
+  }
 
   const resultGetConstants = await makeRequest({
     method: 'GET',

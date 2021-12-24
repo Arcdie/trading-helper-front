@@ -30,12 +30,19 @@ let choosenInstrumentId;
 let priceJumps = [];
 let instrumentsDocs = [];
 
+// const startTime = moment().utc()
+//   .startOf('day')
+//   .add(-7, 'days');
+//
+// const endTime = moment().utc()
+//   .startOf('hour');
+
 const startTime = moment().utc()
-  .startOf('day')
-  .add(-7, 'days');
+  .add(-1, 'days');
+  // .add(-6, 'days');
 
 const endTime = moment().utc()
-  .startOf('hour');
+  .startOf('minute');
 
 /* JQuery */
 const $report = $('.report');
@@ -593,12 +600,16 @@ const calculatePriceJumps = ({ instrumentId }) => {
     averagePercent = parseFloat((averagePercent / candlesForCalculateAveragePercent).toFixed(2));
 
     const currentCandle = futuresOriginalData[i];
-    const differenceBetweenPrices = Math.abs(currentCandle.open - currentCandle.close);
+    const isLong = currentCandle.close > currentCandle.open;
+    // const differenceBetweenPrices = Math.abs(currentCandle.open - currentCandle.close);
+
+    const differenceBetweenPrices = Math.abs(
+      isLong ? currentCandle.high - currentCandle.open : currentCandle.open - currentCandle.low,
+    );
+
     const percentPerPrice = 100 / (currentCandle.open / differenceBetweenPrices);
 
     if (percentPerPrice > (averagePercent * factorForPriceChange)) {
-      const isLong = currentCandle.close > currentCandle.open;
-
       let isGreenLight = true;
 
       if (considerBtcMircoTrend) {
@@ -696,24 +707,25 @@ const calculateProfit = ({ instrumentId }, priceJumps = []) => {
     let maxHigh = startPrice;
 
     let indexCandleWithMinLow = indexOfCandle + 1;
-    let indexCandleWithMaxHigh = indexOfCandle + 1;
+    let indexCandleWithMaxHigh = indexOfCandle;
 
+    let indexCandleWhereWasTP = indexOfCandle;
     let indexCandleWhereWasStop = indexOfCandle + 1;
-    let indexCandleWhereWasTP = indexOfCandle + 1;
 
     const sumPerPrice = startPrice * (stopLossPercent / 100);
     const startPriceWithStopLoss = isLong ?
       (startPrice - sumPerPrice) : (startPrice + sumPerPrice);
 
-    // ! ignore current candle !
-    for (let i = indexOfCandle + 1; i < lOriginalData; i += 1) {
+    for (let i = indexOfCandle; i < lOriginalData; i += 1) {
       const { low, high } = futuresOriginalData[i];
 
-      if ((isLong && low < startPriceWithStopLoss)
-        || (!isLong && high > startPriceWithStopLoss)) {
-        indexCandleWhereWasStop = i;
-        // console.log('end', futuresChartCandles.originalData[i]);
-        break;
+      if (i !== indexOfCandle) {
+        if ((isLong && low < startPriceWithStopLoss)
+          || (!isLong && high > startPriceWithStopLoss)) {
+          indexCandleWhereWasStop = i;
+          // console.log('end', futuresChartCandles.originalData[i]);
+          break;
+        }
       }
 
       if (low < minLow) {
@@ -798,8 +810,17 @@ const makeReport = ({ instrumentId }, calculatedProfit = []) => {
       lastValueVisible: false,
     });
 
-    const timeUnixProfitCandle = futuresOriginalData[elem.indexCandleWhereWasTP].originalTimeUnix;
-    const timeUnixStopCandle = futuresOriginalData[elem.indexCandleWhereWasStop].originalTimeUnix;
+    let timeUnixProfitCandle = futuresOriginalData[elem.indexCandleWhereWasTP].originalTimeUnix;
+
+    const timeUnixStopCandle = futuresOriginalData[elem.indexCandleWhereWasStop] ?
+      futuresOriginalData[elem.indexCandleWhereWasStop].originalTimeUnix :
+      futuresOriginalData[futuresOriginalData.length - 1].originalTimeUnix += 300;
+
+    if (elem.originalTimeUnix === timeUnixProfitCandle) {
+      if (elem.indexCandleWhereWasTP + 1) {
+        timeUnixProfitCandle = futuresOriginalData[elem.indexCandleWhereWasTP + 1].originalTimeUnix;
+      }
+    }
 
     futuresChartCandles.drawSeries(newStopExtraSeries, [{
       value: elem.stopLossPrice,

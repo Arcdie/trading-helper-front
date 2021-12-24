@@ -390,83 +390,212 @@ input:checked + .slider:before {
 .experiment {
   padding: 10px;
   position: relative;
-  /*
-  .period {
-    margin-right: 30px;
-    display: flex;
-    align-items: flex-start;
-  }
-
-  .instrument {
-    margin-bottom: 10px;
-
-    p {
-
-    }
-
-    table {
-      tr {
-        th {
-          padding: 10px;
-          border-bottom: 1px solid black;
-        }
-
-        td {
-          padding: 10px;
-          text-align: center;
-          border-bottom: 1px solid black;
-          border-right: 1px dashed black;
-
-          &.red {
-            background-color: #ff000047;
-          }
-
-          &.green {
-            background-color: #07c007b0;
-          }
-        }
-      }
-    }
-  }
-  */ }
+  display: flex;
+  flex-direction: column; }
   .experiment .row {
-    display: flex; }
-  .experiment table.main-table {
-    width: 100%; }
-    .experiment table.main-table td.red {
-      background-color: #ff000047; }
-    .experiment table.main-table td.green {
-      background-color: #07c007b0; }
-    .experiment table.main-table th.date {
-      width: 23%;
-      padding-bottom: 10px;
-      border-bottom: 1px solid black; }
-    .experiment table.main-table th.instrument-name {
-      padding-bottom: 10px;
-      border-bottom: 1px solid black; }
-    .experiment table.main-table tr.instrument {
-      border-bottom: 1px solid black; }
-      .experiment table.main-table tr.instrument td.instrument-name {
-        text-align: center;
-        border-right: 1px solid black; }
-      .experiment table.main-table tr.instrument td.period {
-        border-right: 1px solid black; }
-        .experiment table.main-table tr.instrument td.period:last-child {
-          border-right: none; }
-        .experiment table.main-table tr.instrument td.period table {
-          width: 100%; }
-          .experiment table.main-table tr.instrument td.period table tr {
+    display: flex;
+    border-top: 1px solid black;
+    margin-top: 15px; }
+    .experiment .row:first-child {
+      margin-top: 0px;
+      border-top: none; }
+  .experiment .charts-container {
+    width: 90%;
+    display: inline-block;
+    box-sizing: border-box;
+    position: relative; }
+    .experiment .charts-container .chart-container {
+      position: relative; }
+      .experiment .charts-container .chart-container.spot .actions-menu, .experiment .charts-container .chart-container.futures .actions-menu {
+        display: block; }
+    .experiment .charts-container .charts-nav {
+      position: absolute;
+      z-index: 999;
+      top: 15px;
+      left: 15px; }
+      .experiment .charts-container .charts-nav .row {
+        display: flex;
+        align-items: center;
+        border-top: none; }
+    .experiment .charts-container .legend p.values span {
+      color: #000FFF;
+      margin-left: 2px;
+      margin-right: 5px; }
+    .experiment .charts-container .ruler {
+      position: absolute;
+      left: -9999px;
+      top: -9999px;
+      z-index: 999;
+      font-size: 16px;
+      color: #0044e8; }
+    .experiment .charts-container .actions-menu {
+      display: none;
+      margin-top: 12px; }
+      .experiment .charts-container .actions-menu .chart-slider {
+        display: inline-block; }
+        .experiment .charts-container .actions-menu .chart-slider p {
+          display: inline-block;
+          margin: 0 8px;
+          font: 17px sans-serif; }
+          .experiment .charts-container .actions-menu .chart-slider p span.current-slide {
+            margin-right: 3px; }
+          .experiment .charts-container .actions-menu .chart-slider p span.amount-slides {
+            margin-left: 3px; }
+        .experiment .charts-container .actions-menu .chart-slider button {
+          display: inline-block;
+          background-color: transparent;
+          border-radius: 100px;
+          cursor: pointer;
+          font-size: 17px; }
+      .experiment .charts-container .actions-menu .volume-timelife {
+        width: 16px;
+        display: inline-block;
+        margin-left: 11px; }
+        .experiment .charts-container .actions-menu .volume-timelife input[type="text"] {
+          width: 100%;
+          height: 100%;
+          text-align: center;
+          position: relative;
+          bottom: 2px; }
+    .experiment .charts-container .chart-periods {
+      display: flex;
+      margin-top: 12px; }
+      .experiment .charts-container .chart-periods div {
+        width: 40px;
+        height: 40px;
+        cursor: pointer;
+        display: none;
+        box-sizing: border-box;
+        margin-right: 5px;
+        position: relative;
+        border: 1px dashed #d9d9d9;
+        background-color: white; }
+        .experiment .charts-container .chart-periods div.is_worked {
+          display: flex;
+          justify-content: center;
+          align-items: center; }
+        .experiment .charts-container .chart-periods div.is_active {
+          border-color: #00bf20; }
+        .experiment .charts-container .chart-periods div span {
+          margin: 8px auto;
+          text-align: center;
+          display: block; }
+    .experiment .charts-container .chart-candles {
+      width: 100%;
+      height: 70%;
+      border: 1px solid black;
+      border-right: none;
+      box-sizing: border-box; }
+    .experiment .charts-container .chart-volume {
+      width: 100%;
+      height: 30%;
+      border: 1px solid black;
+      border-right: none;
+      box-sizing: border-box; }
+  .experiment .instruments-container {
+    width: 11%;
+    overflow-y: scroll;
+    display: inline-block;
+    box-sizing: border-box;
+    border: 1px solid black; }
+    .experiment .instruments-container .search {
+      width: 100%;
+      height: 35px; }
+      .experiment .instruments-container .search input[type="text"] {
+        width: 100%;
+        height: 100%;
+        box-sizing: border-box;
+        border-right: none;
+        border-top: none;
+        border-left: none;
+        padding: 0 8px;
+        outline: none; }
+    .experiment .instruments-container .instruments-list {
+      width: 100%; }
+      .experiment .instruments-container .instruments-list .headlines {
+        text-align: left;
+        padding: 5px 10px;
+        border-bottom: 1px solid black; }
+        .experiment .instruments-container .instruments-list .headlines span {
+          cursor: pointer;
+          display: inline-block;
+          box-sizing: border-box; }
+          .experiment .instruments-container .instruments-list .headlines span.is_active {
+            background-color: #00a1ff59; }
+          .experiment .instruments-container .instruments-list .headlines span.instrument-name {
+            width: 80%; }
+          .experiment .instruments-container .instruments-list .headlines span.amount-volume {
+            width: 18%;
             text-align: center; }
-            .experiment table.main-table tr.instrument td.period table tr:last-child td {
+      .experiment .instruments-container .instruments-list .list {
+        display: flex;
+        overflow-y: scroll;
+        flex-direction: column; }
+        .experiment .instruments-container .instruments-list .list .instrument {
+          cursor: pointer;
+          padding: 10px 10px;
+          border-bottom: 1px solid black; }
+          .experiment .instruments-container .instruments-list .list .instrument.is_active {
+            background-color: #0066ff61 !important; }
+          .experiment .instruments-container .instruments-list .list .instrument:hover {
+            background-color: #0066ff1f; }
+          .experiment .instruments-container .instruments-list .list .instrument span {
+            cursor: pointer;
+            display: inline-block;
+            box-sizing: border-box; }
+            .experiment .instruments-container .instruments-list .list .instrument span.instrument-name {
+              width: 77%; }
+            .experiment .instruments-container .instruments-list .list .instrument span.amount {
+              width: 18%;
+              text-align: center; }
+  .experiment .settings {
+    padding-top: 15px; }
+    .experiment .settings div {
+      margin-bottom: 10px; }
+      .experiment .settings div p {
+        margin-bottom: 3px; }
+  .experiment .report {
+    width: 100%;
+    position: relative;
+    padding-top: 15px; }
+    .experiment .report table.main-table {
+      width: 100%;
+      margin-top: -5px; }
+      .experiment .report table.main-table td.red {
+        background-color: #ff000047; }
+      .experiment .report table.main-table td.green {
+        background-color: #07c007b0; }
+      .experiment .report table.main-table th {
+        width: 10%;
+        padding-bottom: 10px;
+        border-bottom: 1px solid black; }
+        .experiment .report table.main-table th.instrument-name {
+          width: 6%; }
+      .experiment .report table.main-table tr.result table tr {
+        border-bottom: none; }
+      .experiment .report table.main-table tr.instrument table {
+        border-top: 1px solid black; }
+      .experiment .report table.main-table tr td {
+        border-right: 1px solid black; }
+        .experiment .report table.main-table tr td:last-child {
+          border-right: none; }
+        .experiment .report table.main-table tr td table {
+          width: 100%; }
+          .experiment .report table.main-table tr td table tr {
+            text-align: center; }
+            .experiment .report table.main-table tr td table tr:last-child td {
               border-bottom: none; }
-            .experiment table.main-table tr.instrument td.period table tr th {
+            .experiment .report table.main-table tr td table tr.trade:hover {
+              cursor: pointer;
+              background-color: #cccccc80; }
+            .experiment .report table.main-table tr td table tr th {
               padding: 10px 0px;
               border-bottom: 1px solid black; }
-            .experiment table.main-table tr.instrument td.period table tr td {
+            .experiment .report table.main-table tr td table tr td {
               padding: 10px 0px;
               border-bottom: 1px solid black;
               border-right: 1px solid black; }
-              .experiment table.main-table tr.instrument td.period table tr td:last-child {
+              .experiment .report table.main-table tr td table tr td:last-child {
                 border-right: none; }
 
 .volume-monitoring {

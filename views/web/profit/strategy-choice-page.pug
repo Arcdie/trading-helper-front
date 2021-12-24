@@ -13,18 +13,19 @@ block content
 				li
 					a(href='/profit/priceJumps/charts') Charts
 				li
-					a(href='/profit/priceJumps/table') Table
+					a(href='/profit/priceJumps/table?typeTrade=PRICE_JUMP') Table
+				li
+					a(href='/profit/priceJumps/table?typeTrade=PRICE_JUMP&isTest=true') Table Test
+					
+		div.section
+			p Price Rebounds
 
-		//- ul
-		//- 	li
-		//- 		a(href='/statistics/spotVolumes/table') Spot Volumes (Table)
-		//- 	li
-		//- 		a(href='/statistics/spotVolumes/charts') Spot Volumes (Charts)
-		//- 
-		//- ul
-		//- 	li
-		//- 		a(href='/statistics/futuresVolumes/table') Futures Volumes (Table)
-		//- 	li
-		//- 		a(href='/statistics/futuresVolumes/charts') Futures Volumes (Charts)
+			ul
+				li
+					a(href='/profit/priceRebounds/charts') Charts
+				li
+					a(href='/profit/priceRebounds/table?typeTrade=PRICE_REBOUND') Table
+				li
+					a(href='/profit/priceRebounds/table?typeTrade=PRICE_REBOUND&isTest=true') Table Test
 
 block scripts

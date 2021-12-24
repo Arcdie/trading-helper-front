@@ -75,6 +75,23 @@ class IndicatorVolume {
     return newExtraSeries;
   }
 
+  removeChart() {
+    this.removeSeries(this.mainSeries);
+    this.chart.remove();
+  }
+
+  removeSeries(series, isMainSeries) {
+    this.chart.removeSeries(series);
+
+    if (isMainSeries) {
+      this.mainSeries = false;
+    } else {
+      this.extraSeries = this.extraSeries.filter(
+        extraSeries => extraSeries.id !== series.id,
+      );
+    }
+  }
+
   drawSeries(series, data) {
     if (Array.isArray(data)) {
       series.setData(data);

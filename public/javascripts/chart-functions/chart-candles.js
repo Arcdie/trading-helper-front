@@ -169,7 +169,7 @@ class ChartCandles {
   }
 
   removeChart() {
-    this.removeSeries();
+    this.removeSeries(this.mainSeries);
     this.chart.remove();
   }
 
