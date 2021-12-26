@@ -21,9 +21,9 @@
 
 // Profit
 @import './profit/profit-table.scss';
+@import './profit/profit-charts.scss';
 @import './profit/volume-spot-profit.scss';
 
 // Statistics
+@import './statistics/statistics.scss';
 @import './statistics/strategy-choice.scss';
-@import './statistics/statistics-table.scss';
-@import './statistics/price-jumps-statistics.scss';

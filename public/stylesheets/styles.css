@@ -1253,199 +1253,80 @@ input:checked + .slider:before {
             .profit-table table.main-table tr td table tr td:last-child {
               border-right: none; }
 
-.volume-spot-profit {
-  padding: 10px; }
-  .volume-spot-profit table {
-    width: 20%; }
-    .volume-spot-profit table tr th {
-      text-align: center;
-      padding: 10px 0px;
-      border-bottom: 1px solid black; }
-    .volume-spot-profit table tr td {
-      text-align: center;
-      padding: 10px 0px;
-      border-bottom: 1px solid black;
-      border-right: 1px solid black; }
-      .volume-spot-profit table tr td.red {
-        background-color: #ff000047; }
-      .volume-spot-profit table tr td.green {
-        background-color: #07c007b0; }
-
-.strategy-choice {
-  padding: 15px; }
-  .strategy-choice div.section {
-    margin-bottom: 30px;
-    border-bottom: 1px solid black;
-    padding-bottom: 15px; }
-    .strategy-choice div.section p {
-      font: 25px sans-serif; }
-  .strategy-choice ul {
-    margin-top: 10px;
-    font: 15px sans-serif; }
-    .strategy-choice ul li {
-      margin-bottom: 10px; }
-      .strategy-choice ul li a {
-        color: black;
-        text-decoration: none; }
-        .strategy-choice ul li a:hover {
-          color: rgba(0, 0, 0, 0.6); }
-
-.statistics-table {
-  padding: 10px;
-  position: relative;
-  /*
-  .period {
-    margin-right: 30px;
-    display: flex;
-    align-items: flex-start;
-  }
-
-  .instrument {
-    margin-bottom: 10px;
-
-    p {
-
-    }
-
-    table {
-      tr {
-        th {
-          padding: 10px;
-          border-bottom: 1px solid black;
-        }
-
-        td {
-          padding: 10px;
-          text-align: center;
-          border-bottom: 1px solid black;
-          border-right: 1px dashed black;
-
-          &.red {
-            background-color: #ff000047;
-          }
-
-          &.green {
-            background-color: #07c007b0;
-          }
-        }
-      }
-    }
-  }
-  */ }
-  .statistics-table .row {
-    display: flex; }
-  .statistics-table table.main-table {
-    width: 100%; }
-    .statistics-table table.main-table td.red {
-      background-color: #ff000047; }
-    .statistics-table table.main-table td.green {
-      background-color: #07c007b0; }
-    .statistics-table table.main-table th.date {
-      width: 23%;
-      padding-bottom: 10px;
-      border-bottom: 1px solid black; }
-    .statistics-table table.main-table th.instrument-name {
-      padding-bottom: 10px;
-      border-bottom: 1px solid black; }
-    .statistics-table table.main-table tr.instrument {
-      border-bottom: 1px solid black; }
-      .statistics-table table.main-table tr.instrument td.instrument-name {
-        text-align: center;
-        border-right: 1px solid black; }
-      .statistics-table table.main-table tr.instrument td.period {
-        border-right: 1px solid black; }
-        .statistics-table table.main-table tr.instrument td.period:last-child {
-          border-right: none; }
-        .statistics-table table.main-table tr.instrument td.period table {
-          width: 100%; }
-          .statistics-table table.main-table tr.instrument td.period table tr {
-            text-align: center; }
-            .statistics-table table.main-table tr.instrument td.period table tr:last-child td {
-              border-bottom: none; }
-            .statistics-table table.main-table tr.instrument td.period table tr th {
-              padding: 10px 0px;
-              border-bottom: 1px solid black; }
-            .statistics-table table.main-table tr.instrument td.period table tr td {
-              padding: 10px 0px;
-              border-bottom: 1px solid black;
-              border-right: 1px solid black; }
-              .statistics-table table.main-table tr.instrument td.period table tr td:last-child {
-                border-right: none; }
-
-.price-jumps-statistics {
+.profit-charts {
   padding: 10px;
   position: relative;
   display: flex;
   flex-direction: column; }
-  .price-jumps-statistics .row {
+  .profit-charts .row {
     display: flex;
     border-top: 1px solid black;
     margin-top: 15px; }
-    .price-jumps-statistics .row:first-child {
+    .profit-charts .row:first-child {
       margin-top: 0px;
       border-top: none; }
-  .price-jumps-statistics .charts-container {
+  .profit-charts .charts-container {
     width: 90%;
     display: inline-block;
     box-sizing: border-box;
     position: relative; }
-    .price-jumps-statistics .charts-container .chart-container {
+    .profit-charts .charts-container .chart-container {
       position: relative; }
-      .price-jumps-statistics .charts-container .chart-container.spot .actions-menu, .price-jumps-statistics .charts-container .chart-container.futures .actions-menu {
+      .profit-charts .charts-container .chart-container.spot .actions-menu, .profit-charts .charts-container .chart-container.futures .actions-menu {
         display: block; }
-    .price-jumps-statistics .charts-container .charts-nav {
+    .profit-charts .charts-container .charts-nav {
       position: absolute;
       z-index: 999;
       top: 15px;
       left: 15px; }
-      .price-jumps-statistics .charts-container .charts-nav .row {
+      .profit-charts .charts-container .charts-nav .row {
         display: flex;
         align-items: center;
         border-top: none; }
-    .price-jumps-statistics .charts-container .legend p.values span {
+    .profit-charts .charts-container .legend p.values span {
       color: #000FFF;
       margin-left: 2px;
       margin-right: 5px; }
-    .price-jumps-statistics .charts-container .ruler {
+    .profit-charts .charts-container .ruler {
       position: absolute;
       left: -9999px;
       top: -9999px;
       z-index: 999;
       font-size: 16px;
       color: #0044e8; }
-    .price-jumps-statistics .charts-container .actions-menu {
+    .profit-charts .charts-container .actions-menu {
       display: none;
       margin-top: 12px; }
-      .price-jumps-statistics .charts-container .actions-menu .chart-slider {
+      .profit-charts .charts-container .actions-menu .chart-slider {
         display: inline-block; }
-        .price-jumps-statistics .charts-container .actions-menu .chart-slider p {
+        .profit-charts .charts-container .actions-menu .chart-slider p {
           display: inline-block;
           margin: 0 8px;
           font: 17px sans-serif; }
-          .price-jumps-statistics .charts-container .actions-menu .chart-slider p span.current-slide {
+          .profit-charts .charts-container .actions-menu .chart-slider p span.current-slide {
             margin-right: 3px; }
-          .price-jumps-statistics .charts-container .actions-menu .chart-slider p span.amount-slides {
+          .profit-charts .charts-container .actions-menu .chart-slider p span.amount-slides {
             margin-left: 3px; }
-        .price-jumps-statistics .charts-container .actions-menu .chart-slider button {
+        .profit-charts .charts-container .actions-menu .chart-slider button {
           display: inline-block;
           background-color: transparent;
           border-radius: 100px;
           cursor: pointer;
           font-size: 17px; }
-      .price-jumps-statistics .charts-container .actions-menu .volume-timelife {
+      .profit-charts .charts-container .actions-menu .volume-timelife {
         width: 16px;
         display: inline-block;
         margin-left: 11px; }
-        .price-jumps-statistics .charts-container .actions-menu .volume-timelife input[type="text"] {
+        .profit-charts .charts-container .actions-menu .volume-timelife input[type="text"] {
           width: 100%;
           height: 100%;
           text-align: center;
           position: relative;
           bottom: 2px; }
-    .price-jumps-statistics .charts-container .chart-periods {
+    .profit-charts .charts-container .chart-periods {
       display: flex;
       margin-top: 12px; }
-      .price-jumps-statistics .charts-container .chart-periods div {
+      .profit-charts .charts-container .chart-periods div {
         width: 40px;
         height: 40px;
         cursor: pointer;
@@ -1455,38 +1336,38 @@ input:checked + .slider:before {
         position: relative;
         border: 1px dashed #d9d9d9;
         background-color: white; }
-        .price-jumps-statistics .charts-container .chart-periods div.is_worked {
+        .profit-charts .charts-container .chart-periods div.is_worked {
           display: flex;
           justify-content: center;
           align-items: center; }
-        .price-jumps-statistics .charts-container .chart-periods div.is_active {
+        .profit-charts .charts-container .chart-periods div.is_active {
           border-color: #00bf20; }
-        .price-jumps-statistics .charts-container .chart-periods div span {
+        .profit-charts .charts-container .chart-periods div span {
           margin: 8px auto;
           text-align: center;
           display: block; }
-    .price-jumps-statistics .charts-container .chart-candles {
+    .profit-charts .charts-container .chart-candles {
       width: 100%;
       height: 70%;
       border: 1px solid black;
       border-right: none;
       box-sizing: border-box; }
-    .price-jumps-statistics .charts-container .chart-volume {
+    .profit-charts .charts-container .chart-volume {
       width: 100%;
       height: 30%;
       border: 1px solid black;
       border-right: none;
       box-sizing: border-box; }
-  .price-jumps-statistics .instruments-container {
+  .profit-charts .instruments-container {
     width: 11%;
     overflow-y: scroll;
     display: inline-block;
     box-sizing: border-box;
     border: 1px solid black; }
-    .price-jumps-statistics .instruments-container .search {
+    .profit-charts .instruments-container .search {
       width: 100%;
       height: 35px; }
-      .price-jumps-statistics .instruments-container .search input[type="text"] {
+      .profit-charts .instruments-container .search input[type="text"] {
         width: 100%;
         height: 100%;
         box-sizing: border-box;
@@ -1495,51 +1376,51 @@ input:checked + .slider:before {
         border-left: none;
         padding: 0 8px;
         outline: none; }
-    .price-jumps-statistics .instruments-container .instruments-list {
+    .profit-charts .instruments-container .instruments-list {
       width: 100%; }
-      .price-jumps-statistics .instruments-container .instruments-list .headlines {
+      .profit-charts .instruments-container .instruments-list .headlines {
         text-align: left;
         padding: 5px 10px;
         border-bottom: 1px solid black; }
-        .price-jumps-statistics .instruments-container .instruments-list .headlines span {
+        .profit-charts .instruments-container .instruments-list .headlines span {
           cursor: pointer;
           display: inline-block;
           box-sizing: border-box; }
-          .price-jumps-statistics .instruments-container .instruments-list .headlines span.is_active {
+          .profit-charts .instruments-container .instruments-list .headlines span.is_active {
             background-color: #00a1ff59; }
-          .price-jumps-statistics .instruments-container .instruments-list .headlines span.instrument-name {
+          .profit-charts .instruments-container .instruments-list .headlines span.instrument-name {
             width: 80%; }
-          .price-jumps-statistics .instruments-container .instruments-list .headlines span.amount-volume {
+          .profit-charts .instruments-container .instruments-list .headlines span.amount-volume {
             width: 18%;
             text-align: center; }
-      .price-jumps-statistics .instruments-container .instruments-list .list {
+      .profit-charts .instruments-container .instruments-list .list {
         display: flex;
         overflow-y: scroll;
         flex-direction: column; }
-        .price-jumps-statistics .instruments-container .instruments-list .list .instrument {
+        .profit-charts .instruments-container .instruments-list .list .instrument {
           cursor: pointer;
           padding: 10px 10px;
           border-bottom: 1px solid black; }
-          .price-jumps-statistics .instruments-container .instruments-list .list .instrument.is_active {
+          .profit-charts .instruments-container .instruments-list .list .instrument.is_active {
             background-color: #0066ff61 !important; }
-          .price-jumps-statistics .instruments-container .instruments-list .list .instrument:hover {
+          .profit-charts .instruments-container .instruments-list .list .instrument:hover {
             background-color: #0066ff1f; }
-          .price-jumps-statistics .instruments-container .instruments-list .list .instrument span {
+          .profit-charts .instruments-container .instruments-list .list .instrument span {
             cursor: pointer;
             display: inline-block;
             box-sizing: border-box; }
-            .price-jumps-statistics .instruments-container .instruments-list .list .instrument span.instrument-name {
+            .profit-charts .instruments-container .instruments-list .list .instrument span.instrument-name {
               width: 77%; }
-            .price-jumps-statistics .instruments-container .instruments-list .list .instrument span.amount {
+            .profit-charts .instruments-container .instruments-list .list .instrument span.amount {
               width: 18%;
               text-align: center; }
-  .price-jumps-statistics .settings {
+  .profit-charts .settings {
     padding-top: 15px; }
-    .price-jumps-statistics .settings div {
+    .profit-charts .settings div {
       margin-bottom: 10px; }
-      .price-jumps-statistics .settings div p {
+      .profit-charts .settings div p {
         margin-bottom: 3px; }
-  .price-jumps-statistics .report {
+  .profit-charts .report {
     position: relative;
     padding-top: 15px;
     /*
@@ -1576,41 +1457,289 @@ input:checked + .slider:before {
       }
     }
     */ }
-    .price-jumps-statistics .report .total {
+    .profit-charts .report .total {
       position: absolute;
       right: 2px;
       top: 14px; }
-    .price-jumps-statistics .report table.main-table {
+    .profit-charts .report table.main-table {
       width: 100%; }
-      .price-jumps-statistics .report table.main-table td.red {
+      .profit-charts .report table.main-table td.red {
         background-color: #ff000047; }
-      .price-jumps-statistics .report table.main-table td.green {
+      .profit-charts .report table.main-table td.green {
         background-color: #07c007b0; }
-      .price-jumps-statistics .report table.main-table th.date {
+      .profit-charts .report table.main-table th.date {
         width: 23%;
         padding-bottom: 10px;
         border-bottom: 1px solid black; }
-      .price-jumps-statistics .report table.main-table tr.list {
+      .profit-charts .report table.main-table tr.list {
         border-bottom: 1px solid black; }
-        .price-jumps-statistics .report table.main-table tr.list td.period {
+        .profit-charts .report table.main-table tr.list td.period {
           border-right: 1px solid black; }
-          .price-jumps-statistics .report table.main-table tr.list td.period:last-child {
+          .profit-charts .report table.main-table tr.list td.period:last-child {
             border-right: none; }
-          .price-jumps-statistics .report table.main-table tr.list td.period table {
+          .profit-charts .report table.main-table tr.list td.period table {
             width: 100%; }
-            .price-jumps-statistics .report table.main-table tr.list td.period table tr {
+            .profit-charts .report table.main-table tr.list td.period table tr {
               cursor: pointer;
               text-align: center; }
-              .price-jumps-statistics .report table.main-table tr.list td.period table tr:last-child td {
+              .profit-charts .report table.main-table tr.list td.period table tr:last-child td {
                 border-bottom: none; }
-              .price-jumps-statistics .report table.main-table tr.list td.period table tr.element:hover {
+              .profit-charts .report table.main-table tr.list td.period table tr.element:hover {
                 background-color: #cccccc80; }
-              .price-jumps-statistics .report table.main-table tr.list td.period table tr th {
+              .profit-charts .report table.main-table tr.list td.period table tr th {
                 padding: 10px 20px;
                 border-bottom: 1px solid black; }
-              .price-jumps-statistics .report table.main-table tr.list td.period table tr td {
+              .profit-charts .report table.main-table tr.list td.period table tr td {
                 padding: 10px 20px;
                 border-bottom: 1px solid black;
                 border-right: 1px solid black; }
-                .price-jumps-statistics .report table.main-table tr.list td.period table tr td:last-child {
+                .profit-charts .report table.main-table tr.list td.period table tr td:last-child {
                   border-right: none; }
+
+.volume-spot-profit {
+  padding: 10px; }
+  .volume-spot-profit table {
+    width: 20%; }
+    .volume-spot-profit table tr th {
+      text-align: center;
+      padding: 10px 0px;
+      border-bottom: 1px solid black; }
+    .volume-spot-profit table tr td {
+      text-align: center;
+      padding: 10px 0px;
+      border-bottom: 1px solid black;
+      border-right: 1px solid black; }
+      .volume-spot-profit table tr td.red {
+        background-color: #ff000047; }
+      .volume-spot-profit table tr td.green {
+        background-color: #07c007b0; }
+
+.statistics {
+  padding: 10px;
+  position: relative;
+  display: flex;
+  flex-direction: column; }
+  .statistics .row {
+    display: flex;
+    border-top: 1px solid black;
+    margin-top: 15px; }
+    .statistics .row:first-child {
+      margin-top: 0px;
+      border-top: none; }
+  .statistics .charts-container {
+    width: 90%;
+    display: inline-block;
+    box-sizing: border-box;
+    position: relative; }
+    .statistics .charts-container .chart-container {
+      position: relative; }
+      .statistics .charts-container .chart-container.spot .actions-menu, .statistics .charts-container .chart-container.futures .actions-menu {
+        display: block; }
+    .statistics .charts-container .charts-nav {
+      position: absolute;
+      z-index: 999;
+      top: 15px;
+      left: 15px; }
+      .statistics .charts-container .charts-nav .row {
+        display: flex;
+        align-items: center;
+        border-top: none; }
+    .statistics .charts-container .legend p.values span {
+      color: #000FFF;
+      margin-left: 2px;
+      margin-right: 5px; }
+    .statistics .charts-container .ruler {
+      position: absolute;
+      left: -9999px;
+      top: -9999px;
+      z-index: 999;
+      font-size: 16px;
+      color: #0044e8; }
+    .statistics .charts-container .actions-menu {
+      display: none;
+      margin-top: 12px; }
+      .statistics .charts-container .actions-menu .chart-slider {
+        display: inline-block; }
+        .statistics .charts-container .actions-menu .chart-slider p {
+          display: inline-block;
+          margin: 0 8px;
+          font: 17px sans-serif; }
+          .statistics .charts-container .actions-menu .chart-slider p span.current-slide {
+            margin-right: 3px; }
+          .statistics .charts-container .actions-menu .chart-slider p span.amount-slides {
+            margin-left: 3px; }
+        .statistics .charts-container .actions-menu .chart-slider button {
+          display: inline-block;
+          background-color: transparent;
+          border-radius: 100px;
+          cursor: pointer;
+          font-size: 17px; }
+      .statistics .charts-container .actions-menu .volume-timelife {
+        width: 16px;
+        display: inline-block;
+        margin-left: 11px; }
+        .statistics .charts-container .actions-menu .volume-timelife input[type="text"] {
+          width: 100%;
+          height: 100%;
+          text-align: center;
+          position: relative;
+          bottom: 2px; }
+    .statistics .charts-container .chart-periods {
+      display: flex;
+      margin-top: 12px; }
+      .statistics .charts-container .chart-periods div {
+        width: 40px;
+        height: 40px;
+        cursor: pointer;
+        display: none;
+        box-sizing: border-box;
+        margin-right: 5px;
+        position: relative;
+        border: 1px dashed #d9d9d9;
+        background-color: white; }
+        .statistics .charts-container .chart-periods div.is_worked {
+          display: flex;
+          justify-content: center;
+          align-items: center; }
+        .statistics .charts-container .chart-periods div.is_active {
+          border-color: #00bf20; }
+        .statistics .charts-container .chart-periods div span {
+          margin: 8px auto;
+          text-align: center;
+          display: block; }
+    .statistics .charts-container .chart-candles {
+      width: 100%;
+      height: 70%;
+      border: 1px solid black;
+      border-right: none;
+      box-sizing: border-box; }
+    .statistics .charts-container .chart-volume {
+      width: 100%;
+      height: 30%;
+      border: 1px solid black;
+      border-right: none;
+      box-sizing: border-box; }
+  .statistics .instruments-container {
+    width: 11%;
+    overflow-y: scroll;
+    display: inline-block;
+    box-sizing: border-box;
+    border: 1px solid black; }
+    .statistics .instruments-container .search {
+      width: 100%;
+      height: 35px; }
+      .statistics .instruments-container .search input[type="text"] {
+        width: 100%;
+        height: 100%;
+        box-sizing: border-box;
+        border-right: none;
+        border-top: none;
+        border-left: none;
+        padding: 0 8px;
+        outline: none; }
+    .statistics .instruments-container .instruments-list {
+      width: 100%; }
+      .statistics .instruments-container .instruments-list .headlines {
+        text-align: left;
+        padding: 5px 10px;
+        border-bottom: 1px solid black; }
+        .statistics .instruments-container .instruments-list .headlines span {
+          cursor: pointer;
+          display: inline-block;
+          box-sizing: border-box; }
+          .statistics .instruments-container .instruments-list .headlines span.is_active {
+            background-color: #00a1ff59; }
+          .statistics .instruments-container .instruments-list .headlines span.instrument-name {
+            width: 80%; }
+          .statistics .instruments-container .instruments-list .headlines span.amount-volume {
+            width: 18%;
+            text-align: center; }
+      .statistics .instruments-container .instruments-list .list {
+        display: flex;
+        overflow-y: scroll;
+        flex-direction: column; }
+        .statistics .instruments-container .instruments-list .list .instrument {
+          cursor: pointer;
+          padding: 10px 10px;
+          border-bottom: 1px solid black; }
+          .statistics .instruments-container .instruments-list .list .instrument.is_active {
+            background-color: #0066ff61 !important; }
+          .statistics .instruments-container .instruments-list .list .instrument:hover {
+            background-color: #0066ff1f; }
+          .statistics .instruments-container .instruments-list .list .instrument span {
+            cursor: pointer;
+            display: inline-block;
+            box-sizing: border-box; }
+            .statistics .instruments-container .instruments-list .list .instrument span.instrument-name {
+              width: 77%; }
+            .statistics .instruments-container .instruments-list .list .instrument span.amount {
+              width: 18%;
+              text-align: center; }
+  .statistics .settings {
+    padding-top: 15px; }
+    .statistics .settings div {
+      margin-bottom: 10px; }
+      .statistics .settings div p {
+        margin-bottom: 3px; }
+  .statistics .report {
+    width: 100%;
+    position: relative;
+    padding-top: 15px; }
+    .statistics .report table.main-table {
+      width: 100%;
+      margin-top: -5px; }
+      .statistics .report table.main-table td.red {
+        background-color: #ff000047; }
+      .statistics .report table.main-table td.green {
+        background-color: #07c007b0; }
+      .statistics .report table.main-table th {
+        width: 10%;
+        padding-bottom: 10px;
+        border-bottom: 1px solid black; }
+        .statistics .report table.main-table th.instrument-name {
+          width: 6%; }
+      .statistics .report table.main-table tr.result table tr {
+        border-bottom: none; }
+      .statistics .report table.main-table tr.instrument table {
+        border-top: 1px solid black; }
+      .statistics .report table.main-table tr td {
+        border-right: 1px solid black; }
+        .statistics .report table.main-table tr td:last-child {
+          border-right: none; }
+        .statistics .report table.main-table tr td table {
+          width: 100%; }
+          .statistics .report table.main-table tr td table tr {
+            text-align: center; }
+            .statistics .report table.main-table tr td table tr:last-child td {
+              border-bottom: none; }
+            .statistics .report table.main-table tr td table tr.trade:hover {
+              cursor: pointer;
+              background-color: #cccccc80; }
+            .statistics .report table.main-table tr td table tr th {
+              padding: 10px 0px;
+              border-bottom: 1px solid black; }
+            .statistics .report table.main-table tr td table tr td {
+              padding: 10px 0px;
+              border-bottom: 1px solid black;
+              border-right: 1px solid black; }
+              .statistics .report table.main-table tr td table tr td:last-child {
+                border-right: none; }
+
+.strategy-choice {
+  padding: 15px; }
+  .strategy-choice div.section {
+    margin-bottom: 30px;
+    border-bottom: 1px solid black;
+    padding-bottom: 15px; }
+    .strategy-choice div.section p {
+      font: 25px sans-serif; }
+  .strategy-choice ul {
+    margin-top: 10px;
+    font: 15px sans-serif; }
+    .strategy-choice ul li {
+      margin-bottom: 10px; }
+      .strategy-choice ul li a {
+        color: black;
+        text-decoration: none; }
+        .strategy-choice ul li a:hover {
+          color: rgba(0, 0, 0, 0.6); }

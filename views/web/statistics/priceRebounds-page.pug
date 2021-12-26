@@ -1,11 +1,11 @@
-extends ../../../app
+extends ../../app
 
 block variables
 	-
-		const pageTitle = 'Статистика для priceJumps (Charts)';
+		const pageTitle = 'Статистика priceRebounds';
 
 block content
-	.page.price-jumps-statistics
+	.page.statistics
 		.row
 			.charts-container
 
@@ -18,7 +18,7 @@ block content
 						span.instrument-name Инструмент
 
 					.list
-		
+
 		.row
 			.settings
 				.candles-for-calculate-average-percent
@@ -43,9 +43,6 @@ block content
 
 		.row
 			.report
-				table.main-table
-				.total
-					span
 
 block scripts
 	script(src='/libs/moment.min.js')
@@ -56,4 +53,4 @@ block scripts
 	script(src='/javascripts/chart-functions/indicators/volume.js')
 	script(src='/javascripts/chart-functions/indicators/supertrend.js')
 
-	script(src='/javascripts/statistics/charts/price-jumps.js')
+	script(src='/javascripts/statistics/price-rebounds.js')
