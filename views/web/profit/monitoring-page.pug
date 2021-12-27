@@ -1,0 +1,36 @@
+extends ../../app
+
+block variables
+	-
+		const pageTitle = 'Мониторинг';
+
+block content
+	.page.monitoring
+		.row
+			.charts-container
+				.chart-container.total-income
+					.charts
+						.chart-baseline
+						
+				.chart-container.hourly-income
+					.charts
+						.chart-baseline
+
+			.instruments-container
+				.search
+					input(type="text" placeholder="Поиск")
+			
+				.instruments-list
+					.headlines
+						span.instrument-name Инструмент
+						span.amount К-во
+
+					.list
+
+block scripts
+	script(src='/libs/moment.min.js')
+	script(src='/libs/trading-view-charts.min.js')
+	
+	script(src='/javascripts/chart-functions/chart-baseline.js')
+
+	script(src='/javascripts/profit/monitoring.js')

@@ -14,6 +14,7 @@ const AVAILABLE_PERIODS = new Map([
 ]);
 
 const WORK_AMOUNT = 10;
+const BINANCE_COMMISSION = 0.04;
 const DEFAULT_PERIOD = AVAILABLE_PERIODS.get('5M');
 
 /* Variables */
@@ -44,10 +45,11 @@ const urlSearchParams = new URLSearchParams(window.location.search);
 const params = Object.fromEntries(urlSearchParams.entries());
 
 const wsConnectionPort = 3104;
-const wsConnectionLink = 'localhost';
+// const wsConnectionLink = 'localhost';
 // const wsConnectionLink = '45.94.157.194';
 
-const wsClient = new WebSocket(`ws://${wsConnectionLink}:${wsConnectionPort}`);
+const wsClient = {};
+// const wsClient = new WebSocket(`ws://${wsConnectionLink}:${wsConnectionPort}`);
 
 /* JQuery */
 const $report = $('.report');
@@ -326,16 +328,20 @@ $(document).ready(async () => {
     alert('Соединение было разорвано, перезагрузите страницу');
   };
 
+  /*
   setInterval(() => {
     wsClient.send(JSON.stringify({
       actionName: 'pong',
     }));
   }, 1 * 60 * 1000); // 1 minute
+  */
 
-  // for await (const doc of instrumentsDocs) {
-  //   await $._data($($instrumentsList).get(0), 'events').click[0].handler(`#instrument-${doc._id}`);
-  //   await sleep(1000);
-  // }
+  /*
+  for await (const doc of instrumentsDocs) {
+    await $._data($($instrumentsList).get(0), 'events').click[0].handler(`#instrument-${doc._id}`);
+    await sleep(1000);
+  }
+  // */
 });
 
 /* Functions */
@@ -607,7 +613,11 @@ const calculateCandles = ({ instrumentId }) => {
       close = tradePrice;
       sumVolume += period[j].quantity;
 
-      if (!doesExistStrategy) {
+      const doesExistActiveTrade = instrumentDoc.my_trades.some(
+        myTrade => myTrade.isActive,
+      );
+
+      if (!doesExistStrategy && !doesExistActiveTrade) {
         const result = calculatePriceJumps(chartCandles.originalData, {
           open,
           close,
@@ -1070,6 +1080,8 @@ const initReport = (periods = []) => {
         <tr>
           <th>#</th>
           <th>Profit</th>
+          <th>-</th>
+          <th>=</th>
           <th>%</th>
           <th>Date</th>
         </tr>
@@ -1077,7 +1089,9 @@ const initReport = (periods = []) => {
         <tr>
           <td>*</td>
           <td class="commonProfit">0</td>
-          <td class="commonProfitPercent">0%</td>
+          <td class="commonSumCommissions">0</td>
+          <td class="commonResult">0</td>
+          <td class="commonResultPercent">0%</td>
           <td>${validDate}</td>
         </tr>
       </table>
@@ -1091,13 +1105,17 @@ const initReport = (periods = []) => {
           <tr>
             <th class="instrument-name">#</th>
             <th>Profit</th>
+            <th>-</th>
+            <th>=</th>
             <th>%</th>
           </tr>
 
           <tr>
             <td class="instrument-name">*</td>
             <td class="commonProfit">0</td>
-            <td class="commonProfitPercent">0%</td>
+            <td class="commonSumCommissions">0</td>
+            <td class="commonResult">0</td>
+            <td class="commonResultPercent">0%</td>
           </tr>
         </table>
       </td>
@@ -1112,7 +1130,8 @@ const initReport = (periods = []) => {
 
 const makeReport = () => {
   let commonProfitForRequest = 0;
-  let commonProfitPercentForRequest = 0;
+  let commonResultPercentForRequest = 0;
+  let commonSumCommissionsForRequest = 0;
 
   const $result = $report.find('tr.result');
 
@@ -1126,14 +1145,17 @@ const makeReport = () => {
 
   instrumentsDocs.forEach(doc => {
     let commonProfit = 0;
-    let commonProfitPercent = 0;
+    let commonResultPercent = 0;
+    let commonSumCommissions = 0;
 
     if (!doc.my_trades || !doc.my_trades.length) {
       return true;
     }
 
     doc.profit = 0;
+    doc.result = 0;
     doc.profitPercent = 0;
+    doc.sumCommissions = 0;
 
     doc.my_trades.forEach(myTrade => {
       if (!myTrade.profit) {
@@ -1152,27 +1174,46 @@ const makeReport = () => {
           myTrade.buyPrice = NaN;
         }
 
+        const sumBuyPrice = myTrade.buyPrice * myTrade.quantity;
+        const sumSellPrice = myTrade.sellPrice * myTrade.quantity;
+
+        const sumBuyCommissions = (sumBuyPrice * (BINANCE_COMMISSION / 100));
+        const sumSellCommissions = (sumSellPrice * (BINANCE_COMMISSION / 100));
+
+        const sumCommissions = (sumBuyCommissions + sumSellCommissions);
+
         const profit = myTrade.sellPrice - myTrade.buyPrice;
-        const differenceBetweenPrices = Math.abs(profit);
-        let percentPerPrice = 100 / (myTrade.buyPrice / differenceBetweenPrices);
+        const startPrice = myTrade.isLong ? myTrade.buyPrice : myTrade.sellPrice;
+
+        const result = (profit * myTrade.quantity) - sumCommissions;
+
+        let profitPercentPerPrice = 100 / (startPrice / Math.abs(profit));
+        const resultPercentPerPrice = 100 / (WORK_AMOUNT / result);
 
         if (profit < 0) {
-          percentPerPrice = -percentPerPrice;
+          profitPercentPerPrice = -profitPercentPerPrice;
         }
 
+        myTrade.result = result;
         myTrade.profit = (profit * myTrade.quantity);
-        myTrade.profitPercent = percentPerPrice;
+        myTrade.profitPercent = profitPercentPerPrice;
+        myTrade.resultPercent = resultPercentPerPrice;
+        myTrade.sumCommissions = sumCommissions;
       }
 
       commonProfit += myTrade.profit;
-      commonProfitPercent += myTrade.profitPercent;
+      commonResultPercent += myTrade.resultPercent;
+      commonSumCommissions += myTrade.sumCommissions;
     });
 
     doc.profit = commonProfit;
-    doc.profitPercent = commonProfitPercent;
+    doc.resultPercent = commonResultPercent;
+    doc.sumCommissions = commonSumCommissions;
+    doc.result = commonProfit - commonSumCommissions;
 
     commonProfitForRequest += doc.profit;
-    commonProfitPercentForRequest += doc.profitPercent;
+    commonResultPercentForRequest += doc.resultPercent;
+    commonSumCommissionsForRequest += doc.sumCommissions;
 
     processedInstrumentsDocs.push(doc);
   });
@@ -1184,7 +1225,7 @@ const makeReport = () => {
   let instrumentsStr = '';
 
   processedInstrumentsDocs
-    .sort((a, b) => a.profitPercent > b.profitPercent ? -1 : 1)
+    .sort((a, b) => a.resultPercent > b.resultPercent ? -1 : 1)
     .forEach(doc => {
       let tdStr = '';
 
@@ -1193,6 +1234,8 @@ const makeReport = () => {
           <tr>
             <th>#</th>
             <th>Profit</th>
+            <th>-</th>
+            <th>=</th>
             <th>%</th>
             <th>Time</th>
           </tr>
@@ -1200,6 +1243,7 @@ const makeReport = () => {
 
         let periodProfit = 0;
         let periodProfitPercent = 0;
+        let periodSumCommissions = 0;
 
         const periodMyTrades = doc.my_trades
           .filter(myTrade => myTrade.startOfDayUnix === periods[i]);
@@ -1218,18 +1262,25 @@ const makeReport = () => {
             tableStr += `<tr class="trade" data-index="${myTrade.index}">
               <td>${index + 1}</td>
               <td>${myTrade.profit.toFixed(2)}</td>
+              <td>${myTrade.sumCommissions.toFixed(2)}</td>
+              <td>${myTrade.result.toFixed(2)}</td>
               <td class="${classFillColor}">${myTrade.profitPercent.toFixed(2)}%</td>
               <td>${validTime}</td>
             </tr>`;
 
             periodProfit += myTrade.profit;
             periodProfitPercent += myTrade.profitPercent;
+            periodSumCommissions += myTrade.sumCommissions;
           });
+
+        const periodResult = periodProfit - periodSumCommissions;
 
         tableStr += `
           <tr>
             <td>${periodMyTrades.length}</td>
             <td>${periodProfit.toFixed(2)}</td>
+            <td>${periodSumCommissions.toFixed(2)}</td>
+            <td>${periodResult.toFixed(2)}</td>
             <td>${periodProfitPercent.toFixed(2)}%</td>
             <td></td>
           </tr>
@@ -1244,13 +1295,17 @@ const makeReport = () => {
             <tr>
               <th class="instrument-name">${doc.name}</th>
               <th>Profit</th>
+              <th>-</th>
+              <th>=</th>
               <th>%</th>
             </tr>
 
             <tr>
               <td>${doc.price}</td>
               <td>${doc.profit.toFixed(2)}</td>
-              <td>${doc.profitPercent.toFixed(2)}</td>
+              <td>${doc.sumCommissions.toFixed(2)}</td>
+              <td>${doc.result.toFixed(2)}</td>
+              <td class="${doc.resultPercent > 0 ? 'green' : 'red'}">${doc.resultPercent.toFixed(2)}%</td>
             </tr>
           </table>
         </td>
@@ -1261,8 +1316,16 @@ const makeReport = () => {
   $report.find('table.main-table')
     .append(instrumentsStr);
 
+  const commonResultForRequest = commonProfitForRequest - commonSumCommissionsForRequest;
+
   $result.find('td.common .commonProfit').text(commonProfitForRequest.toFixed(2));
-  $result.find('td.common .commonProfitPercent').text(`${commonProfitPercentForRequest.toFixed(2)}%`);
+  $result.find('td.common .commonResult').text(commonResultForRequest.toFixed(2));
+  $result.find('td.common .commonSumCommissions').text(commonSumCommissionsForRequest.toFixed(2));
+
+  $result.find('td.common .commonResultPercent')
+    .attr('class', 'commonResultPercent')
+    .addClass(commonResultPercentForRequest > 0 ? 'green' : 'red')
+    .text(`${commonResultPercentForRequest.toFixed(2)}%`);
 
   periods.forEach(period => {
     const targetMyTrades = [];
@@ -1273,16 +1336,95 @@ const makeReport = () => {
     });
 
     let periodProfit = 0;
-    let periodProfitPercent = 0;
+    let periodResultPercent = 0;
+    let periodSumCommissions = 0;
 
     targetMyTrades.forEach(myTrade => {
       periodProfit += myTrade.profit;
-      periodProfitPercent += myTrade.profitPercent;
+      periodResultPercent += myTrade.resultPercent;
+      periodSumCommissions += myTrade.sumCommissions;
     });
 
+    const periodResult = periodProfit - periodSumCommissions;
+
     $result.find(`.period.p-${period} .commonProfit`).text(periodProfit.toFixed(2));
-    $result.find(`.period.p-${period} .commonProfitPercent`).text(`${periodProfitPercent.toFixed(2)}%`);
+    $result.find(`.period.p-${period} .commonResult`).text(periodResult.toFixed(2));
+    $result.find(`.period.p-${period} .commonSumCommissions`).text(periodSumCommissions.toFixed(2));
+
+    $result.find(`.period.p-${period} .commonResultPercent`)
+      .attr('class', 'commonResultPercent')
+      .addClass(periodResultPercent > 0 ? 'green' : 'red')
+      .text(`${periodResultPercent.toFixed(2)}%`);
   });
+};
+
+const loadTradesTmp = async ({
+  instrumentName,
+
+  startDate,
+  endDate,
+}) => {
+  console.log('started loading');
+
+  const linkToFile = `/files/aggTrades/${instrumentName}/${instrumentName}.json`;
+
+  const fileData = await makeRequest({
+    method: 'GET',
+    url: linkToFile,
+  });
+
+  if (!fileData) {
+    alert(`Cant makeRequest ${linkToFile}`);
+    return false;
+  }
+
+  const trades = fileData || [];
+
+  console.log('ended loading');
+
+  if (!trades.length) {
+    return false;
+  }
+
+  const splitByMinutes = [];
+  let newSplit = [trades[0]];
+
+  let minute = new Date(parseInt(trades[0][2], 10)).getUTCMinutes();
+
+  for (let i = 1; i < trades.length; i += 1) {
+    const minuteOfTrade = new Date(parseInt(trades[i][2], 10)).getUTCMinutes();
+
+    if (minuteOfTrade !== minute) {
+      minute = minuteOfTrade;
+
+      splitByMinutes.push(
+        newSplit.map(tradeData => {
+          const [
+            price,
+            quantity,
+            time,
+          ] = tradeData;
+
+          const originalTimeUnix = parseInt(
+            (new Date(parseInt(time, 10)).setSeconds(0)) / 1000, 10,
+          );
+
+          return {
+            price: parseFloat(price),
+            quantity: parseFloat(quantity),
+            originalTimeUnix,
+          };
+        }),
+      );
+
+      newSplit = [trades[i]];
+      continue;
+    }
+
+    newSplit.push(trades[i]);
+  }
+
+  return splitByMinutes;
 };
 
 const loadTrades = async ({
@@ -1388,7 +1530,9 @@ const reset = ({ instrumentId }) => {
   const $result = $report.find('tr.result');
 
   $result.find('.commonProfit').text(0);
-  $result.find('.commonProfitPercent').text('0%');
+  $result.find('.commonResult').text(0);
+  $result.find('.commonSumCommissions').text(0);
+  $result.find('.commonResultPercent').text('0%');
 
   $report.find('tr.instrument').remove();
 };

@@ -44,10 +44,11 @@ const urlSearchParams = new URLSearchParams(window.location.search);
 const params = Object.fromEntries(urlSearchParams.entries());
 
 const wsConnectionPort = 3104;
-const wsConnectionLink = 'localhost';
-// const wsConnectionLink = '45.94.157.194';
+// const wsConnectionLink = 'localhost';
+const wsConnectionLink = '45.94.157.194';
 
-const wsClient = new WebSocket(`ws://${wsConnectionLink}:${wsConnectionPort}`);
+const wsClient = {};
+// const wsClient = new WebSocket(`ws://${wsConnectionLink}:${wsConnectionPort}`);
 
 /* JQuery */
 const $report = $('.report');
@@ -1286,6 +1287,75 @@ const makeReport = () => {
 };
 
 const loadTrades = async ({
+  instrumentName,
+
+  startDate,
+  endDate,
+}) => {
+  console.log('started loading');
+
+  const linkToFile = `/files/aggTrades/${instrumentName}/${instrumentName}.json`;
+
+  const fileData = await makeRequest({
+    method: 'GET',
+    url: linkToFile,
+  });
+
+  if (!fileData) {
+    alert(`Cant makeRequest ${linkToFile}`);
+    return false;
+  }
+
+  const trades = fileData || [];
+
+  console.log('ended loading');
+
+  if (!trades.length) {
+    return false;
+  }
+
+  const splitByMinutes = [];
+  let newSplit = [trades[0]];
+
+  let minute = new Date(parseInt(trades[0][2], 10)).getUTCMinutes();
+
+  for (let i = 1; i < trades.length; i += 1) {
+    const minuteOfTrade = new Date(parseInt(trades[i][2], 10)).getUTCMinutes();
+
+    if (minuteOfTrade !== minute) {
+      minute = minuteOfTrade;
+
+      splitByMinutes.push(
+        newSplit.map(tradeData => {
+          const [
+            price,
+            quantity,
+            time,
+          ] = tradeData;
+
+          const originalTimeUnix = parseInt(
+            (new Date(parseInt(time, 10)).setSeconds(0)) / 1000, 10,
+          );
+
+          return {
+            price: parseFloat(price),
+            quantity: parseFloat(quantity),
+            originalTimeUnix,
+          };
+        }),
+      );
+
+      newSplit = [trades[i]];
+      continue;
+    }
+
+    newSplit.push(trades[i]);
+  }
+
+  return splitByMinutes;
+};
+
+const loadTradesOriginal = async ({
   instrumentName,
 
   startDate,

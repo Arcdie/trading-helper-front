@@ -26,8 +26,8 @@ let choosenPeriod = DEFAULT_PERIOD;
 let instrumentsDocs = [];
 
 const startTime = moment().utc()
-  // .startOf('day');
-  .add(-1, 'days');
+  .startOf('day');
+  // .add(-1, 'days');
 
 const endTime = moment().utc()
   .startOf('minute');
