@@ -1477,11 +1477,15 @@ input:checked + .slider:before {
       padding-bottom: 10px;
       border-bottom: 1px solid black; }
       .profit-table table.main-table th.instrument-name {
-        width: 6%; }
+        width: 15%; }
     .profit-table table.main-table tr.result table tr {
       border-bottom: none; }
-    .profit-table table.main-table tr.instrument table {
-      border-top: 1px solid black; }
+    .profit-table table.main-table tr.instrument {
+      opacity: .3; }
+      .profit-table table.main-table tr.instrument.is_active {
+        opacity: 1; }
+      .profit-table table.main-table tr.instrument table {
+        border-top: 1px solid black; }
     .profit-table table.main-table tr td {
       border-right: 1px solid black; }
       .profit-table table.main-table tr td:last-child {

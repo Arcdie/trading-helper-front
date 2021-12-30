@@ -9,7 +9,7 @@ const URL_GET_CANDLES = '/api/candles';
 const URL_GET_ACTIVE_INSTRUMENTS = '/api/instruments/active';
 
 const AVAILABLE_PERIODS = new Map([
-  // ['1M', '1m'],
+  ['1M', '1m'],
   ['5M', '5m'],
 ]);
 
@@ -23,12 +23,6 @@ let choosenInstrumentId;
 let choosenPeriod = DEFAULT_PERIOD;
 const windowHeight = window.innerHeight;
 
-const settings = {
-  padding: 20,
-  allowedPercent: 0.2,
-  requiredNumberTouches: 3,
-};
-
 const urlSearchParams = new URLSearchParams(window.location.search);
 const params = Object.fromEntries(urlSearchParams.entries());
 
@@ -38,18 +32,11 @@ const $chartsContainer = $('.charts-container');
 const $instrumentsContainer = $('.instruments-container');
 const $instrumentsList = $instrumentsContainer.find('.instruments-list .list');
 
-const $settings = $('.settings');
-
 $(document).ready(async () => {
   // start settings
 
   $instrumentsContainer
     .css({ maxHeight: windowHeight });
-
-
-  $settings.find('.padding').val(settings.padding);
-  $settings.find('.allowed-percent').val(settings.allowedPercent);
-  $settings.find('.number-touches').val(settings.requiredNumberTouches);
 
   // loading data
 
@@ -102,44 +89,57 @@ $(document).ready(async () => {
 
       await loadCharts({ instrumentId });
       calculateLevels({ instrumentId });
-      splitDays({ instrumentId });
+      // splitDays({ instrumentId });
 
       choosenInstrumentId = instrumentId;
     });
 
-  $settings
-    .find('input[type="text"]')
-    .on('change', async function () {
-      const className = $(this).attr('class');
-      const newValue = parseFloat($(this).val());
+  /*
+  $chartsContainer
+    .on('click', '.chart-periods div', async function () {
+      const period = $(this).data('period');
 
-      if (!newValue || Number.isNaN(newValue)) {
+      if (period !== choosenPeriod) {
+        const $periods = $(this).parent().find('div');
+        $periods.removeClass('is_active');
+        $(this).addClass('is_active');
+
+        choosenPeriod = period;
+
+        await loadCharts({ instrumentId: choosenInstrumentId });
+        // drawTrades({ instrumentId: choosenInstrumentId });
+      }
+    });
+  */
+
+  /*
+  $chartsContainer
+    .on('click', '.chart-slider button', function () {
+      if (!choosenInstrumentId) {
         return true;
       }
 
-      switch (className) {
-        case 'padding': settings.padding = newValue; break;
-        case 'allowed-percent': settings.allowedPercent = newValue; break;
-        case 'number-touches': settings.requiredNumberTouches = newValue; break;
+      const $slider = $(this).closest('.chart-slider');
+      const chartKey = $slider.attr('class').split(' ')[1];
 
-        default: break;
+      const $amountSlides = $slider.find('span.amount-slides');
+      const amountSlides = parseInt($amountSlides.text(), 10);
+
+      if (amountSlides === 0) {
+        return true;
       }
 
-      if (choosenInstrumentId) {
-        const instrumentId = choosenInstrumentId;
-        const instrumentDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
+      if (chartKey === 'futures') {
+        const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
 
-        const chartCandles = instrumentDoc.chart_candles;
-
-        chartCandles.extraSeries.forEach(extraSeries => {
-          chartCandles.removeSeries(extraSeries, false);
-        });
-
-        chartCandles.removeMarkers();
-
-        calculateLevels({ instrumentId });
+        scrollToTrade($(this).attr('class'), {
+          instrumentId: choosenInstrumentId,
+        }, instrumentDoc.my_trades.map(myTrade => ({
+          originalTimeUnix: myTrade.tradeStartedAt,
+        })));
       }
     });
+    */
 
   if (params.symbol) {
     const instrumentDoc = instrumentsDocs.find(doc => doc.name === params.symbol);
@@ -184,7 +184,15 @@ const loadCharts = async ({
         </div>
         <div class="row">
           <div class="chart-periods">
+            <div class="1m is_worked ${choosenPeriod === AVAILABLE_PERIODS.get('1M') ? 'is_active' : ''}" data-period="1m"><span>1M</span></div>
             <div class="5m is_worked  ${choosenPeriod === AVAILABLE_PERIODS.get('5M') ? 'is_active' : ''}" data-period="5m"><span>5M</span></div>
+          </div>
+        </div>
+        <div class="actions-menu">
+          <div class="chart-slider ${chartKey}">
+            <button class="previous"><</button>
+            <p><span class="current-slide">0</span>/<span class="amount-slides">0</span></p>
+            <button class="next">></button>
           </div>
         </div>
       </div>
@@ -237,6 +245,30 @@ const loadCharts = async ({
     const $open = $legend.find('span.open');
     const $close = $legend.find('span.close');
     const $percent = $legend.find('span.percent');
+
+    /*
+    if (chartKey === 'futures') {
+      chartCandles.chart.subscribeClick((param) => {
+        if (param.time && instrumentDoc.my_trades.length) {
+          let nearestSlideIndex = -1;
+
+          instrumentDoc.my_trades.forEach((myTrade, index) => {
+            if (myTrade.tradeEndedAt < param.time) {
+              nearestSlideIndex = index;
+            }
+          });
+
+          if (~nearestSlideIndex) {
+            const $slider = $chartsContainer.find('.chart-slider.futures');
+
+            $slider
+              .find('span.current-slide')
+              .text(nearestSlideIndex + 1);
+          }
+        }
+      });
+    }
+    */
 
     chartCandles.chart.subscribeCrosshairMove((param) => {
       if (param.point) {
@@ -318,20 +350,20 @@ const calculateLevels = ({ instrumentId }) => {
     return true;
   }
 
+  const padding = 20;
+
   const levelsLines = [];
-  const lowestCandles = [];
   const highestCandles = [];
 
-  for (let i = 0; i < lCandles - settings.padding; i += 1) {
+  for (let i = 0; i < lCandles - padding; i += 1) {
     const candle = candlesData[i];
-    const startIndex = i - settings.padding;
+    const startIndex = i - padding;
 
     const targetCandlesArr = candlesData.slice(
       startIndex < 0 ? 0 : startIndex,
-      i + settings.padding,
+      i + padding,
     );
 
-    let isCandleLowLowest = true;
     let isCandleHighHighest = true;
 
     targetCandlesArr.forEach(tCandle => {
@@ -339,42 +371,19 @@ const calculateLevels = ({ instrumentId }) => {
         return true;
       }
 
-      const price = tCandle.isLong ? tCandle.close : tCandle.open;
-
-      if (tCandle.high > candle.high
-        || price > candle.high) {
+      if (tCandle.high > candle.high) {
         isCandleHighHighest = false;
       }
     });
 
-    targetCandlesArr.forEach(tCandle => {
-      if (!isCandleLowLowest) {
-        return true;
-      }
-
-      const price = tCandle.isLong ? tCandle.close : tCandle.open;
-
-      if (tCandle.low < candle.low
-        || price < candle.low) {
-        isCandleLowLowest = false;
-      }
-    });
-
     if (isCandleHighHighest) {
+      // candle.index = i;
       highestCandles.push(candle);
-    }
-
-    if (isCandleLowLowest) {
-      lowestCandles.push(candle);
     }
   }
 
   for (let i = 0; i < highestCandles.length; i += 1) {
     const candle = highestCandles[i];
-
-    if (!highestCandles[i + 1]) {
-      break;
-    }
 
     const newLevelLine = [candle];
 
@@ -399,9 +408,15 @@ const calculateLevels = ({ instrumentId }) => {
       break;
     }
 
+    // console.log('newLevelLine', newLevelLine);
+    // console.log('newLevelLine', newLevelLine.length);
+
     if (newLevelLine.length === 1) {
       continue;
     }
+
+    const yOfFirstCandle = chartCandles.mainSeries.priceToCoordinate(newLevelLine[0].high);
+    const yOfSecondCandle = chartCandles.mainSeries.priceToCoordinate(newLevelLine[1].high);
 
     const indexOfFirstCandle = candlesData.findIndex(
       tCandle => tCandle.originalTimeUnix === newLevelLine[0].originalTimeUnix,
@@ -411,225 +426,71 @@ const calculateLevels = ({ instrumentId }) => {
       tCandle => tCandle.originalTimeUnix === newLevelLine[1].originalTimeUnix,
     );
 
-    let indexOfEndCandle;
-
     const numberCandles = indexOfSecondCandle - indexOfFirstCandle;
 
+    // const highForLastCandle = newLevelLine[1].high - differenceBetweenHighs;
+
     const differenceBetweenHighs = newLevelLine[0].high - newLevelLine[1].high;
+    const differenceBetweenYOfCandles = Math.abs(yOfSecondCandle - yOfFirstCandle);
+
+    const numberReduceForY = differenceBetweenYOfCandles / (numberCandles - 2);
     const numberReduceForPrice = differenceBetweenHighs / numberCandles;
 
     let originalTimeUnixForEndCandle;
 
+    let currentY = yOfSecondCandle;
     let currentPrice = newLevelLine[1].high;
 
     for (let j = indexOfSecondCandle + 1; j < lCandles; j += 1) {
+      currentY += numberReduceForY;
       currentPrice -= numberReduceForPrice;
 
-      const price = candlesData[j].isLong ? candlesData[j].close : candlesData[j].open;
-      const limitPrice = currentPrice + (currentPrice * (settings.allowedPercent / 100));
-      const limitPriceForHigh = currentPrice + (currentPrice * ((settings.allowedPercent * 2) / 100));
+      // if (candlesData[j].high > highForLastCandle) {
+      if (candlesData[j].high > currentPrice) {
+        // const yOfCandle = chartCandles.mainSeries.priceToCoordinate(candlesData[j].high);
 
-      if (price > limitPrice || candlesData[j].high > limitPriceForHigh) {
-        indexOfEndCandle = j;
-        originalTimeUnixForEndCandle = candlesData[j].originalTimeUnix;
-        break;
+        // if (yOfCandle < currentY) {
+          // originalTimeUnixForEndCandle = 1640771100;
+          originalTimeUnixForEndCandle = candlesData[j].originalTimeUnix;
+          break;
+        // }
       }
     }
 
     if (!originalTimeUnixForEndCandle) {
-      indexOfEndCandle = lCandles - 1;
-      originalTimeUnixForEndCandle = candlesData[indexOfEndCandle].originalTimeUnix;
+      originalTimeUnixForEndCandle = candlesData[lCandles - 1].originalTimeUnix;
     }
+
+    // console.log('highForLastCandle', highForLastCandle);
 
     newLevelLine.push({
       high: currentPrice,
       originalTimeUnix: originalTimeUnixForEndCandle,
     });
 
-    const touches = [];
-    let numberTouches = 0;
-    currentPrice = newLevelLine[0].high;
-
-    for (let j = indexOfFirstCandle; j < indexOfEndCandle; j += 1) {
-      currentPrice -= numberReduceForPrice;
-
-      if (j === indexOfFirstCandle
-        || j === indexOfSecondCandle
-        || j === indexOfEndCandle) {
-        continue;
-      }
-
-      const nextCandle = candlesData[j];
-
-      if (nextCandle.high >= currentPrice) {
-        numberTouches += 1;
-        touches.push(nextCandle);
-        j += 2;
-      }
-    }
-
-    if (numberTouches < settings.requiredNumberTouches) {
-      continue;
-    }
-
-    touches.forEach(touch => {
-      chartCandles.addMarker({
-        shape: 'arrowDown',
-        color: constants.YELLOW_COLOR,
-        time: touch.originalTimeUnix,
-      });
-    });
-
-    newLevelLine.push(false);
-    levelsLines.push(newLevelLine);
-  }
-
-  for (let i = 0; i < lowestCandles.length; i += 1) {
-    const candle = lowestCandles[i];
-
-    if (!lowestCandles[i + 1]) {
-      break;
-    }
-
-    const newLevelLine = [candle];
-
-    for (let j = i + 1; j < lowestCandles.length; j += 1) {
-      const nextCandle = lowestCandles[j];
-
-      if (candle.low > nextCandle.low) {
-        continue;
-      }
-
-      const lowestCandlesBetweenPeriods = lowestCandles.slice(i + 1, j);
-
-      const isPriceCrossedCandleLow = lowestCandlesBetweenPeriods.some(
-        tCandle => tCandle.low < nextCandle.low,
-      );
-
-      if (isPriceCrossedCandleLow) {
-        continue;
-      }
-
-      newLevelLine.push(nextCandle);
-      break;
-    }
-
-    if (newLevelLine.length === 1) {
-      continue;
-    }
-
-    const indexOfFirstCandle = candlesData.findIndex(
-      tCandle => tCandle.originalTimeUnix === newLevelLine[0].originalTimeUnix,
-    );
-
-    const indexOfSecondCandle = candlesData.findIndex(
-      tCandle => tCandle.originalTimeUnix === newLevelLine[1].originalTimeUnix,
-    );
-
-    let indexOfEndCandle;
-
-    const numberCandles = indexOfSecondCandle - indexOfFirstCandle;
-
-    const differenceBetweenLows = newLevelLine[1].low - newLevelLine[0].low;
-    const numberReduceForPrice = differenceBetweenLows / numberCandles;
-
-    let originalTimeUnixForEndCandle;
-
-    let currentPrice = newLevelLine[1].low;
-
-    for (let j = indexOfSecondCandle + 1; j < lCandles; j += 1) {
-      currentPrice += numberReduceForPrice;
-
-      const price = candlesData[j].isLong ? candlesData[j].open : candlesData[j].close;
-      const limitPrice = currentPrice - (currentPrice * (settings.allowedPercent / 100));
-      const limitPriceForHigh = currentPrice - (currentPrice * ((settings.allowedPercent * 2) / 100));
-
-      if (price < limitPrice || candlesData[j].low < limitPriceForHigh) {
-        indexOfEndCandle = j;
-        originalTimeUnixForEndCandle = candlesData[j].originalTimeUnix;
-        break;
-      }
-    }
-
-    if (!originalTimeUnixForEndCandle) {
-      indexOfEndCandle = lCandles - 1;
-      originalTimeUnixForEndCandle = candlesData[indexOfEndCandle].originalTimeUnix;
-    }
-
-    newLevelLine.push({
-      low: currentPrice,
-      originalTimeUnix: originalTimeUnixForEndCandle,
-    });
-
-    const touches = [];
-    let numberTouches = 0;
-    currentPrice = newLevelLine[0].low;
-
-    for (let j = indexOfFirstCandle; j < indexOfEndCandle; j += 1) {
-      currentPrice += numberReduceForPrice;
-
-      if (j === indexOfFirstCandle
-        || j === indexOfSecondCandle
-        || j === indexOfEndCandle) {
-        continue;
-      }
-
-      const nextCandle = candlesData[j];
-
-      if (nextCandle.low <= currentPrice) {
-        numberTouches += 1;
-        touches.push(nextCandle);
-        j += 2;
-      }
-    }
-
-    if (numberTouches < settings.requiredNumberTouches) {
-      continue;
-    }
-
-    touches.forEach(touch => {
-      chartCandles.addMarker({
-        shape: 'arrowUp',
-        color: constants.YELLOW_COLOR,
-        time: touch.originalTimeUnix,
-      });
-    });
-
-    newLevelLine.push(true);
     levelsLines.push(newLevelLine);
   }
 
   highestCandles.forEach(candle => {
     chartCandles.addMarker({
       shape: 'arrowDown',
-      color: constants.GREEN_COLOR,
-      time: candle.originalTimeUnix,
-    });
-  });
-
-  lowestCandles.forEach(candle => {
-    chartCandles.addMarker({
-      shape: 'arrowUp',
-      color: constants.GREEN_COLOR,
+      color: '#4CAF50',
       time: candle.originalTimeUnix,
     });
   });
 
   chartCandles.drawMarkers();
 
-  levelsLines.forEach(([start, middle, end, isLong]) => {
-    const key = isLong ? 'low' : 'high';
-    const color = isLong ? constants.GREEN_COLOR : constants.RED_COLOR;
-
+  levelsLines.forEach(([start, middle, end]) => {
     const newExtraSeries = chartCandles.addExtraSeries({
-      color,
       lastValueVisible: false,
+      color: constants.RED_COLOR,
     });
 
     chartCandles.drawSeries(
       newExtraSeries,
       [start, end].map(candle => ({
-        value: candle[key],
+        value: candle.high,
         time: candle.originalTimeUnix,
       })),
     );

@@ -16,16 +16,22 @@ const BINANCE_COMMISSION = 0.04;
 /* Variables */
 
 let instrumentsDocs = [];
+let targetInstruments = [];
 
 const startDate = moment().utc()
-  .utc().startOf('day');
-  // .add(-1, 'days');
+  .add(-1, 'month');
+  // .utc().startOf('day');
+  // .add(-1, 'days').startOf('day');
 
 const endDate = moment().utc()
-  .startOf('minute');
+  .add(-1, 'days')
+  .startOf('day');
 
 const urlSearchParams = new URLSearchParams(window.location.search);
 const params = Object.fromEntries(urlSearchParams.entries());
+
+const isTest = params.isTest && params.isTest === 'true';
+const isStatistics = params.isStatistics && params.isStatistics === 'true';
 
 /* JQuery */
 
@@ -57,13 +63,12 @@ $(document).ready(async () => {
     return true;
   }
 
-  const isTest = params.isTest && params.isTest === 'true';
-
   const resultGetUserTradeBounds = await makeRequest({
     method: 'GET',
     url: URL_GET_USER_TRADE_BOUNDS,
     query: {
       isTest,
+      isStatistics,
       typeTrade: TYPE_TRADE,
 
       startDate: startDate.toISOString(),
@@ -78,12 +83,6 @@ $(document).ready(async () => {
 
   instrumentsDocs = resultGetInstruments.result;
 
-  let mainPeriods = [];
-
-  let commonProfitForRequest = 0;
-  let commonResultPercentForRequest = 0;
-  let commonSumCommissionsForRequest = 0;
-
   instrumentsDocs.forEach(doc => {
     doc.user_trade_bounds = resultGetUserTradeBounds.result.filter(
       bound => bound.instrument_id === doc._id,
@@ -94,24 +93,20 @@ $(document).ready(async () => {
       bound.trade_ended_at_unix = bound.is_active ? getUnix() : getUnix(bound.trade_ended_at);
     });
 
-    let commonProfit = 0;
-    let commonResultPercent = 0;
-    let commonSumCommissions = 0;
-
     if (!doc.user_trade_bounds.length) {
       instrumentsDocs = instrumentsDocs.filter(d => d._id !== doc._id);
       return true;
     }
+
+    let commonProfit = 0;
+    let commonResultPercent = 0;
+    let commonSumCommissions = 0;
 
     doc.user_trade_bounds.forEach(bound => {
       const divider = bound.trade_started_at_unix % 86400;
       const startOfDayUnix = bound.trade_started_at_unix - divider;
 
       bound.start_of_day_unix = startOfDayUnix;
-
-      if (!mainPeriods.includes(startOfDayUnix)) {
-        mainPeriods.push(startOfDayUnix);
-      }
 
       if (!bound.sell_price) {
         bound.sell_price = doc.price;
@@ -148,7 +143,68 @@ $(document).ready(async () => {
       bound.sumCommissions = sumCommissions;
 
       commonProfit += bound.profit;
-      commonResultPercent += resultPercentPerPrice;
+      commonResultPercent += bound.resultPercent;
+      commonSumCommissions += bound.sumCommissions;
+    });
+
+    doc.profit = commonProfit;
+    doc.resultPercent = commonResultPercent;
+    doc.sumCommissions = commonSumCommissions;
+    doc.result = commonProfit - commonSumCommissions;
+  });
+
+  if (isStatistics) {
+    instrumentsDocs.forEach(doc => {
+      doc.numberGreenPeriods = 0;
+
+      if (doc.resultPercent < -2) {
+        doc.is_active = false;
+      }
+    });
+  }
+
+  render(instrumentsDocs, true);
+  render(instrumentsDocs);
+
+  $profitContainer
+    .on('change', 'input.instrument-show', function () {
+      const $tr = $(this).closest('tr.instrument');
+      const instrumentId = $tr.data('instrument');
+
+      const instrumentDoc = instrumentsDocs.find(
+        doc => doc._id === instrumentId,
+      );
+
+      instrumentDoc.is_active = this.checked;
+
+      render(instrumentsDocs);
+    });
+});
+
+const render = (instrumentsDocs = [], isFirstRender = false) => {
+  let mainPeriods = [];
+
+  let commonProfitForRequest = 0;
+  let commonResultPercentForRequest = 0;
+  let commonSumCommissionsForRequest = 0;
+
+  instrumentsDocs.forEach(doc => {
+    let commonProfit = 0;
+    let commonResultPercent = 0;
+    let commonSumCommissions = 0;
+
+    doc.profit = 0;
+    doc.resultPercent = 0;
+    doc.sumCommissions = 0;
+    doc.result = 0;
+
+    doc.user_trade_bounds.forEach(bound => {
+      if (!mainPeriods.includes(bound.start_of_day_unix)) {
+        mainPeriods.push(bound.start_of_day_unix);
+      }
+
+      commonProfit += bound.profit;
+      commonResultPercent += bound.resultPercent;
       commonSumCommissions += bound.sumCommissions;
     });
 
@@ -157,9 +213,11 @@ $(document).ready(async () => {
     doc.sumCommissions = commonSumCommissions;
     doc.result = commonProfit - commonSumCommissions;
 
-    commonProfitForRequest += doc.profit;
-    commonResultPercentForRequest += doc.resultPercent;
-    commonSumCommissionsForRequest += doc.sumCommissions;
+    if (doc.is_active) {
+      commonProfitForRequest += doc.profit;
+      commonResultPercentForRequest += doc.resultPercent;
+      commonSumCommissionsForRequest += doc.sumCommissions;
+    }
   });
 
   let periodsResultStr = '';
@@ -231,13 +289,17 @@ $(document).ready(async () => {
       }
 
       instrumentsStr += `<tr
-        class="instrument"
+        data-instrument=${doc._id}
+        class="instrument ${doc.is_active ? 'is_active' : ''}"
         id="instrumentid-${doc._id}"
       >
         <td>
           <table>
             <tr>
-              <th class="instrument-name">${doc.name.replace('PERP', '')}</th>
+              <th class="instrument-name">
+                <input class="instrument-show" type="checkbox" id="instrument-${doc._id}" ${doc.is_active ? 'checked' : ''}>
+                <label for="instrument-${doc._id}">${doc.name.replace('PERP', '')}</label>
+              </th>
               <th>Profit</th>
               <th>-</th>
               <th>=</th>
@@ -262,7 +324,8 @@ $(document).ready(async () => {
     ${instrumentsStr}
   </table>`;
 
-  $profitContainer.empty()
+  $profitContainer
+    .empty()
     .append(mainTableStr);
 
   instrumentsDocs
@@ -290,19 +353,10 @@ $(document).ready(async () => {
         const periodKey = periodsKeys[i];
         const $td = $instrument.find(`td.period.p-${periodKey}`);
 
-        let tableStr = `<table>
-          <tr>
-            <th>#</th>
-            <th>Profit</th>
-            <th>-</th>
-            <th>=</th>
-            <th>%</th>
-            <th>Time</th>
-          </tr>
-        `;
+        let tableStr = '';
 
         let periodProfit = 0;
-        let periodProfitPercent = 0;
+        let periodResultPercent = 0;
         let periodSumCommissions = 0;
         const periodBounds = periods.get(periodKey);
 
@@ -327,24 +381,41 @@ $(document).ready(async () => {
             </tr>`;
 
             periodProfit += bound.profit;
-            periodProfitPercent += bound.profitPercent;
+            periodResultPercent += bound.resultPercent;
             periodSumCommissions += bound.sumCommissions;
           });
 
         const periodResult = periodProfit - periodSumCommissions;
 
-        tableStr += `
+        if (isFirstRender && periodResult > 0) {
+          doc.numberGreenPeriods += 1;
+        }
+
+        $td.empty().append(`<table>
+          <tr>
+            <th>#</th>
+            <th>Profit</th>
+            <th>-</th>
+            <th>=</th>
+            <th>%</th>
+            <th>Time</th>
+          </tr>
+
           <tr>
             <td>${periodBounds.length}</td>
             <td>${periodProfit.toFixed(2)}</td>
             <td>${periodSumCommissions.toFixed(2)}</td>
             <td>${periodResult.toFixed(2)}</td>
-            <td>${periodProfitPercent.toFixed(2)}%</td>
+            <td class="${periodResultPercent > 0 ? 'green' : 'red'}">${periodResultPercent.toFixed(2)}%</td>
             <td></td>
           </tr>
-        </table>`;
 
-        $td.empty().append(tableStr);
+          ${tableStr}
+        </table>`);
+      }
+
+      if (doc.numberGreenPeriods < (periodsKeys.length - 2)) {
+        doc.is_active = false;
       }
     });
 
@@ -353,6 +424,10 @@ $(document).ready(async () => {
     const $period = $profitContainer.find(`tr.result td.period.p-${period}`);
 
     instrumentsDocs.forEach(doc => {
+      if (!doc.is_active) {
+        return true;
+      }
+
       targetBounds.push(...doc.user_trade_bounds
         .filter(bound => bound.start_of_day_unix === period));
     });
@@ -378,4 +453,13 @@ $(document).ready(async () => {
       .addClass(periodResultPercent > 0 ? 'green' : 'red')
       .text(`${periodResultPercent.toFixed(2)}%`);
   });
-});
+
+  targetInstruments = instrumentsDocs
+    .filter(doc => doc.is_active)
+    .map(doc => ({
+      instrumentId: doc._id,
+      instrumentName: doc.name,
+    }));
+
+  console.log('targetInstruments', JSON.stringify(targetInstruments));
+};

@@ -155,6 +155,8 @@ class ChartCandles {
   }
 
   drawMarkers() {
+    this.markers = this.markers.sort((a, b) => a.time < b.time ? -1 : 1);
+
     this.mainSeries.setMarkers(this.markers.map(marker => ({
       time: marker.time,
       color: marker.color,
@@ -226,6 +228,8 @@ class ChartCandles {
           low: data.data[2],
           high: data.data[3],
           volume: data.volume,
+
+          isLong: data.data[1] > data.data[0],
         };
       })
       .sort((a, b) => {

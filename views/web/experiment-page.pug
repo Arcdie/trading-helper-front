@@ -18,31 +18,20 @@ block content
 						span.instrument-name Инструмент
 
 					.list
-
+					
 		.row
 			.settings
-				.candles-for-calculate-average-percent
-					p Number candles for calculate average percent
-					input.candles-for-calculate-average-percent(type="text")
+				.padding
+					p Расстояние между поиском max high и min low (чем меньше, тем больше наклонок, но страдает качество)
+					input.padding(type="text")
 					
-				.factor-for-price-change
-					p In how many times price of candle must be changed
-					input.factor-for-price-change(type="text")
+				.allowed-percent
+					p На сколько % тело свечи может пересечь наклонку
+					input.allowed-percent(type="text")
 			
-				.stoploss-percent
-					p StopLoss %
-					input.stoploss-percent(type="text")
-					
-				.consider-btc-mirco-trend
-					label(for='consider-btc-mirco-trend') BTC micro-trend
-					input#consider-btc-mirco-trend(type='checkbox')
-					
-				.consider-futures-mirco-trend
-					label(for='consider-futures-mirco-trend') Futures micro-trend
-					input#consider-futures-mirco-trend(type='checkbox')
-
-		.row
-			.report
+				.number-touches
+					p Сколько касаний необходимо учитывать при создании наклонки
+					input.number-touches(type="text")
 
 block scripts
 	script(src='/libs/moment.min.js')
@@ -51,6 +40,5 @@ block scripts
 
 	script(src='/javascripts/chart-functions/chart-candles.js')
 	script(src='/javascripts/chart-functions/indicators/volume.js')
-	script(src='/javascripts/chart-functions/indicators/supertrend.js')
 
 	script(src='/javascripts/web/experiment.js')
