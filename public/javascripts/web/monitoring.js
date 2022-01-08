@@ -27,17 +27,20 @@ const settings = {
   padding: 20,
   numberTouches: 0,
   allowedPercent: 0.2,
+
+  limitTimeFor1h: 14 * 24 * 60 * 60,
+  limitTimeFor5m: 2 * 24 * 60 * 60,
 };
 
 const urlSearchParams = new URLSearchParams(window.location.search);
 const params = Object.fromEntries(urlSearchParams.entries());
 
-const startDate = moment().utc()
-  .startOf('month')
-  .add(-1, 'months');
-
-const endDate = moment().utc()
-  .endOf('hour');
+// const startDate = moment().utc()
+//   .startOf('month')
+//   .add(-1, 'months');
+//
+// const endDate = moment().utc()
+//   .endOf('hour');
 
 /* JQuery */
 const $chartsContainer = $('.charts-container');
@@ -109,9 +112,11 @@ $(document).ready(async () => {
       await loadCharts({ instrumentId });
 
       calculateFigureLines({ instrumentId });
-      calculateFigureLevels({ instrumentId });
+      // calculateFigureLevels({ instrumentId });
 
-      // splitDays({ instrumentId });
+      if (choosenPeriod === AVAILABLE_PERIODS.get('5m')) {
+        splitDays({ instrumentId });
+      }
 
       choosenInstrumentId = instrumentId;
     });
@@ -147,9 +152,39 @@ $(document).ready(async () => {
         chartCandles.removeMarkers();
 
         calculateFigureLines({ instrumentId });
-        calculateFigureLevels({ instrumentId });
+        // calculateFigureLevels({ instrumentId });
 
-        splitDays({ instrumentId });
+        if (choosenPeriod === AVAILABLE_PERIODS.get('5m')) {
+          splitDays({ instrumentId });
+        }
+      }
+    });
+
+  $chartsContainer
+    .on('click', '.chart-periods div', async function () {
+      if (!choosenInstrumentId) {
+        return true;
+      }
+
+      const period = $(this).data('period');
+
+      if (period !== choosenPeriod) {
+        const $periods = $(this).parent().find('div');
+        $periods.removeClass('is_active');
+        $(this).addClass('is_active');
+
+        choosenPeriod = period;
+
+        const instrumentId = choosenInstrumentId;
+
+        await loadCharts({ instrumentId });
+
+        calculateFigureLines({ instrumentId });
+        // calculateFigureLevels({ instrumentId });
+
+        if (choosenPeriod === AVAILABLE_PERIODS.get('5m')) {
+          splitDays({ instrumentId });
+        }
       }
     });
 
@@ -171,8 +206,22 @@ $(document).ready(async () => {
         return true;
       }
 
-      // arrow down
-      if (e.keyCode === 40) {
+      // arrow right
+      if (e.keyCode === 37) {
+        const indexOfInstrumentDoc = instrumentsDocs.findIndex(
+          doc => doc._id === choosenInstrumentId,
+        );
+
+        const prevIndex = indexOfInstrumentDoc - 1;
+
+        if (!instrumentsDocs[prevIndex]) {
+          return true;
+        }
+
+        $instrumentsList
+          .find('.instrument').eq(prevIndex)
+          .click();
+      } else if (e.keyCode === 39) {
         const indexOfInstrumentDoc = instrumentsDocs.findIndex(
           doc => doc._id === choosenInstrumentId,
         );
@@ -199,12 +248,15 @@ const loadCharts = async ({
 
   const instrumentDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
 
+  const startDate = choosenPeriod === AVAILABLE_PERIODS.get('5m') ?
+    moment().utc().startOf('month') : moment().utc().startOf('month').add(-1, 'months');
+
   instrumentDoc.candles_data = await getCandlesData({
     period: choosenPeriod,
     instrumentId: instrumentDoc._id,
 
-    startTime: startDate.toISOString(),
-    endTime: endDate.toISOString(),
+    startDate: startDate.toISOString(),
+    // endDate: endDate.toISOString(),
   });
 
   const chartKeys = ['futures'];
@@ -292,6 +344,20 @@ const loadCharts = async ({
     const $open = $legend.find('span.open');
     const $close = $legend.find('span.close');
     const $percent = $legend.find('span.percent');
+
+    if (chartKey === 'futures') {
+      chartCandles.chart.subscribeClick((param) => {
+        if (param.time && chartCandles.extraSeries.length) {
+          const existedSeries = chartCandles.extraSeries.find(
+            series => series.id === param.time,
+          );
+
+          if (existedSeries) {
+            chartCandles.removeSeries(existedSeries, false);
+          }
+        }
+      });
+    }
 
     chartCandles.chart.subscribeCrosshairMove((param) => {
       if (param.point) {
@@ -646,7 +712,15 @@ const calculateFigureLines = ({ instrumentId }) => {
     }
 
     if (newFigureLines.length) {
-      figureLines.push(newFigureLines[newFigureLines.length - 1]);
+      const lastFigureLine = newFigureLines[newFigureLines.length - 1];
+
+      const differenceBetweenDates = getUnix() - lastFigureLine[0].originalTimeUnix;
+      const limiter = choosenPeriod === AVAILABLE_PERIODS.get('5m') ?
+        settings.limitTimeFor5m : settings.limitTimeFor1h;
+
+      if (differenceBetweenDates < limiter) {
+        figureLines.push(lastFigureLine);
+      }
     }
   }
 
@@ -780,7 +854,16 @@ const calculateFigureLines = ({ instrumentId }) => {
     }
 
     if (newFigureLines.length) {
-      figureLines.push(newFigureLines[newFigureLines.length - 1]);
+      const lastFigureLine = newFigureLines[newFigureLines.length - 1];
+
+      const differenceBetweenDates = getUnix() - lastFigureLine[0].originalTimeUnix;
+
+      const limiter = choosenPeriod === AVAILABLE_PERIODS.get('5m') ?
+        settings.limitTimeFor5m : settings.limitTimeFor1h;
+
+      if (differenceBetweenDates < limiter) {
+        figureLines.push(lastFigureLine);
+      }
     }
   }
 
@@ -814,6 +897,8 @@ const calculateFigureLines = ({ instrumentId }) => {
       color,
       lineStyle,
       lastValueVisible: false,
+    }, {
+      id: start.originalTimeUnix,
     });
 
     chartCandles.drawSeries(
@@ -1046,25 +1131,25 @@ const getLowLevels = ({
 const getCandlesData = async ({
   instrumentId,
   period,
-  startTime,
-  endTime,
+  startDate,
+  endDate,
 }) => {
   console.log('start loading');
 
-  if (!endTime) {
-    endTime = new Date().toISOString();
+  if (!startDate) {
+    startDate = new Date().toISOString();
   }
 
-  if (!startTime) {
-    startTime = moment().utc().startOf('day').toISOString();
+  if (!endDate) {
+    endDate = moment().utc().toISOString();
   }
 
   const query = {
     instrumentId,
-    startTime,
-    endTime,
-    // isFirstCall: false,
-    isFirstCall: true,
+    startTime: startDate,
+    endTime: endDate,
+    isFirstCall: false,
+    // isFirstCall: true,
   };
 
   const resultGetCandles = await makeRequest({

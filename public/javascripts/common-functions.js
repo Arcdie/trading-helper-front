@@ -60,6 +60,16 @@ const getQueue = (arr, limiter) => {
   return queues;
 };
 
+const getPrecision = (price) => {
+  const dividedPrice = price.toString().split('.');
+
+  if (!dividedPrice[1]) {
+    return 0;
+  }
+
+  return dividedPrice[1].length;
+};
+
 const initPopWindow = (str) => {
   $modalWindow
     .find('div.md-content')

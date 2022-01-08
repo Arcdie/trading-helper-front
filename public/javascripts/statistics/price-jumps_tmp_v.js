@@ -5,8 +5,9 @@ objects, moment, constants, ChartCandles, IndicatorVolume, IndicatorSuperTrend
 
 /* Constants */
 
+const URL_GET_CANDLES = '/api/candles';
 const URL_GET_ACTIVE_INSTRUMENTS = '/api/instruments/active';
-const URL_GET_CONSTANTS = '/api/strategies/priceRebounds/constants';
+const URL_GET_CONSTANTS = '/api/strategies/priceJumps/constants';
 const URL_CREATE_USER_TRADE_BOUND = '/api/user-trade-bounds/for-statistics';
 
 const AVAILABLE_PERIODS = new Map([
@@ -20,7 +21,7 @@ const DEFAULT_PERIOD = AVAILABLE_PERIODS.get('5M');
 
 /* Variables */
 
-const isSaveMode = true;
+const isSaveMode = false;
 
 const settings = {
   stopLossPercent: false,
@@ -33,23 +34,26 @@ const settings = {
 let instrumentsDocs = [];
 
 let choosenInstrumentId;
-let choosenPeriod = DEFAULT_PERIOD;
+const choosenPeriod = DEFAULT_PERIOD;
 const windowHeight = window.innerHeight;
 
 const startDate = moment().utc()
   .startOf('day')
-  .add(-1, 'days');
+  // .add(-1, 'days');
+  .add(-7, 'days');
 
 const endDate = moment().utc()
-  .endOf('day');
-  // .startOf('minute');
+  .startOf('day')
+  .add(-3, 'days');
+  // .startOf('day').add(-1, 'hour');
 
 const urlSearchParams = new URLSearchParams(window.location.search);
 const params = Object.fromEntries(urlSearchParams.entries());
 
-const wsConnectionPort = 3104;
-// const wsConnectionLink = 'localhost';
-const wsConnectionLink = '45.94.157.194';
+const wsConnectionLink = 'localhost';
+// const wsConnectionLink = '45.94.157.194';
+
+const wsConnectionPort = wsConnectionLink !== 'localhost' ? 3104 : 3105;
 
 // const wsClient = false;
 const wsClient = new WebSocket(`ws://${wsConnectionLink}:${wsConnectionPort}`);
@@ -80,14 +84,10 @@ $(document).ready(async () => {
   }
 
   settings.stopLossPercent = resultGetConstants.result.STOPLOSS_PERCENT;
-  settings.factorForPriceChange = resultGetConstants.result.FACTOR_FOR_PRICE_CHANGE;
   settings.considerBtcMircoTrend = resultGetConstants.result.DOES_CONSIDER_BTC_MICRO_TREND;
   settings.considerFuturesMircoTrend = resultGetConstants.result.DOES_CONSIDER_FUTURES_MICRO_TREND;
-  settings.candlesForCalculateAveragePercent = resultGetConstants.result.NUMBER_CANDLES_FOR_CALCULATE_AVERAGE_PERCENT;
 
   $settings.find('.stoploss-percent').val(settings.stopLossPercent);
-  $settings.find('.factor-for-price-change').val(settings.factorForPriceChange);
-  $settings.find('.candles-for-calculate-average-percent').val(settings.candlesForCalculateAveragePercent);
 
   $settings.find('#consider-btc-mirco-trend').prop('checked', settings.considerBtcMircoTrend);
   $settings.find('#consider-futures-mirco-trend').prop('checked', settings.considerFuturesMircoTrend);
@@ -106,10 +106,6 @@ $(document).ready(async () => {
   }
 
   instrumentsDocs = resultGetInstruments.result;
-
-  const allowedInstrumentsIds = ['616f0f7290a7836ed8d5e27d', '616f0f7290a7836ed8d5e253', '616f0f7190a7836ed8d5e1f3', '616f0f7190a7836ed8d5e1b5', '616f0f7190a7836ed8d5e1b3', '616f0f7290a7836ed8d5e289', '616f0f7190a7836ed8d5e219', '616f0f7190a7836ed8d5e1ff', '616f0f7290a7836ed8d5e281', '616f0f7290a7836ed8d5e237', '616f0f7290a7836ed8d5e239', '616f0f7290a7836ed8d5e271', '616f0f7190a7836ed8d5e19b', '616f0f7290a7836ed8d5e279', '616f0f7290a7836ed8d5e247', '616f0f7190a7836ed8d5e1ed', '616f0f7190a7836ed8d5e1d5', '616f0f7190a7836ed8d5e213', '616f0f7290a7836ed8d5e297', '616f0f7190a7836ed8d5e1fb', '616f0f7190a7836ed8d5e1a5', '616f0f7190a7836ed8d5e1d7', '616f0f7290a7836ed8d5e233', '616f0f7190a7836ed8d5e18d', '616f0f7190a7836ed8d5e20d', '616f0f7290a7836ed8d5e269', '616f0f7290a7836ed8d5e23d', '616f0f7190a7836ed8d5e211', '616f0f7190a7836ed8d5e1e5', '616f0f7290a7836ed8d5e235', '616f0f7190a7836ed8d5e1b1', '616f0f7290a7836ed8d5e28d'];
-
-  instrumentsDocs = instrumentsDocs.filter(doc => allowedInstrumentsIds.includes(doc._id));
 
   // main logic
   renderListInstruments(instrumentsDocs);
@@ -159,8 +155,6 @@ $(document).ready(async () => {
         instrumentDoc.my_trades = [];
       }
 
-      const loadTrades = wsClient ? loadTrades2 : loadTrades1;
-
       const trades = await loadTrades({
         instrumentName: instrumentDoc.name,
 
@@ -174,7 +168,7 @@ $(document).ready(async () => {
 
       instrumentDoc.trades = trades;
 
-      loadCharts({ instrumentId });
+      await loadCharts({ instrumentId });
       await calculateCandles({ instrumentId });
       const daysIntervals = splitDays({ instrumentId });
 
@@ -186,24 +180,6 @@ $(document).ready(async () => {
 
       choosenInstrumentId = instrumentId;
     });
-
-  /*
-  $chartsContainer
-    .on('click', '.chart-periods div', async function () {
-      const period = $(this).data('period');
-
-      if (period !== choosenPeriod) {
-        const $periods = $(this).parent().find('div');
-        $periods.removeClass('is_active');
-        $(this).addClass('is_active');
-
-        choosenPeriod = period;
-
-        loadCharts({ instrumentId: choosenInstrumentId });
-        // drawTrades({ instrumentId: choosenInstrumentId });
-      }
-    });
-  */
 
   $settings
     .find('input[type="text"]')
@@ -217,11 +193,6 @@ $(document).ready(async () => {
 
       switch (className) {
         case 'stoploss-percent': settings.stopLossPercent = newValue; break;
-        case 'factor-for-price-change': settings.factorForPriceChange = newValue; break;
-
-        case 'candles-for-calculate-average-percent': {
-          settings.candlesForCalculateAveragePercent = newValue; break;
-        }
 
         default: break;
       }
@@ -235,38 +206,11 @@ $(document).ready(async () => {
           doc.my_trades = [];
         });
 
-        loadCharts({ instrumentId });
+        await loadCharts({ instrumentId });
         await calculateCandles({ instrumentId });
         makeReport();
       }
     });
-
-/*
-  $settings
-    .find('input[type="checkbox"]')
-    .on('change', async function () {
-      const id = $(this).attr('id');
-      const newValue = $(this).is(':checked');
-
-      switch (id) {
-        case 'consider-btc-mirco-trend': settings.considerBtcMircoTrend = newValue; break;
-        case 'consider-futures-mirco-trend': settings.considerFuturesMircoTrend = newValue; break;
-        default: break;
-      }
-
-      if (choosenInstrumentId) {
-        const instrumentId = choosenInstrumentId;
-
-        loadCharts({ instrumentId });
-
-        priceJumps = calculatePriceJumps({ instrumentId });
-        drawMarkersForPriceJumps({ instrumentId }, priceJumps);
-
-        const calculatedProfit = calculateProfit({ instrumentId }, priceJumps);
-        makeReport({ instrumentId }, calculatedProfit);
-      }
-    });
-*/
 
   $chartsContainer
     .on('click', '.chart-slider button', function () {
@@ -387,7 +331,7 @@ $(document).ready(async () => {
 
 /* Functions */
 
-const loadCharts = ({
+const loadCharts = async ({
   instrumentId,
 }) => {
   $chartsContainer.empty();
@@ -398,28 +342,27 @@ const loadCharts = ({
     return null;
   }
 
-  const chartKeys = ['futures'];
-
-  if (settings.considerBtcMircoTrend) {
-    chartKeys.push('btc');
-  }
-
   let appendStr = '';
 
+  const chartKeys = ['futures_5m', 'futures_1h'];
+
+  instrumentDoc.charts = new Map();
+
   chartKeys.forEach(chartKey => {
-    appendStr += `<div class="chart-container ${chartKey}">
+    const period = chartKey.split('_')[1];
+
+    appendStr += `<div class="chart-container ${chartKey} ${chartKey === 'futures_5m' ? 'futures' : ''}">
       <div class="charts-nav">
         <div class="legend">
           <p class="values">ОТКР<span class="open">0</span>МАКС<span class="high">0</span>МИН<span class="low">0</span>ЗАКР<span class="close">0</span><span class="percent">0%</span></p>
         </div>
         <div class="row">
           <div class="chart-periods">
-            <div class="1m is_worked ${choosenPeriod === AVAILABLE_PERIODS.get('1M') ? 'is_active' : ''}" data-period="1m"><span>1M</span></div>
-            <div class="5m is_worked  ${choosenPeriod === AVAILABLE_PERIODS.get('5M') ? 'is_active' : ''}" data-period="5m"><span>5M</span></div>
+            <div class="${period} is_worked is_active" data-period="${period}"><span>${period.toUpperCase()}</span></div>
           </div>
         </div>
         <div class="actions-menu">
-          <div class="chart-slider ${chartKey}">
+          <div class="chart-slider ${chartKey} ${chartKey === 'futures_5m' ? 'futures' : ''}">
             <button class="previous"><</button>
             <p><span class="current-slide">0</span>/<span class="amount-slides">0</span></p>
             <button class="next">></button>
@@ -433,46 +376,69 @@ const loadCharts = ({
 
   $chartsContainer.append(appendStr);
 
-  const listCharts = [];
-
-  chartKeys.forEach(chartKey => {
+  for await (const chartKey of chartKeys) {
     const $chartContainer = $chartsContainer.find(`.chart-container.${chartKey}`);
     const $rootContainer = $chartContainer.find('.charts');
 
-    let chartKeyDoc;
+    const period = chartKey.split('_')[1];
+
+    const chartCandles = new ChartCandles($rootContainer, period, instrumentDoc);
+    const indicatorVolume = new IndicatorVolume($rootContainer);
+
+    const indicatorMicroSuperTrend = new IndicatorSuperTrend(chartCandles.chart, {
+      factor: 3,
+      artPeriod: 10,
+      candlesPeriod: period,
+    });
+
+    const indicatorMacroSuperTrend = new IndicatorSuperTrend(chartCandles.chart, {
+      factor: 5,
+      artPeriod: 20,
+      candlesPeriod: period,
+    });
+
+    const insertObj = {
+      chart_candles: chartCandles,
+      indicator_volume: indicatorVolume,
+      indicator_micro_supertrend: indicatorMicroSuperTrend,
+      indicator_macro_supertrend: indicatorMacroSuperTrend,
+    };
 
     switch (chartKey) {
-      case 'futures': { chartKeyDoc = instrumentDoc; break; }
+      case 'futures_5m': {
+        break;
+      }
 
-      case 'btc': {
-        const btcDoc = instrumentsDocs.find(doc => doc.name === 'BTCUSDTPERP');
-        chartKeyDoc = btcDoc;
+      case 'futures_1h': {
+        const candlesData = await getCandlesData({
+          period: '1h',
+          instrumentId: instrumentDoc._id,
+          endTime: endDate.add(1, 'days').toISOString(),
+          startTime: startDate.add(-10, 'days').toISOString(),
+        });
+
+        chartCandles.setOriginalData(candlesData, false);
+        chartCandles.drawSeries(chartCandles.mainSeries, chartCandles.originalData);
+
+        indicatorVolume.drawSeries(indicatorVolume.mainSeries, chartCandles.originalData.map(e => ({
+          value: e.volume,
+          time: e.time,
+        })));
+
+        const calculatedMicroTrendData = indicatorMicroSuperTrend.calculateAndDraw(chartCandles.originalData);
+        const calculatedMacroTrendData = indicatorMacroSuperTrend.calculateAndDraw(chartCandles.originalData);
+
+        insertObj.indicator_micro_supertrend_data = calculatedMicroTrendData;
+        insertObj.indicator_macro_supertrend_data = calculatedMacroTrendData;
+
         break;
       }
 
       default: break;
     }
 
-    const chartCandles = new ChartCandles($rootContainer, choosenPeriod, chartKeyDoc);
-    const indicatorVolume = new IndicatorVolume($rootContainer);
-
-    const indicatorMicroSuperTrend = new IndicatorSuperTrend(chartCandles.chart, {
-      factor: 3,
-      artPeriod: 10,
-      candlesPeriod: choosenPeriod,
-    });
-
-    const indicatorMacroSuperTrend = new IndicatorSuperTrend(chartCandles.chart, {
-      factor: 5,
-      artPeriod: 20,
-      candlesPeriod: choosenPeriod,
-    });
-
     chartCandles.chartKey = chartKey;
-    chartKeyDoc.chart_candles = chartCandles;
-    chartKeyDoc.indicator_volume = indicatorVolume;
-    chartKeyDoc.indicator_micro_supertrend = indicatorMicroSuperTrend;
-    chartKeyDoc.indicator_macro_supertrend = indicatorMacroSuperTrend;
+    instrumentDoc.charts.set(period, insertObj);
 
     const $ruler = $chartContainer.find('span.ruler');
     const $legend = $chartContainer.find('.legend');
@@ -482,7 +448,7 @@ const loadCharts = ({
     const $close = $legend.find('span.close');
     const $percent = $legend.find('span.percent');
 
-    if (chartKey === 'futures') {
+    if (chartKey === 'futures_5m') {
       chartCandles.chart.subscribeClick((param) => {
         if (param.time && instrumentDoc.my_trades.length) {
           let nearestSlideIndex = -1;
@@ -494,7 +460,7 @@ const loadCharts = ({
           });
 
           if (~nearestSlideIndex) {
-            const $slider = $chartsContainer.find('.chart-slider.futures');
+            const $slider = $chartsContainer.find('.chart-slider.futures_5m');
 
             $slider
               .find('span.current-slide')
@@ -507,8 +473,8 @@ const loadCharts = ({
     chartCandles.chart.subscribeCrosshairMove((param) => {
       if (param.point) {
         const coordinateToPrice = chartCandles.mainSeries.coordinateToPrice(param.point.y);
-        const differenceBetweenInstrumentAndCoordinatePrices = Math.abs(chartKeyDoc.price - coordinateToPrice);
-        const percentPerPrice = 100 / (chartKeyDoc.price / differenceBetweenInstrumentAndCoordinatePrices);
+        const differenceBetweenInstrumentAndCoordinatePrices = Math.abs(instrumentDoc.price - coordinateToPrice);
+        const percentPerPrice = 100 / (instrumentDoc.price / differenceBetweenInstrumentAndCoordinatePrices);
 
         $ruler
           .text(`${percentPerPrice.toFixed(1)}%`)
@@ -522,7 +488,7 @@ const loadCharts = ({
         const price = param.seriesPrices.get(chartCandles.mainSeries);
 
         if (price) {
-          const differenceBetweenHighAndLow = price.high - price.low;
+          const differenceBetweenHighAndLow = Math.abs(price.open - price.close);
           const percentPerPrice = 100 / (price.low / differenceBetweenHighAndLow);
 
           $open.text(price.open);
@@ -534,42 +500,40 @@ const loadCharts = ({
       }
     });
 
-    listCharts.push(chartCandles, indicatorVolume);
-  });
+    const listCharts = [chartCandles, indicatorVolume];
 
-  let isCrossHairMoving = false;
+    listCharts.forEach(elem => {
+      const otherCharts = listCharts.filter(chart => chart.chartKey !== elem.chartKey);
 
-  listCharts.forEach(elem => {
-    const otherCharts = listCharts.filter(chart => chart.chartKey !== elem.chartKey);
+      let isCrossHairMoving = false;
 
-    elem.chart.subscribeCrosshairMove(param => {
-      if (!param.point || !param.time || isCrossHairMoving) {
-        return true;
-      }
+      elem.chart.subscribeCrosshairMove(param => {
+        if (!param.point || !param.time || isCrossHairMoving) {
+          return true;
+        }
 
-      isCrossHairMoving = true;
+        isCrossHairMoving = true;
 
-      otherCharts.forEach(innerElem => {
-        innerElem.chart.moveCrosshair(param.point);
-      });
-
-      isCrossHairMoving = false;
-
-      elem.chart.timeScale().subscribeVisibleLogicalRangeChange(range => {
         otherCharts.forEach(innerElem => {
-          innerElem.chart.timeScale().setVisibleLogicalRange(range);
+          innerElem.chart.moveCrosshair(param.point);
+        });
+
+        isCrossHairMoving = false;
+
+        elem.chart.timeScale().subscribeVisibleLogicalRangeChange(range => {
+          otherCharts.forEach(innerElem => {
+            innerElem.chart.timeScale().setVisibleLogicalRange(range);
+          });
         });
       });
-    });
-  });
 
-  listCharts.forEach(chartWrapper => {
-    chartWrapper.chart.applyOptions({
-      timeScale: {
-        timeVisible: true,
-      },
+      elem.chart.applyOptions({
+        timeScale: {
+          timeVisible: true,
+        },
+      });
     });
-  });
+  }
 };
 
 const calculateCandles = async ({ instrumentId }) => {
@@ -579,66 +543,72 @@ const calculateCandles = async ({ instrumentId }) => {
     return null;
   }
 
-  const chartCandles = instrumentDoc.chart_candles;
-  const indicatorVolume = instrumentDoc.indicator_volume;
-  const indicatorMicroSuperTrend = instrumentDoc.indicator_micro_supertrend;
-  const indicatorMacroSuperTrend = instrumentDoc.indicator_macro_supertrend;
+  const chart = instrumentDoc.charts.get('5m');
+  const chart1H = instrumentDoc.charts.get('1h');
+
+  const chartCandles = chart.chart_candles;
+  const indicatorVolume = chart.indicator_volume;
+  const indicatorMicroSuperTrend = chart.indicator_micro_supertrend;
+  const indicatorMacroSuperTrend = chart.indicator_macro_supertrend;
+
+  const chart1HMacroData = chart1H.indicator_micro_supertrend_data;
 
   instrumentDoc.price_jumps = [];
   chartCandles.originalData = [];
 
+  let microTrendData = [];
+  let macroTrendData = [];
+
   let periods = instrumentDoc.trades;
 
-  if (choosenPeriod === AVAILABLE_PERIODS.get('5M')) {
-    const coeff = 5 * 60 * 1000;
-    let timeUnixOfFirstCandle = periods[0][0].originalTimeUnix;
+  const coeff = 5 * 60 * 1000;
+  let timeUnixOfFirstCandle = periods[0][0].originalTimeUnix;
 
-    const divider = timeUnixOfFirstCandle % 60;
+  const divider = timeUnixOfFirstCandle % 60;
 
-    if (divider !== 0) {
-      let incr = 1;
-      const next5mInterval = (Math.ceil((timeUnixOfFirstCandle * 1000) / coeff) * coeff) / 1000;
+  if (divider !== 0) {
+    let incr = 1;
+    const next5mInterval = (Math.ceil((timeUnixOfFirstCandle * 1000) / coeff) * coeff) / 1000;
 
-      periods.shift();
+    periods.shift();
 
-      alert('Started while loop');
+    alert('Started while loop');
 
-      while (1) {
-        const firstCandleTimeOfPeriod = periods[incr][0].originalTimeUnix;
+    while (1) {
+      const firstCandleTimeOfPeriod = periods[incr][0].originalTimeUnix;
 
-        if (firstCandleTimeOfPeriod === next5mInterval) {
-          timeUnixOfFirstCandle = firstCandleTimeOfPeriod;
-          break;
-        }
-
-        incr += 1;
-        periods.shift();
+      if (firstCandleTimeOfPeriod === next5mInterval) {
+        timeUnixOfFirstCandle = firstCandleTimeOfPeriod;
+        break;
       }
+
+      incr += 1;
+      periods.shift();
+    }
+  }
+
+  let newPeriod = [];
+  const newPeriods = [];
+
+  let current5mInterval = timeUnixOfFirstCandle;
+  let next5mInterval = current5mInterval + 300;
+
+  periods.forEach(period => {
+    const timeUnixOfFirstCandleInPeriod = period[0].originalTimeUnix;
+
+    if (timeUnixOfFirstCandleInPeriod < next5mInterval) {
+      newPeriod.push(...period);
+      return true;
     }
 
-    let newPeriod = [];
-    const newPeriods = [];
+    newPeriods.push(newPeriod);
 
-    let current5mInterval = timeUnixOfFirstCandle;
-    let next5mInterval = current5mInterval + 300;
+    newPeriod = [...period];
+    current5mInterval = next5mInterval;
+    next5mInterval += 300;
+  });
 
-    periods.forEach(period => {
-      const timeUnixOfFirstCandleInPeriod = period[0].originalTimeUnix;
-
-      if (timeUnixOfFirstCandleInPeriod < next5mInterval) {
-        newPeriod.push(...period);
-        return true;
-      }
-
-      newPeriods.push(newPeriod);
-
-      newPeriod = [...period];
-      current5mInterval = next5mInterval;
-      next5mInterval += 300;
-    });
-
-    periods = newPeriods;
-  }
+  periods = newPeriods;
 
   const lPeriods = periods.length;
 
@@ -676,28 +646,33 @@ const calculateCandles = async ({ instrumentId }) => {
         myTrade => myTrade.isActive,
       );
 
-      if (!doesExistStrategy && isClosed && !doesExistActiveTrade) {
-        const result = calculatePriceJumps(chartCandles.originalData, {
+      if (!doesExistStrategy && !doesExistActiveTrade) {
+        const result = calculatePriceJumps({
+          candlesData: chartCandles.originalData,
+          microTrendData,
+          macroTrendData,
+        }, {
           open,
           close,
+          isClosed,
           low: minLow,
           high: maxHigh,
           originalTimeUnix: time,
+        }, {
+          macroTrendData1h: chart1HMacroData,
         });
 
         if (result) {
           doesExistStrategy = true;
           instrumentDoc.price_jumps.push(result);
 
-          const isLong = !(close > open);
-
           createMyTrade(instrumentDoc, {
-            isLong,
+            isLong: result.isLong,
             stopLossPercent: settings.stopLossPercent,
             takeProfitPercent: settings.stopLossPercent,
 
-            buyPrice: isLong ? close : 0,
-            sellPrice: !isLong ? close : 0,
+            buyPrice: result.isLong ? close : 0,
+            sellPrice: !result.isLong ? close : 0,
 
             tradeStartedAt: time,
           });
@@ -721,6 +696,9 @@ const calculateCandles = async ({ instrumentId }) => {
       high: maxHigh,
       volume: sumVolume,
     });
+
+    microTrendData = indicatorMicroSuperTrend.calculateData(chartCandles.originalData);
+    macroTrendData = indicatorMacroSuperTrend.calculateData(chartCandles.originalData);
   }
 
   const lastCandle = chartCandles.originalData[chartCandles.originalData.length - 1];
@@ -744,7 +722,8 @@ const calculateCandles = async ({ instrumentId }) => {
 const splitDays = ({ instrumentId }) => {
   const instrumentDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
 
-  const chartCandles = instrumentDoc.chart_candles;
+  const chart = instrumentDoc.charts.get('5m');
+  const chartCandles = chart.chart_candles;
   let { originalData } = chartCandles;
 
   if (!originalData || !originalData.length) {
@@ -830,48 +809,48 @@ const splitDays = ({ instrumentId }) => {
   return intervals;
 };
 
-const calculatePriceJumps = (originalData, currentCandle) => {
-  const lOriginalData = originalData.length;
+const calculatePriceJumps = ({
+  candlesData,
+  microTrendData,
+  macroTrendData,
+}, currentCandle, {
+  macroTrendData1h,
+}) => {
+  // const lCandlesData = candlesData.length;
+  // const lMicroData = microTrendData.length;
+  const lMacroData = macroTrendData.length;
+  // const lastValueMicroData = microTrendData[lMicroData - 1];
+  const lastValueMacroData = macroTrendData[lMacroData - 1];
 
-  if (!lOriginalData || lOriginalData < settings.candlesForCalculateAveragePercent) {
+  if (!lastValueMacroData || !currentCandle.isClosed) {
     return false;
   }
 
-  let averagePercent = 0;
+  if (!lastValueMacroData.isLong && currentCandle.close > lastValueMacroData.topBand) {
+    const startOfHour = currentCandle.originalTimeUnix - (currentCandle.originalTimeUnix % 3600);
 
-  for (let j = lOriginalData - settings.candlesForCalculateAveragePercent; j < lOriginalData; j += 1) {
-    const candle = originalData[j];
-    const isLong = candle.close > candle.open;
+    const data1H = macroTrendData1h.find(d => d.originalTimeUnix === startOfHour);
 
-    const differenceBetweenPrices = isLong ?
-      candle.high - candle.open : candle.open - candle.low;
-    const percentPerPrice = 100 / (candle.open / differenceBetweenPrices);
+    if (!data1H) {
+      alert('!data1H');
+    }
 
-    averagePercent += percentPerPrice;
+    if (data1H.isLong) {
+      const isLong = true;
+
+      return {
+        ...currentCandle,
+        isLong,
+      };
+    }
   }
 
-  averagePercent = parseFloat(
-    (averagePercent / settings.candlesForCalculateAveragePercent).toFixed(2),
-  );
-
-  const isLong = currentCandle.close > currentCandle.open;
-
-  const differenceBetweenPrices = Math.abs(
-    isLong ? currentCandle.high - currentCandle.open : currentCandle.open - currentCandle.low,
-  );
-
-  const percentPerPrice = 100 / (currentCandle.open / differenceBetweenPrices);
-
-  if (percentPerPrice > (averagePercent * settings.factorForPriceChange)) {
-    return {
-      ...currentCandle,
-      averagePercent,
-    };
-  }
+  return false;
 };
 
 const checkMyTrades = async (instrumentDoc, { price, timeUnix }, isFinish = false) => {
-  const chartCandles = instrumentDoc.chart_candles;
+  const chart = instrumentDoc.charts.get('5m');
+  const chartCandles = chart.chart_candles;
 
   if (!instrumentDoc.my_trades || !instrumentDoc.my_trades.length) {
     return true;
@@ -1089,7 +1068,9 @@ const scrollToTrade = (action, { instrumentId }, slides) => {
   }
 
   const instrumentDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
-  const chartCandles = instrumentDoc.chart_candles;
+
+  const chart = instrumentDoc.charts.get('5m');
+  const chartCandles = chart.chart_candles;
 
   const $slider = $chartsContainer.find('.chart-slider.futures');
   const $currentSlide = $slider.find('span.current-slide');
@@ -1430,76 +1411,7 @@ const makeReport = () => {
   });
 };
 
-const loadTrades1 = async ({
-  instrumentName,
-
-  startDate,
-  endDate,
-}) => {
-  console.log('started loading');
-
-  const linkToFile = `/files/aggTrades/${instrumentName}/${instrumentName}.json`;
-
-  const fileData = await makeRequest({
-    method: 'GET',
-    url: linkToFile,
-  });
-
-  if (!fileData) {
-    alert(`Cant makeRequest ${linkToFile}`);
-    return false;
-  }
-
-  const trades = fileData || [];
-
-  console.log('ended loading');
-
-  if (!trades.length) {
-    return false;
-  }
-
-  const splitByMinutes = [];
-  let newSplit = [trades[0]];
-
-  let minute = new Date(parseInt(trades[0][2], 10)).getUTCMinutes();
-
-  for (let i = 1; i < trades.length; i += 1) {
-    const minuteOfTrade = new Date(parseInt(trades[i][2], 10)).getUTCMinutes();
-
-    if (minuteOfTrade !== minute) {
-      minute = minuteOfTrade;
-
-      splitByMinutes.push(
-        newSplit.map(tradeData => {
-          const [
-            price,
-            quantity,
-            time,
-          ] = tradeData;
-
-          const originalTimeUnix = parseInt(
-            (new Date(parseInt(time, 10)).setSeconds(0)) / 1000, 10,
-          );
-
-          return {
-            price: parseFloat(price),
-            quantity: parseFloat(quantity),
-            originalTimeUnix,
-          };
-        }),
-      );
-
-      newSplit = [trades[i]];
-      continue;
-    }
-
-    newSplit.push(trades[i]);
-  }
-
-  return splitByMinutes;
-};
-
-const loadTrades2 = async ({
+const loadTrades = async ({
   instrumentName,
 
   startDate,
@@ -1589,16 +1501,56 @@ const loadTrades2 = async ({
   return splitByMinutes;
 };
 
+const getCandlesData = async ({
+  instrumentId,
+  period,
+  startTime,
+  endTime,
+}) => {
+  console.log('start loading');
+
+  if (!endTime) {
+    endTime = new Date().toISOString();
+  }
+
+  if (!startTime) {
+    startTime = moment().utc().startOf('day').toISOString();
+  }
+
+  const query = {
+    instrumentId,
+    startTime,
+    endTime,
+    isFirstCall: false,
+  };
+
+  const resultGetCandles = await makeRequest({
+    method: 'GET',
+    url: `${URL_GET_CANDLES}/${period}`,
+    query,
+  });
+
+  if (!resultGetCandles || !resultGetCandles.status) {
+    alert(resultGetCandles.message || `Cant makeRequest ${URL_GET_CANDLES}`);
+    return [];
+  }
+
+  console.log('end loading');
+
+  return resultGetCandles.result;
+};
+
+
 const reset = ({ instrumentId }) => {
   // chart
   const instrumentDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
 
   $chartsContainer.empty();
 
-  instrumentDoc.chart_candles = false;
-  instrumentDoc.indicator_volume = false;
-  instrumentDoc.indicator_micro_supertrend = false;
-  instrumentDoc.indicator_macro_supertrend = false;
+  // instrumentDoc.chart_candles = false;
+  // instrumentDoc.indicator_volume = false;
+  // instrumentDoc.indicator_micro_supertrend = false;
+  // instrumentDoc.indicator_macro_supertrend = false;
 
   // report
   const $result = $report.find('tr.result');
@@ -1609,16 +1561,6 @@ const reset = ({ instrumentId }) => {
   $result.find('.commonResultPercent').text('0%');
 
   $report.find('tr.instrument').remove();
-};
-
-const getPrecision = (price) => {
-  const dividedPrice = price.toString().split('.');
-
-  if (!dividedPrice[1]) {
-    return 0;
-  }
-
-  return dividedPrice[1].length;
 };
 
 const createUserTradeBound = async (myTrade, { instrumentId }) => {

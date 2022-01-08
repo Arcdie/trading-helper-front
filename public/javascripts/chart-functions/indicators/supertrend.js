@@ -213,4 +213,9 @@ class IndicatorSuperTrend {
       series.setData(data);
     } else series.update(data);
   }
+
+  reset() {
+    this.topSeries = [];
+    this.bottomSeries = [];
+  }
 }

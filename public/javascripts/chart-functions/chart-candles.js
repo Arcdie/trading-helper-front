@@ -117,7 +117,7 @@ class ChartCandles {
     }
   }
 
-  addExtraSeries(optionalParams) {
+  addExtraSeries(optionalParams, extraParams = {}) {
     const {
       minMove,
       precision,
@@ -137,7 +137,7 @@ class ChartCandles {
       // lineStyle: LightweightCharts.LineStyle.LargeDashed,
     });
 
-    newExtraSeries.id = new Date().getTime();
+    newExtraSeries.id = extraParams.id || new Date().getTime();
     this.extraSeries.push(newExtraSeries);
     return newExtraSeries;
   }

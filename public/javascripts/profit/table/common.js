@@ -18,20 +18,26 @@ const BINANCE_COMMISSION = 0.04;
 let instrumentsDocs = [];
 let targetInstruments = [];
 
-const startDate = moment().utc()
-  .add(-1, 'month');
-  // .utc().startOf('day');
-  // .add(-1, 'days').startOf('day');
+let startDate = moment().utc()
+  .add(-2, 'months')
+  .startOf('year');
+  // .add(-1, 'days');
 
-const endDate = moment().utc()
-  .add(-1, 'days')
-  .startOf('day');
+let endDate = moment().utc();
 
 const urlSearchParams = new URLSearchParams(window.location.search);
 const params = Object.fromEntries(urlSearchParams.entries());
 
 const isTest = params.isTest && params.isTest === 'true';
 const isStatistics = params.isStatistics && params.isStatistics === 'true';
+
+if (params.startDate) {
+  startDate = moment.unix(parseInt(params.startDate, 10));
+}
+
+if (params.endDate) {
+  endDate = moment.unix(parseInt(params.endDate, 10));
+}
 
 /* JQuery */
 
@@ -63,17 +69,23 @@ $(document).ready(async () => {
     return true;
   }
 
+  const query = {
+    isTest,
+    isStatistics,
+    typeTrade: TYPE_TRADE,
+
+    startDate: startDate.toISOString(),
+    endDate: endDate.toISOString(),
+  };
+
+  if (params.isLong) {
+    query.isLong = params.isLong;
+  }
+
   const resultGetUserTradeBounds = await makeRequest({
     method: 'GET',
     url: URL_GET_USER_TRADE_BOUNDS,
-    query: {
-      isTest,
-      isStatistics,
-      typeTrade: TYPE_TRADE,
-
-      startDate: startDate.toISOString(),
-      endDate: endDate.toISOString(),
-    },
+    query,
   });
 
   if (!resultGetUserTradeBounds || !resultGetUserTradeBounds.status) {
@@ -153,6 +165,7 @@ $(document).ready(async () => {
     doc.result = commonProfit - commonSumCommissions;
   });
 
+  /*
   if (isStatistics) {
     instrumentsDocs.forEach(doc => {
       doc.numberGreenPeriods = 0;
@@ -162,9 +175,10 @@ $(document).ready(async () => {
       }
     });
   }
+  */
 
   render(instrumentsDocs, true);
-  render(instrumentsDocs);
+  // render(instrumentsDocs);
 
   $profitContainer
     .on('change', 'input.instrument-show', function () {
@@ -460,6 +474,4 @@ const render = (instrumentsDocs = [], isFirstRender = false) => {
       instrumentId: doc._id,
       instrumentName: doc.name,
     }));
-
-  console.log('targetInstruments', JSON.stringify(targetInstruments));
 };

@@ -1,58 +1,48 @@
 /* global
-functions, makeRequest, getQueue, sleep,
+functions, makeRequest, getQueue, getPrecision, sleep,
 objects, moment, constants, ChartCandles, IndicatorVolume, IndicatorSuperTrend
 */
 
 /* Constants */
 
+const URL_GET_CANDLES = '/api/candles';
 const URL_GET_ACTIVE_INSTRUMENTS = '/api/instruments/active';
-const URL_GET_CONSTANTS = '/api/strategies/priceRebounds/constants';
-const URL_CREATE_USER_TRADE_BOUND = '/api/user-trade-bounds/for-statistics';
 
 const AVAILABLE_PERIODS = new Map([
-  ['1M', '1m'],
   ['5M', '5m'],
+  ['1H', '1h'],
+]);
+
+const AVAILABLE_HISTORY_MODES = new Map([
+  ['trades', 'trades'],
+  ['candles', 'candles'],
 ]);
 
 const WORK_AMOUNT = 10;
 const BINANCE_COMMISSION = 0.04;
-const DEFAULT_PERIOD = AVAILABLE_PERIODS.get('5M');
+const DEFAULT_PERIOD = AVAILABLE_PERIODS.get('1H');
+// const HISTORY_MODE = AVAILABLE_HISTORY_MODES.get('candles');
 
 /* Variables */
 
-const isSaveMode = true;
-
 const settings = {
-  stopLossPercent: false,
-  factorForPriceChange: false,
-  considerBtcMircoTrend: false,
+  stopLossPercent: 2,
+  considerBtcMircoTrend: true,
   considerFuturesMircoTrend: false,
-  candlesForCalculateAveragePercent: false,
 };
 
 let instrumentsDocs = [];
 
 let choosenInstrumentId;
-let choosenPeriod = DEFAULT_PERIOD;
+const choosenPeriod = DEFAULT_PERIOD;
 const windowHeight = window.innerHeight;
 
-const startDate = moment().utc()
-  .startOf('day')
-  .add(-6, 'days');
-
-const endDate = moment().utc()
-  .startOf('day');
-  // .startOf('minute');
+// 1 december 2021 - 1 january 2022
+const startDate = moment.unix(1638316800).utc();
+const endDate = moment.unix(1640995200).utc();
 
 const urlSearchParams = new URLSearchParams(window.location.search);
 const params = Object.fromEntries(urlSearchParams.entries());
-
-const wsConnectionPort = 3104;
-// const wsConnectionLink = 'localhost';
-// const wsConnectionLink = '45.94.157.194';
-
-const wsClient = false;
-// const wsClient = new WebSocket(`ws://${wsConnectionLink}:${wsConnectionPort}`);
 
 /* JQuery */
 const $report = $('.report');
@@ -69,25 +59,7 @@ $(document).ready(async () => {
   $instrumentsContainer
     .css({ maxHeight: windowHeight });
 
-  const resultGetConstants = await makeRequest({
-    method: 'GET',
-    url: URL_GET_CONSTANTS,
-  });
-
-  if (!resultGetConstants || !resultGetConstants.status) {
-    alert(resultGetConstants.message || 'Cant makeRequest URL_GET_CONSTANTS');
-    return true;
-  }
-
-  settings.stopLossPercent = resultGetConstants.result.STOPLOSS_PERCENT;
-  settings.factorForPriceChange = resultGetConstants.result.FACTOR_FOR_PRICE_CHANGE;
-  settings.considerBtcMircoTrend = resultGetConstants.result.DOES_CONSIDER_BTC_MICRO_TREND;
-  settings.considerFuturesMircoTrend = resultGetConstants.result.DOES_CONSIDER_FUTURES_MICRO_TREND;
-  settings.candlesForCalculateAveragePercent = resultGetConstants.result.NUMBER_CANDLES_FOR_CALCULATE_AVERAGE_PERCENT;
-
   $settings.find('.stoploss-percent').val(settings.stopLossPercent);
-  $settings.find('.factor-for-price-change').val(settings.factorForPriceChange);
-  $settings.find('.candles-for-calculate-average-percent').val(settings.candlesForCalculateAveragePercent);
 
   $settings.find('#consider-btc-mirco-trend').prop('checked', settings.considerBtcMircoTrend);
   $settings.find('#consider-futures-mirco-trend').prop('checked', settings.considerFuturesMircoTrend);
@@ -106,6 +78,10 @@ $(document).ready(async () => {
   }
 
   instrumentsDocs = resultGetInstruments.result;
+
+  instrumentsDocs.forEach(doc => {
+    doc.my_trades = [];
+  });
 
   // main logic
   renderListInstruments(instrumentsDocs);
@@ -136,10 +112,6 @@ $(document).ready(async () => {
       }
 
       if (choosenInstrumentId) {
-        const oldInstrumentDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
-
-        oldInstrumentDoc.trades = [];
-
         reset({ instrumentId: choosenInstrumentId });
       }
 
@@ -149,55 +121,18 @@ $(document).ready(async () => {
 
       $instrument.addClass('is_active');
 
-      const instrumentDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
-
-      if (!instrumentDoc.my_trades) {
-        instrumentDoc.my_trades = [];
-      }
-
-      const trades = await loadTrades({
-        instrumentName: instrumentDoc.name,
-
-        startDate,
-        endDate,
-      });
-
-      if (!trades) {
-        return true;
-      }
-
-      instrumentDoc.trades = trades;
-
-      loadCharts({ instrumentId });
-      await calculateCandles({ instrumentId });
+      await loadCharts({ instrumentId });
+      await calculateTrades({ instrumentId });
       const daysIntervals = splitDays({ instrumentId });
 
       if (!choosenInstrumentId) {
         initReport(daysIntervals.map(interval => interval.startOfPeriodUnix));
       }
 
-      makeReport();
+      makeReport({ instrumentId });
 
       choosenInstrumentId = instrumentId;
     });
-
-  /*
-  $chartsContainer
-    .on('click', '.chart-periods div', async function () {
-      const period = $(this).data('period');
-
-      if (period !== choosenPeriod) {
-        const $periods = $(this).parent().find('div');
-        $periods.removeClass('is_active');
-        $(this).addClass('is_active');
-
-        choosenPeriod = period;
-
-        loadCharts({ instrumentId: choosenInstrumentId });
-        // drawTrades({ instrumentId: choosenInstrumentId });
-      }
-    });
-  */
 
   $settings
     .find('input[type="text"]')
@@ -211,56 +146,21 @@ $(document).ready(async () => {
 
       switch (className) {
         case 'stoploss-percent': settings.stopLossPercent = newValue; break;
-        case 'factor-for-price-change': settings.factorForPriceChange = newValue; break;
-
-        case 'candles-for-calculate-average-percent': {
-          settings.candlesForCalculateAveragePercent = newValue; break;
-        }
 
         default: break;
       }
 
       if (choosenInstrumentId) {
         const instrumentId = choosenInstrumentId;
-
-        reset({ instrumentId });
 
         instrumentsDocs.forEach(doc => {
           doc.my_trades = [];
         });
 
-        loadCharts({ instrumentId });
-        await calculateCandles({ instrumentId });
-        makeReport();
+        await calculateTrades({ instrumentId });
+        makeReport({ instrumentId });
       }
     });
-
-/*
-  $settings
-    .find('input[type="checkbox"]')
-    .on('change', async function () {
-      const id = $(this).attr('id');
-      const newValue = $(this).is(':checked');
-
-      switch (id) {
-        case 'consider-btc-mirco-trend': settings.considerBtcMircoTrend = newValue; break;
-        case 'consider-futures-mirco-trend': settings.considerFuturesMircoTrend = newValue; break;
-        default: break;
-      }
-
-      if (choosenInstrumentId) {
-        const instrumentId = choosenInstrumentId;
-
-        loadCharts({ instrumentId });
-
-        priceJumps = calculatePriceJumps({ instrumentId });
-        drawMarkersForPriceJumps({ instrumentId }, priceJumps);
-
-        const calculatedProfit = calculateProfit({ instrumentId }, priceJumps);
-        makeReport({ instrumentId }, calculatedProfit);
-      }
-    });
-*/
 
   $chartsContainer
     .on('click', '.chart-slider button', function () {
@@ -327,18 +227,6 @@ $(document).ready(async () => {
     }
   }
 
-  if (wsClient) {
-    wsClient.onclose = () => {
-      alert('Соединение было разорвано, перезагрузите страницу');
-    };
-
-    setInterval(() => {
-      wsClient.send(JSON.stringify({
-        actionName: 'pong',
-      }));
-    }, 1 * 60 * 1000); // 1 minute
-  }
-
   $(document)
     .on('keyup', async e => {
       if (!choosenInstrumentId) {
@@ -381,21 +269,35 @@ $(document).ready(async () => {
 
 /* Functions */
 
-const loadCharts = ({
+const loadCharts = async ({
   instrumentId,
 }) => {
   $chartsContainer.empty();
 
+  const btcDoc = instrumentsDocs.find(doc => doc.name === 'BTCUSDTPERP');
   const instrumentDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
 
-  if (!instrumentDoc.trades || !instrumentDoc.trades.length) {
-    return null;
-  }
+  instrumentDoc.candles_data = await getCandlesData({
+    period: choosenPeriod,
+    instrumentId: instrumentDoc._id,
+
+    startTime: startDate.toISOString(),
+    endTime: endDate.toISOString(),
+  });
 
   const chartKeys = ['futures'];
 
   if (settings.considerBtcMircoTrend) {
     chartKeys.push('btc');
+
+    if (!btcDoc.candles_data) {
+      btcDoc.candles_data = await getCandlesData({
+        period: choosenPeriod,
+        instrumentId: btcDoc._id,
+        startTime: startDate.toISOString(),
+        endTime: endDate.toISOString(),
+      });
+    }
   }
 
   let appendStr = '';
@@ -408,8 +310,7 @@ const loadCharts = ({
         </div>
         <div class="row">
           <div class="chart-periods">
-            <div class="1m is_worked ${choosenPeriod === AVAILABLE_PERIODS.get('1M') ? 'is_active' : ''}" data-period="1m"><span>1M</span></div>
-            <div class="5m is_worked  ${choosenPeriod === AVAILABLE_PERIODS.get('5M') ? 'is_active' : ''}" data-period="5m"><span>5M</span></div>
+            <div class="1h is_worked is_active" data-period="1h"><span>1H</span></div>
           </div>
         </div>
         <div class="actions-menu">
@@ -447,12 +348,37 @@ const loadCharts = ({
       default: break;
     }
 
-    const chartCandles = new ChartCandles($rootContainer, DEFAULT_PERIOD, chartKeyDoc);
+    const chartCandles = new ChartCandles($rootContainer, choosenPeriod, chartKeyDoc);
     const indicatorVolume = new IndicatorVolume($rootContainer);
+
+    const indicatorMicroSuperTrend = new IndicatorSuperTrend(chartCandles.chart, {
+      factor: 3,
+      artPeriod: 10,
+      candlesPeriod: choosenPeriod,
+    });
+
+    const indicatorMacroSuperTrend = new IndicatorSuperTrend(chartCandles.chart, {
+      factor: 5,
+      artPeriod: 20,
+      candlesPeriod: choosenPeriod,
+    });
 
     chartCandles.chartKey = chartKey;
     chartKeyDoc.chart_candles = chartCandles;
     chartKeyDoc.indicator_volume = indicatorVolume;
+    chartKeyDoc.indicator_micro_supertrend = indicatorMicroSuperTrend;
+    chartKeyDoc.indicator_macro_supertrend = indicatorMacroSuperTrend;
+
+    chartCandles.setOriginalData(chartKeyDoc.candles_data, false);
+    chartCandles.drawSeries(chartCandles.mainSeries, chartCandles.originalData);
+
+    indicatorVolume.drawSeries(indicatorVolume.mainSeries, chartCandles.originalData.map(e => ({
+      value: e.volume,
+      time: e.time,
+    })));
+
+    indicatorMicroSuperTrend.calculateAndDraw(chartCandles.originalData);
+    indicatorMacroSuperTrend.calculateAndDraw(chartCandles.originalData);
 
     const $ruler = $chartContainer.find('span.ruler');
     const $legend = $chartContainer.find('.legend');
@@ -552,166 +478,109 @@ const loadCharts = ({
   });
 };
 
-const calculateCandles = async ({ instrumentId }) => {
+const calculateTrades = async ({ instrumentId }) => {
   const instrumentDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
-
-  if (!instrumentDoc.trades || !instrumentDoc.trades.length) {
-    return null;
-  }
+  const btcDoc = instrumentsDocs.find(doc => doc.name === 'BTCUSDTPERP');
 
   const chartCandles = instrumentDoc.chart_candles;
-  const indicatorVolume = instrumentDoc.indicator_volume;
+  const indicatorMicroSuperTrend = instrumentDoc.indicator_micro_supertrend;
+  const indicatorMacroSuperTrend = instrumentDoc.indicator_macro_supertrend;
 
-  instrumentDoc.price_jumps = [];
-  chartCandles.originalData = [];
+  const candlesData = [];
+  const candlesOriginalData = chartCandles.originalData;
+  const lOriginalCandles = candlesOriginalData.length;
 
-  let periods = instrumentDoc.trades;
+  let microTrendData = [];
+  let macroTrendData = [];
 
-  if (choosenPeriod === AVAILABLE_PERIODS.get('5M')) {
-    const coeff = 5 * 60 * 1000;
-    let timeUnixOfFirstCandle = periods[0][0].originalTimeUnix;
+  let microTrendDataBtc = [];
+  let macroTrendDataBtc = [];
 
-    const divider = timeUnixOfFirstCandle % 60;
+  let microTrendDataUpperTimerame = [];
+  let macroTrendDataUpperTimeframe = [];
 
-    if (divider !== 0) {
-      let incr = 1;
-      const next5mInterval = (Math.ceil((timeUnixOfFirstCandle * 1000) / coeff) * coeff) / 1000;
-
-      periods.shift();
-
-      alert('Started while loop');
-
-      while (1) {
-        const firstCandleTimeOfPeriod = periods[incr][0].originalTimeUnix;
-
-        if (firstCandleTimeOfPeriod === next5mInterval) {
-          timeUnixOfFirstCandle = firstCandleTimeOfPeriod;
-          break;
-        }
-
-        incr += 1;
-        periods.shift();
-      }
-    }
-
-    let newPeriod = [];
-    const newPeriods = [];
-
-    let current5mInterval = timeUnixOfFirstCandle;
-    let next5mInterval = current5mInterval + 300;
-
-    periods.forEach(period => {
-      const timeUnixOfFirstCandleInPeriod = period[0].originalTimeUnix;
-
-      if (timeUnixOfFirstCandleInPeriod < next5mInterval) {
-        newPeriod.push(...period);
-        return true;
-      }
-
-      newPeriods.push(newPeriod);
-
-      newPeriod = [...period];
-      current5mInterval = next5mInterval;
-      next5mInterval += 300;
-    });
-
-    periods = newPeriods;
+  if (settings.considerBtcMircoTrend) {
+    microTrendDataBtc = indicatorMicroSuperTrend.calculateData(btcDoc.chart_candles.originalData);
+    macroTrendDataBtc = indicatorMacroSuperTrend.calculateData(btcDoc.chart_candles.originalData);
   }
 
-  const lPeriods = periods.length;
+  /*
+  let candlesData1h = await getCandlesData({
+    period: '1h',
+    instrumentId: instrumentDoc._id,
 
-  for (let i = 0; i < lPeriods; i += 1) {
-    const period = periods[i];
-    const lTrades = period.length;
+    startTime: moment(startDate).add(-1, 'months').toISOString(),
+    endTime: endDate.toISOString(),
+  });
 
-    let doesExistStrategy = false;
+  candlesData1h = chartCandles.prepareNewData(candlesData1h, false);
 
-    const open = period[0].price;
-    const time = period[0].originalTimeUnix;
+  microTrendDataUpperTimerame = indicatorMicroSuperTrend.calculateData(candlesData1h);
+  macroTrendDataUpperTimeframe = indicatorMacroSuperTrend.calculateData(candlesData1h);
+  // */
 
-    let sumVolume = 0;
-    let close = open;
-    let minLow = open;
-    let maxHigh = open;
+  for (let i = 0; i < lOriginalCandles; i += 1) {
+    const currentCandle = candlesOriginalData[i];
 
-    for (let j = 0; j < lTrades; j += 1) {
-      const tradePrice = period[j].price;
+    checkMyTrades(instrumentDoc, currentCandle, {
+      microTrendData,
+      macroTrendData,
+    });
 
-      if (tradePrice < minLow) {
-        minLow = tradePrice;
-      }
+    // const doesExistActiveTrade = instrumentDoc.my_trades
+    //   .find(myTrade => myTrade.isActive);
 
-      if (tradePrice > maxHigh) {
-        maxHigh = tradePrice;
-      }
+    const result = strategyFunctionLong({
+      candlesData,
+      microTrendData,
+      macroTrendData,
 
-      close = tradePrice;
-      sumVolume += period[j].quantity;
+      microTrendDataBtc,
+      macroTrendDataBtc,
+      microTrendDataUpperTimerame,
+      macroTrendDataUpperTimeframe,
+    }, {
+      ...currentCandle,
+      isClosed: true,
+    }, settings);
 
-      const doesExistActiveTrade = instrumentDoc.my_trades.some(
-        myTrade => myTrade.isActive,
-      );
+    if (result) {
+      const stopLossPercent = settings.stopLossPercent / 100;
+      const percentPerPrice = (result.close * stopLossPercent);
 
-      if (!doesExistStrategy && !doesExistActiveTrade) {
-        const result = calculatePriceJumps(chartCandles.originalData, {
-          open,
-          close,
-          low: minLow,
-          high: maxHigh,
-          originalTimeUnix: time,
-        });
+      const stopLossPrice = result.isLong ?
+        (currentCandle.close - percentPerPrice) : (currentCandle.close + percentPerPrice);
 
-        if (result) {
-          doesExistStrategy = true;
-          instrumentDoc.price_jumps.push(result);
+      createMyTrade(instrumentDoc, {
+        isLong: result.isLong,
 
-          const isLong = !(close > open);
+        buyPrice: result.isLong ? currentCandle.close : 0,
+        sellPrice: !result.isLong ? currentCandle.close : 0,
 
-          createMyTrade(instrumentDoc, {
-            isLong,
-            stopLossPercent: settings.stopLossPercent,
-            takeProfitPercent: settings.stopLossPercent,
+        stopLossPrice,
+        // stopLossPrice: result.isLong ? currentCandle.low : currentCandle.high,
 
-            buyPrice: isLong ? close : 0,
-            sellPrice: !isLong ? close : 0,
+        // stopLossPercent: settings.stopLossPercent,
+        // takeProfitPercent: settings.stopLossPercent,
 
-            tradeStartedAt: time,
-          });
-        }
-      }
-
-      checkMyTrades(instrumentDoc, {
-        price: close,
-        timeUnix: time,
+        tradeStartedAt: currentCandle.originalTimeUnix,
       });
     }
 
-    chartCandles.originalData.push({
-      time,
-      originalTime: new Date(time * 1000),
-      originalTimeUnix: time,
+    candlesData.push(currentCandle);
 
-      open,
-      close,
-      low: minLow,
-      high: maxHigh,
-      volume: sumVolume,
-    });
+    microTrendData = indicatorMicroSuperTrend.calculateData(candlesData);
+    macroTrendData = indicatorMacroSuperTrend.calculateData(candlesData);
   }
 
-  const lastCandle = chartCandles.originalData[chartCandles.originalData.length - 1];
+  const lastCandle = candlesData[candlesData.length - 1];
 
-  await checkMyTrades(instrumentDoc, {
-    price: lastCandle.close,
-    timeUnix: lastCandle.originalTimeUnix,
+  checkMyTrades(instrumentDoc, lastCandle, {
+    microTrendData,
+    macroTrendData,
   }, true);
 
-  chartCandles.drawSeries(chartCandles.mainSeries, chartCandles.originalData);
-
-  indicatorVolume.drawSeries(indicatorVolume.mainSeries, chartCandles.originalData.map(e => ({
-    value: e.volume,
-    time: e.time,
-  })));
+  console.log(instrumentDoc.my_trades);
 };
 
 const splitDays = ({ instrumentId }) => {
@@ -786,6 +655,7 @@ const splitDays = ({ instrumentId }) => {
     endOfPeriodUnix: newInterval[newInterval.length - 1].originalTimeUnix,
   });
 
+  /*
   intervals.forEach(interval => {
     const newCandleExtraSeries = chartCandles.addExtraSeries({
       lastValueVisible: false,
@@ -799,122 +669,242 @@ const splitDays = ({ instrumentId }) => {
       time: interval.startOfPeriodUnix,
     }]);
   });
+  */
 
   return intervals;
 };
 
-const calculatePriceJumps = (originalData, currentCandle) => {
-  const lOriginalData = originalData.length;
+const strategyFunctionLong = ({
+  candlesData,
+  microTrendData,
+  macroTrendData,
 
-  if (!lOriginalData || lOriginalData < settings.candlesForCalculateAveragePercent) {
+  microTrendDataBtc,
+  macroTrendDataBtc,
+
+  microTrendDataUpperTimerame,
+  macroTrendDataUpperTimeframe,
+}, currentCandle, settings) => {
+  if (!currentCandle.isClosed) {
     return false;
   }
 
-  let averagePercent = 0;
+  const lCandlesData = candlesData.length;
+  const lMicroTrendData = microTrendData.length;
+  const lMacroTrendData = macroTrendData.length;
 
-  for (let j = lOriginalData - settings.candlesForCalculateAveragePercent; j < lOriginalData; j += 1) {
-    const candle = originalData[j];
-    const isLong = candle.close > candle.open;
+  // if (!lCandlesData || !lMicroTrendData || !lMacroTrendData) {
+  //   return false;
+  // }
 
-    const differenceBetweenPrices = isLong ?
-      candle.high - candle.open : candle.open - candle.low;
-    const percentPerPrice = 100 / (candle.open / differenceBetweenPrices);
-
-    averagePercent += percentPerPrice;
+  if (lCandlesData < (20 * 2) || !lMicroTrendData || !lMacroTrendData) {
+    return false;
   }
 
-  averagePercent = parseFloat(
-    (averagePercent / settings.candlesForCalculateAveragePercent).toFixed(2),
-  );
+  const isLongCurrentCandle = currentCandle.close > currentCandle.open;
 
-  const isLong = currentCandle.close > currentCandle.open;
-
-  const differenceBetweenPrices = Math.abs(
-    isLong ? currentCandle.high - currentCandle.open : currentCandle.open - currentCandle.low,
-  );
-
-  const percentPerPrice = 100 / (currentCandle.open / differenceBetweenPrices);
-
-  if (percentPerPrice > (averagePercent * settings.factorForPriceChange)) {
-    return {
-      ...currentCandle,
-      averagePercent,
-    };
+  if (!isLongCurrentCandle) {
+    return false;
   }
+
+  const lastMicroTrendData = microTrendData[lMicroTrendData - 1];
+  const lastMacroTrendData = macroTrendData[lMacroTrendData - 1];
+
+  // if (lastMicroTrendData.isLong) {
+  //   return false;
+  // }
+
+  if (lastMacroTrendData.isLong) {
+    return false;
+  }
+
+  // if (!lastMacroTrendData.isLong
+  //   || lastMicroTrendData.isLong) {
+  //   return false;
+  // }
+
+  if (currentCandle.close < lastMacroTrendData.superTrend) {
+    return false;
+  }
+
+  const indexOfBtcCandle = microTrendDataBtc.findIndex(
+    data => data.originalTimeUnix === lastMacroTrendData.originalTimeUnix,
+  );
+
+  if (microTrendDataBtc[indexOfBtcCandle].isLong
+    || macroTrendDataBtc[indexOfBtcCandle].isLong) {
+    return false;
+  }
+
+  return {
+    ...currentCandle,
+    isLong: true,
+  };
 };
 
-const checkMyTrades = async (instrumentDoc, { price, timeUnix }, isFinish = false) => {
+const strategyFunctionShort = ({
+  candlesData,
+  microTrendData,
+  macroTrendData,
+
+  microTrendDataBtc,
+  macroTrendDataBtc,
+
+  microTrendDataUpperTimerame,
+  macroTrendDataUpperTimeframe,
+}, currentCandle, settings) => {
+  if (!currentCandle.isClosed) {
+    return false;
+  }
+
+  const lCandlesData = candlesData.length;
+  const lMicroTrendData = microTrendData.length;
+  const lMacroTrendData = macroTrendData.length;
+
+  // if (!lCandlesData || !lMicroTrendData || !lMacroTrendData) {
+  //   return false;
+  // }
+
+  if (lCandlesData < (20 * 2) || !lMicroTrendData || !lMacroTrendData) {
+    return false;
+  }
+
+  const isLongCurrentCandle = currentCandle.close > currentCandle.open;
+
+  if (isLongCurrentCandle) {
+    return false;
+  }
+
+  /*
+  const differenceBetweenOpenAndClose = Math.abs(
+    isLongCurrentCandle ? currentCandle.close - currentCandle.low : currentCandle.high - currentCandle.close,
+  );
+
+  const percentPerPrice = 100 / ((isLongCurrentCandle ? currentCandle.low : currentCandle.high) / differenceBetweenOpenAndClose);
+
+  if (percentPerPrice > settings.stopLossPercent) {
+    return false;
+  }
+  */
+
+  const lastMicroTrendData = microTrendData[lMicroTrendData - 1];
+  const lastMacroTrendData = macroTrendData[lMacroTrendData - 1];
+
+  // if (lastMicroTrendData.isLong) {
+  //   return false;
+  // }
+
+  if (!lastMacroTrendData.isLong) {
+    return false;
+  }
+
+  // if (!lastMacroTrendData.isLong
+  //   || lastMicroTrendData.isLong) {
+  //   return false;
+  // }
+
+  if (currentCandle.close > lastMacroTrendData.superTrend) {
+    return false;
+  }
+
+  const indexOfBtcCandle = microTrendDataBtc.findIndex(
+    data => data.originalTimeUnix === lastMacroTrendData.originalTimeUnix,
+  );
+
+  if (microTrendDataBtc[indexOfBtcCandle].isLong
+    || macroTrendDataBtc[indexOfBtcCandle].isLong) {
+    return false;
+  }
+
+  const lastMicroTrendDataBtc = microTrendDataBtc[lCandlesData - 1];
+  // const lastMacroTrendDataBtc = macroTrendDataBtc[lCandlesData - 1];
+
+  let minLow = lastMicroTrendDataBtc.low;
+  let maxHigh = lastMicroTrendDataBtc.high;
+
+  let increment = 0;
+
+  while (1) {
+    increment += 1;
+
+    const { low, high, isLong } = microTrendDataBtc[lCandlesData - increment];
+
+    if (isLong) {
+      break;
+    }
+
+    if (low < minLow) {
+      minLow = low;
+    }
+
+    if (high > maxHigh) {
+      maxHigh = high;
+    }
+  }
+
+  const differenceBetweenLowAndHigh = Math.abs(maxHigh - minLow);
+  const percentPerPrice = 100 / (maxHigh / differenceBetweenLowAndHigh);
+
+  console.log('percentPerPrice', percentPerPrice);
+
+  if (percentPerPrice < 5) {
+    return false;
+  }
+
+  return {
+    ...currentCandle,
+    isLong: false,
+  };
+};
+
+const checkMyTrades = (instrumentDoc, currentCandle, {
+  microTrendData,
+  macroTrendData,
+}, isFinish = false) => {
   const chartCandles = instrumentDoc.chart_candles;
 
   if (!instrumentDoc.my_trades || !instrumentDoc.my_trades.length) {
     return true;
   }
 
+  const { superTrend } = microTrendData[microTrendData.length - 1];
+
   instrumentDoc.my_trades
     .filter(myTrade => myTrade.isActive)
     .forEach(myTrade => {
-      if ((myTrade.isLong && price > myTrade.takeProfitPrice)
-        || (!myTrade.isLong && price < myTrade.takeProfitPrice)) {
-        let incrValue = 1;
-        let newStopLoss;
-        let newTakeProfit;
-
-        if (myTrade.isLong) {
-          while (1) {
-            newTakeProfit = price + (myTrade.profitStepSize * incrValue);
-            if (newTakeProfit > price) break;
-            incrValue += 1;
-          }
-
-          newStopLoss = (newTakeProfit - (myTrade.profitStepSize * 2));
-        } else {
-          while (1) {
-            newTakeProfit = price - (myTrade.profitStepSize * incrValue);
-            if (newTakeProfit < price) break;
-            incrValue += 1;
-          }
-
-          newStopLoss = (newTakeProfit + (myTrade.profitStepSize * 2));
+      if (!myTrade.takeProfitPercent) {
+        if ((myTrade.isLong && superTrend > myTrade.stopLossPrice)
+          || (!myTrade.isLong && superTrend < myTrade.stopLossPrice)) {
+          myTrade.stopLossPrice = superTrend;
         }
-
-        newStopLoss = parseFloat(newStopLoss.toFixed(instrumentDoc.price_precision));
-
-        myTrade.stopLossPrice = newStopLoss;
-        myTrade.takeProfitPrice = parseFloat(newTakeProfit.toFixed(instrumentDoc.price_precision));
-
-        // myTrade.arrSL.push(myTrade.stopLossPrice);
-        // myTrade.arrTP.push(myTrade.takeProfitPrice);
       }
 
       if (isFinish
-        || (myTrade.isLong && price < myTrade.stopLossPrice)
-        || (!myTrade.isLong && price > myTrade.stopLossPrice)) {
+        || (myTrade.isLong && currentCandle.low < myTrade.stopLossPrice)
+        || (!myTrade.isLong && currentCandle.high > myTrade.stopLossPrice)) {
         myTrade.isActive = false;
-        myTrade.tradeEndedAt = timeUnix;
+        myTrade.tradeEndedAt = currentCandle.originalTimeUnix;
+
+        /*
+        const maxProfitPrice = myTrade.isLong ? myTrade.sellPrice : myTrade.buyPrice;
+
+        if (myTrade.isLong && myTrade.sellPrice < myTrade.takeProfitPrice) {
+          myTrade.sellPrice = myTrade.stopLossPrice;
+        } else if (!myTrade.isLong && myTrade.buyPrice > myTrade.takeProfitPrice) {
+          myTrade.buyPrice = myTrade.stopLossPrice;
+        }
+
+        myTrade.takeProfitPrice = maxProfitPrice;
+        */
 
         if (myTrade.isLong) {
-          myTrade.sellPrice = parseFloat(price);
+          myTrade.sellPrice = myTrade.stopLossPrice;
         } else {
-          myTrade.buyPrice = parseFloat(price);
+          myTrade.buyPrice = myTrade.stopLossPrice;
         }
 
-        let validTradeEndedAt;
-        let validTradeStartedAt;
-
-        if (choosenPeriod === AVAILABLE_PERIODS.get('1M')) {
-          validTradeStartedAt = moment(myTrade.tradeStartedAt * 1000).utc()
-            .startOf('minute').unix();
-
-          validTradeEndedAt = moment(myTrade.tradeEndedAt * 1000).utc()
-            .startOf('minute').unix() + 60;
-        } else {
-          const coeff = 5 * 60 * 1000;
-          const nextIntervalForEndedAtUnix = (Math.ceil((myTrade.tradeEndedAt * 1000) / coeff) * coeff) / 1000;
-          const prevIntervalForStartedAtUnix = ((Math.ceil((myTrade.tradeStartedAt * 1000) / coeff) * coeff) / 1000) - 300;
-
-          validTradeStartedAt = prevIntervalForStartedAtUnix;
-          validTradeEndedAt = nextIntervalForEndedAtUnix;
-        }
+        const validTradeEndedAt = myTrade.tradeStartedAt;
+        const validTradeStartedAt = myTrade.tradeEndedAt;
 
         const keyAction = myTrade.isLong ? 'buyPrice' : 'sellPrice';
 
@@ -974,14 +964,6 @@ const checkMyTrades = async (instrumentDoc, { price, timeUnix }, isFinish = fals
     }, instrumentDoc.my_trades.map(myTrade => ({
       originalTimeUnix: myTrade.tradeStartedAt,
     })));
-
-    if (isSaveMode) {
-      for await (const myTrade of instrumentDoc.my_trades) {
-        await createUserTradeBound(myTrade, {
-          instrumentId: instrumentDoc._id,
-        });
-      }
-    }
   }
 };
 
@@ -1009,29 +991,31 @@ const createMyTrade = (instrumentDoc, options) => {
 
   quantity = parseFloat(quantity.toFixed(stepSizePrecision));
 
-  const stopLossPercent = options.stopLossPercent / 100;
-  const takeProfitPercent = options.takeProfitPercent / 100;
+  if (!options.stopLossPrice) {
+    const stopLossPercent = options.stopLossPercent / 100;
+    const takeProfitPercent = options.takeProfitPercent / 100;
 
-  const stopLossStepSize = parseFloat((price * stopLossPercent).toFixed(instrumentDoc.price_precision));
-  const profitStepSize = parseFloat((price * takeProfitPercent).toFixed(instrumentDoc.price_precision));
+    const stopLossStepSize = parseFloat((price * stopLossPercent).toFixed(instrumentDoc.price_precision));
+    const profitStepSize = parseFloat((price * takeProfitPercent).toFixed(instrumentDoc.price_precision));
 
-  if (options.isLong) {
-    options.takeProfitPrice = price + (profitStepSize * 2);
-    options.stopLossPrice = price - stopLossStepSize;
+    if (options.isLong) {
+      options.takeProfitPrice = price + (profitStepSize * 2);
+      options.stopLossPrice = price - stopLossStepSize;
+    } else {
+      options.takeProfitPrice = price - (profitStepSize * 2);
+      options.stopLossPrice = price + stopLossStepSize;
+    }
+
+    options.profitStepSize = profitStepSize;
+    options.takeProfitPrice = parseFloat(options.takeProfitPrice.toFixed(instrumentDoc.price_precision));
   } else {
-    options.takeProfitPrice = price - (profitStepSize * 2);
-    options.stopLossPrice = price + stopLossStepSize;
+    // ...
   }
 
   options.isActive = true;
   options.quantity = quantity;
-  options.profitStepSize = profitStepSize;
   options.index = instrumentDoc.my_trades.length;
   options.stopLossPrice = parseFloat(options.stopLossPrice.toFixed(instrumentDoc.price_precision));
-  options.takeProfitPrice = parseFloat(options.takeProfitPrice.toFixed(instrumentDoc.price_precision));
-
-  // options.arrSL = [options.stopLossPrice];
-  // options.arrTP = [options.takeProfitPrice];
 
   instrumentDoc.my_trades.push(options);
 };
@@ -1118,7 +1102,7 @@ const initReport = (periods = []) => {
   periods.forEach(period => {
     const validDate = moment(period * 1000).format('DD.MM');
 
-    periodsResultStr += `<td class="period p-${period}" data-period="${period}">
+    periodsResultStr += `<td class="period p-${period} is_active" data-period="${period}">
       <table>
         <tr>
           <th>#</th>
@@ -1171,7 +1155,13 @@ const initReport = (periods = []) => {
     .append(mainTableStr);
 };
 
-const makeReport = () => {
+const makeReport = ({ instrumentId }) => {
+  const instrumentDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
+
+  if (!instrumentDoc.my_trades || !instrumentDoc.my_trades.length) {
+    return true;
+  }
+
   let commonProfitForRequest = 0;
   let commonResultPercentForRequest = 0;
   let commonSumCommissionsForRequest = 0;
@@ -1180,184 +1170,158 @@ const makeReport = () => {
 
   const periods = [];
 
+  $report.find('.period').addClass('is_active');
   $result.find('.period').each((index, elem) => {
     periods.push(parseInt(elem.dataset.period, 10));
   });
 
-  const processedInstrumentsDocs = [];
+  let commonProfit = 0;
+  let commonResult = 0;
+  let commonResultPercent = 0;
+  let commonSumCommissions = 0;
 
-  instrumentsDocs.forEach(doc => {
-    let commonProfit = 0;
-    let commonResultPercent = 0;
-    let commonSumCommissions = 0;
+  instrumentDoc.my_trades.forEach(myTrade => {
+    if (!myTrade.profit) {
+      const divider = myTrade.tradeStartedAt % 86400;
+      const startOfDayUnix = myTrade.tradeStartedAt - divider;
 
-    if (!doc.my_trades || !doc.my_trades.length) {
-      return true;
-    }
+      myTrade.startOfDayUnix = startOfDayUnix;
 
-    doc.profit = 0;
-    doc.result = 0;
-    doc.profitPercent = 0;
-    doc.sumCommissions = 0;
-
-    doc.my_trades.forEach(myTrade => {
-      if (!myTrade.profit) {
-        const divider = myTrade.tradeStartedAt % 86400;
-        const startOfDayUnix = myTrade.tradeStartedAt - divider;
-
-        myTrade.startOfDayUnix = startOfDayUnix;
-
-        if (!myTrade.sellPrice) {
-          alert('No myTrade.sellPrice');
-          myTrade.sellPrice = NaN;
-        }
-
-        if (!myTrade.buyPrice) {
-          alert('No myTrade.buyPrice');
-          myTrade.buyPrice = NaN;
-        }
-
-        const sumBuyPrice = myTrade.buyPrice * myTrade.quantity;
-        const sumSellPrice = myTrade.sellPrice * myTrade.quantity;
-
-        const sumBuyCommissions = (sumBuyPrice * (BINANCE_COMMISSION / 100));
-        const sumSellCommissions = (sumSellPrice * (BINANCE_COMMISSION / 100));
-
-        const sumCommissions = (sumBuyCommissions + sumSellCommissions);
-
-        const profit = myTrade.sellPrice - myTrade.buyPrice;
-        const startPrice = myTrade.isLong ? myTrade.buyPrice : myTrade.sellPrice;
-
-        const result = (profit * myTrade.quantity) - sumCommissions;
-
-        let profitPercentPerPrice = 100 / (startPrice / Math.abs(profit));
-        const resultPercentPerPrice = 100 / (WORK_AMOUNT / result);
-
-        if (profit < 0) {
-          profitPercentPerPrice = -profitPercentPerPrice;
-        }
-
-        myTrade.result = result;
-        myTrade.profit = (profit * myTrade.quantity);
-        myTrade.profitPercent = profitPercentPerPrice;
-        myTrade.resultPercent = resultPercentPerPrice;
-        myTrade.sumCommissions = sumCommissions;
+      if (!myTrade.sellPrice) {
+        alert('No myTrade.sellPrice');
+        myTrade.sellPrice = NaN;
       }
 
-      commonProfit += myTrade.profit;
-      commonResultPercent += myTrade.resultPercent;
-      commonSumCommissions += myTrade.sumCommissions;
-    });
+      if (!myTrade.buyPrice) {
+        alert('No myTrade.buyPrice');
+        myTrade.buyPrice = NaN;
+      }
 
-    doc.profit = commonProfit;
-    doc.resultPercent = commonResultPercent;
-    doc.sumCommissions = commonSumCommissions;
-    doc.result = commonProfit - commonSumCommissions;
+      const sumBuyPrice = myTrade.buyPrice * myTrade.quantity;
+      const sumSellPrice = myTrade.sellPrice * myTrade.quantity;
 
-    commonProfitForRequest += doc.profit;
-    commonResultPercentForRequest += doc.resultPercent;
-    commonSumCommissionsForRequest += doc.sumCommissions;
+      const sumBuyCommissions = (sumBuyPrice * (BINANCE_COMMISSION / 100));
+      const sumSellCommissions = (sumSellPrice * (BINANCE_COMMISSION / 100));
 
-    processedInstrumentsDocs.push(doc);
+      const sumCommissions = (sumBuyCommissions + sumSellCommissions);
+
+      const profit = myTrade.sellPrice - myTrade.buyPrice;
+      const startPrice = myTrade.isLong ? myTrade.buyPrice : myTrade.sellPrice;
+
+      const result = (profit * myTrade.quantity) - sumCommissions;
+
+      let profitPercentPerPrice = 100 / (startPrice / Math.abs(profit));
+      const resultPercentPerPrice = 100 / (WORK_AMOUNT / result);
+
+      if (profit < 0) {
+        profitPercentPerPrice = -profitPercentPerPrice;
+      }
+
+      myTrade.result = result;
+      myTrade.profit = (profit * myTrade.quantity);
+      myTrade.profitPercent = profitPercentPerPrice;
+      myTrade.resultPercent = resultPercentPerPrice;
+      myTrade.sumCommissions = sumCommissions;
+    }
+
+    commonProfit += myTrade.profit;
+    commonResultPercent += myTrade.resultPercent;
+    commonSumCommissions += myTrade.sumCommissions;
   });
 
-  if (!processedInstrumentsDocs.length) {
-    return true;
+  commonResult = commonProfit - commonSumCommissions;
+
+  commonProfitForRequest += commonProfit;
+  commonResultPercentForRequest += commonResultPercent;
+  commonSumCommissionsForRequest += commonSumCommissions;
+
+  let tdStr = '';
+
+  for (let i = 0; i < periods.length; i += 1) {
+    let tableStr = '';
+
+    let periodProfit = 0;
+    let periodResultPercent = 0;
+    let periodSumCommissions = 0;
+
+    const periodMyTrades = instrumentDoc.my_trades
+      .filter(myTrade => myTrade.startOfDayUnix === periods[i]);
+
+    periodMyTrades
+      .sort((a, b) => a.tradeStartedAt > b.tradeStartedAt ? -1 : 1)
+      .forEach((myTrade, index) => {
+        const validTime = moment(myTrade.tradeStartedAt * 1000).format('HH:mm');
+
+        let classFillColor = '';
+
+        if (!myTrade.isActive) {
+          classFillColor = myTrade.resultPercent > 0 ? 'green' : 'red';
+        }
+
+        tableStr += `<tr class="trade" data-index="${myTrade.index}">
+          <td>${index + 1}</td>
+          <td>${myTrade.profit.toFixed(2)}</td>
+          <td>${myTrade.sumCommissions.toFixed(2)}</td>
+          <td>${myTrade.result.toFixed(2)}</td>
+          <td class="${classFillColor}">${myTrade.resultPercent.toFixed(2)}%</td>
+          <td>${validTime}</td>
+        </tr>`;
+
+        periodProfit += myTrade.profit;
+        periodResultPercent += myTrade.resultPercent;
+        periodSumCommissions += myTrade.sumCommissions;
+      });
+
+    const periodResult = periodProfit - periodSumCommissions;
+
+    tdStr += `<td class="period period p-${periods[i]} is_active">
+      <table>
+        <tr>
+          <th>#</th>
+          <th>Profit</th>
+          <th>-</th>
+          <th>=</th>
+          <th>%</th>
+          <th>Time</th>
+        </tr>
+
+        <tr>
+          <td>${periodMyTrades.length}</td>
+          <td>${periodProfit.toFixed(2)}</td>
+          <td>${periodSumCommissions.toFixed(2)}</td>
+          <td>${periodResult.toFixed(2)}</td>
+          <td class="${periodResultPercent > 0 ? 'green' : 'red'}">${periodResultPercent.toFixed(2)}%</td>
+          <td></td>
+        </tr>
+
+        ${tableStr}
+      </table>
+    </td>`;
   }
 
-  let instrumentsStr = '';
-
-  processedInstrumentsDocs
-    .sort((a, b) => a.resultPercent > b.resultPercent ? -1 : 1)
-    .forEach(doc => {
-      let tdStr = '';
-
-      for (let i = 0; i < periods.length; i += 1) {
-        let tableStr = `<table>
+  $report.find('table.main-table')
+    .append(`<tr class="instrument" data-instrumentid="${instrumentDoc._id}">
+      <td>
+        <table>
           <tr>
-            <th>#</th>
+            <th class="instrument-name">${instrumentDoc.name}</th>
             <th>Profit</th>
             <th>-</th>
             <th>=</th>
             <th>%</th>
-            <th>Time</th>
           </tr>
-        `;
 
-        let periodProfit = 0;
-        let periodProfitPercent = 0;
-        let periodSumCommissions = 0;
-
-        const periodMyTrades = doc.my_trades
-          .filter(myTrade => myTrade.startOfDayUnix === periods[i]);
-
-        periodMyTrades
-          .sort((a, b) => a.tradeStartedAt > b.tradeStartedAt ? -1 : 1)
-          .forEach((myTrade, index) => {
-            const validTime = moment(myTrade.tradeStartedAt * 1000).format('HH:mm');
-
-            let classFillColor = '';
-
-            if (!myTrade.isActive) {
-              classFillColor = myTrade.profitPercent > 0 ? 'green' : 'red';
-            }
-
-            tableStr += `<tr class="trade" data-index="${myTrade.index}">
-              <td>${index + 1}</td>
-              <td>${myTrade.profit.toFixed(2)}</td>
-              <td>${myTrade.sumCommissions.toFixed(2)}</td>
-              <td>${myTrade.result.toFixed(2)}</td>
-              <td class="${classFillColor}">${myTrade.profitPercent.toFixed(2)}%</td>
-              <td>${validTime}</td>
-            </tr>`;
-
-            periodProfit += myTrade.profit;
-            periodProfitPercent += myTrade.profitPercent;
-            periodSumCommissions += myTrade.sumCommissions;
-          });
-
-        const periodResult = periodProfit - periodSumCommissions;
-
-        tableStr += `
           <tr>
-            <td>${periodMyTrades.length}</td>
-            <td>${periodProfit.toFixed(2)}</td>
-            <td>${periodSumCommissions.toFixed(2)}</td>
-            <td>${periodResult.toFixed(2)}</td>
-            <td>${periodProfitPercent.toFixed(2)}%</td>
-            <td></td>
+            <td>${instrumentDoc.price}</td>
+            <td>${commonProfit.toFixed(2)}</td>
+            <td>${commonSumCommissions.toFixed(2)}</td>
+            <td>${commonResult.toFixed(2)}</td>
+            <td class="${commonResultPercent >= 0 ? 'green' : 'red'}">${commonResultPercent.toFixed(2)}%</td>
           </tr>
-        </table>`;
-
-        tdStr += `<td class="period">${tableStr}</td>`;
-      }
-
-      instrumentsStr += `<tr class="instrument" data-instrumentid="${doc._id}">
-        <td>
-          <table>
-            <tr>
-              <th class="instrument-name">${doc.name}</th>
-              <th>Profit</th>
-              <th>-</th>
-              <th>=</th>
-              <th>%</th>
-            </tr>
-
-            <tr>
-              <td>${doc.price}</td>
-              <td>${doc.profit.toFixed(2)}</td>
-              <td>${doc.sumCommissions.toFixed(2)}</td>
-              <td>${doc.result.toFixed(2)}</td>
-              <td class="${doc.resultPercent > 0 ? 'green' : 'red'}">${doc.resultPercent.toFixed(2)}%</td>
-            </tr>
-          </table>
-        </td>
-        ${tdStr}
-      </tr>`;
-    });
-
-  $report.find('table.main-table')
-    .append(instrumentsStr);
+        </table>
+      </td>
+      ${tdStr}
+    </tr>`);
 
   const commonResultForRequest = commonProfitForRequest - commonSumCommissionsForRequest;
 
@@ -1371,12 +1335,8 @@ const makeReport = () => {
     .text(`${commonResultPercentForRequest.toFixed(2)}%`);
 
   periods.forEach(period => {
-    const targetMyTrades = [];
-
-    processedInstrumentsDocs.forEach(doc => {
-      targetMyTrades.push(...doc.my_trades
-        .filter(myTrade => myTrade.startOfDayUnix === period));
-    });
+    const targetMyTrades = instrumentDoc.my_trades
+      .filter(myTrade => myTrade.startOfDayUnix === period);
 
     let periodProfit = 0;
     let periodResultPercent = 0;
@@ -1390,6 +1350,11 @@ const makeReport = () => {
 
     const periodResult = periodProfit - periodSumCommissions;
 
+    if (periodProfit === 0) {
+      $report.find(`.period.p-${period}`).removeClass('is_active');
+      return true;
+    }
+
     $result.find(`.period.p-${period} .commonProfit`).text(periodProfit.toFixed(2));
     $result.find(`.period.p-${period} .commonResult`).text(periodResult.toFixed(2));
     $result.find(`.period.p-${period} .commonSumCommissions`).text(periodSumCommissions.toFixed(2));
@@ -1401,76 +1366,70 @@ const makeReport = () => {
   });
 };
 
-const loadTrades = async ({
-  instrumentName,
+const reset = ({ instrumentId }) => {
+  // chart
+  const instrumentDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
 
-  startDate,
-  endDate,
-}) => {
-  console.log('started loading');
+  $chartsContainer.empty();
 
-  const linkToFile = `/files/aggTrades/${instrumentName}/${instrumentName}.json`;
+  instrumentDoc.chart_candles = false;
+  instrumentDoc.indicator_volume = false;
+  instrumentDoc.indicator_micro_supertrend = false;
+  instrumentDoc.indicator_macro_supertrend = false;
 
-  const fileData = await makeRequest({
-    method: 'GET',
-    url: linkToFile,
-  });
+  instrumentDoc.trades = [];
 
-  if (!fileData) {
-    alert(`Cant makeRequest ${linkToFile}`);
-    return false;
-  }
+  // report
+  const $result = $report.find('tr.result');
 
-  const trades = fileData || [];
+  $result.find('.commonProfit').text(0);
+  $result.find('.commonResult').text(0);
+  $result.find('.commonSumCommissions').text(0);
+  $result.find('.commonResultPercent').text('0%');
 
-  console.log('ended loading');
-
-  if (!trades.length) {
-    return false;
-  }
-
-  const splitByMinutes = [];
-  let newSplit = [trades[0]];
-
-  let minute = new Date(parseInt(trades[0][2], 10)).getUTCMinutes();
-
-  for (let i = 1; i < trades.length; i += 1) {
-    const minuteOfTrade = new Date(parseInt(trades[i][2], 10)).getUTCMinutes();
-
-    if (minuteOfTrade !== minute) {
-      minute = minuteOfTrade;
-
-      splitByMinutes.push(
-        newSplit.map(tradeData => {
-          const [
-            price,
-            quantity,
-            time,
-          ] = tradeData;
-
-          const originalTimeUnix = parseInt(
-            (new Date(parseInt(time, 10)).setSeconds(0)) / 1000, 10,
-          );
-
-          return {
-            price: parseFloat(price),
-            quantity: parseFloat(quantity),
-            originalTimeUnix,
-          };
-        }),
-      );
-
-      newSplit = [trades[i]];
-      continue;
-    }
-
-    newSplit.push(trades[i]);
-  }
-
-  return splitByMinutes;
+  $report.find('tr.instrument').remove();
 };
 
-const loadTradesOriginal = async ({
+const getCandlesData = async ({
+  instrumentId,
+  period,
+  startTime,
+  endTime,
+}) => {
+  console.log('start loading');
+
+  if (!endTime) {
+    endTime = new Date().toISOString();
+  }
+
+  if (!startTime) {
+    startTime = moment().utc().startOf('day').toISOString();
+  }
+
+  const query = {
+    instrumentId,
+    startTime,
+    endTime,
+    isFirstCall: false,
+  };
+
+  const resultGetCandles = await makeRequest({
+    method: 'GET',
+    url: `${URL_GET_CANDLES}/${period}`,
+    query,
+  });
+
+  if (!resultGetCandles || !resultGetCandles.status) {
+    alert(resultGetCandles.message || `Cant makeRequest ${URL_GET_CANDLES}`);
+    return [];
+  }
+
+  console.log('end loading');
+
+  return resultGetCandles.result;
+};
+
+const getTradesData = async ({
   instrumentName,
 
   startDate,
@@ -1519,18 +1478,18 @@ const loadTradesOriginal = async ({
     return false;
   }
 
-  const splitByMinutes = [];
+  const splitByHours = [];
   let newSplit = [trades[0]];
 
-  let minute = new Date(trades[0][2]).getUTCMinutes();
+  let hour = new Date(trades[0][2]).getUTCHours();
 
   for (let i = 1; i < trades.length; i += 1) {
-    const minuteOfTrade = new Date(trades[i][2]).getUTCMinutes();
+    const hourOfTrade = new Date(trades[i][2]).getUTCHours();
 
-    if (minuteOfTrade !== minute) {
-      minute = minuteOfTrade;
+    if (hourOfTrade !== hour) {
+      hour = hourOfTrade;
 
-      splitByMinutes.push(
+      splitByHours.push(
         newSplit.map(tradeData => {
           const [
             price,
@@ -1557,54 +1516,5 @@ const loadTradesOriginal = async ({
     newSplit.push(trades[i]);
   }
 
-  return splitByMinutes;
-};
-
-const reset = ({ instrumentId }) => {
-  // chart
-  const instrumentDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
-
-  $chartsContainer.empty();
-
-  instrumentDoc.chart_candles = false;
-  instrumentDoc.indicator_volume = false;
-
-  // report
-  const $result = $report.find('tr.result');
-
-  $result.find('.commonProfit').text(0);
-  $result.find('.commonResult').text(0);
-  $result.find('.commonSumCommissions').text(0);
-  $result.find('.commonResultPercent').text('0%');
-
-  $report.find('tr.instrument').remove();
-};
-
-const getPrecision = (price) => {
-  const dividedPrice = price.toString().split('.');
-
-  if (!dividedPrice[1]) {
-    return 0;
-  }
-
-  return dividedPrice[1].length;
-};
-
-const createUserTradeBound = async (myTrade, { instrumentId }) => {
-  const resultAddUserTradeBound = await makeRequest({
-    method: 'POST',
-    url: URL_CREATE_USER_TRADE_BOUND,
-
-    body: {
-      ...myTrade,
-      instrumentId,
-      typeTrade: 'PRICE_REBOUND',
-      typeExit: 'DEACTIVATED',
-    },
-  });
-
-  if (!resultAddUserTradeBound || !resultAddUserTradeBound.status) {
-    alert(resultAddUserTradeBound.message || 'Cant makeRequest URL_CREATE_USER_TRADE_BOUND');
-    return false;
-  }
+  return splitByHours;
 };
