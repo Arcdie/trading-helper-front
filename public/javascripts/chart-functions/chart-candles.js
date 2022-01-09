@@ -161,7 +161,7 @@ class ChartCandles {
       time: marker.time,
       color: marker.color,
       text: marker.text,
-      position: 'aboveBar',
+      position: marker.position || 'aboveBar',
       shape: marker.shape || 'arrowDown',
     })));
   }

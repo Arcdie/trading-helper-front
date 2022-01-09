@@ -1,5 +1,5 @@
 /* global
-functions, makeRequest,
+functions, makeRequest, getUnix, formatNumberToPretty,
 objects, moment, constants, ChartCandles, IndicatorVolume, IndicatorSuperTrend
 */
 
@@ -112,7 +112,7 @@ $(document).ready(async () => {
       await loadCharts({ instrumentId });
 
       calculateFigureLines({ instrumentId });
-      // calculateFigureLevels({ instrumentId });
+      calculateFigureLevels({ instrumentId });
 
       if (choosenPeriod === AVAILABLE_PERIODS.get('5m')) {
         splitDays({ instrumentId });
@@ -151,8 +151,9 @@ $(document).ready(async () => {
 
         chartCandles.removeMarkers();
 
+        calculateSwings({ instrumentId });
         calculateFigureLines({ instrumentId });
-        // calculateFigureLevels({ instrumentId });
+        calculateFigureLevels({ instrumentId });
 
         if (choosenPeriod === AVAILABLE_PERIODS.get('5m')) {
           splitDays({ instrumentId });
@@ -179,8 +180,9 @@ $(document).ready(async () => {
 
         await loadCharts({ instrumentId });
 
+        calculateSwings({ instrumentId });
         calculateFigureLines({ instrumentId });
-        // calculateFigureLevels({ instrumentId });
+        calculateFigureLevels({ instrumentId });
 
         if (choosenPeriod === AVAILABLE_PERIODS.get('5m')) {
           splitDays({ instrumentId });
@@ -909,6 +911,300 @@ const calculateFigureLines = ({ instrumentId }) => {
       })),
     );
   });
+};
+
+const calculateSwings = ({ instrumentId }) => {
+  const instrumentDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
+
+  const chartCandles = instrumentDoc.chart_candles;
+  const candlesData = chartCandles.originalData;
+  const lCandles = candlesData.length;
+
+  if (!lCandles) {
+    return true;
+  }
+
+  const basicSwings = [];
+
+  let directionOfSwing;
+  let newSwing = [candlesData[0]];
+
+  for (let i = 1; i < lCandles; i += 1) {
+    const candle = candlesData[i];
+    const prevCandle = candlesData[i - 1];
+
+    if (newSwing.length === 1) {
+      directionOfSwing = candle.low < prevCandle.low ? 'short' : 'long';
+    }
+
+    if (directionOfSwing === 'short') {
+      if (candle.low > prevCandle.low) {
+        basicSwings.push({
+          isLong: false,
+          candles: newSwing,
+          maxHigh: newSwing[0].high,
+          minLow: newSwing[newSwing.length - 1].low,
+        });
+
+        directionOfSwing = 'long';
+        newSwing = [prevCandle, candle];
+        continue;
+      }
+
+      newSwing.push(candle);
+    } else {
+      if (candle.high < prevCandle.high) {
+        basicSwings.push({
+          isLong: true,
+          candles: newSwing,
+          minLow: newSwing[0].low,
+          maxHigh: newSwing[newSwing.length - 1].high,
+        });
+
+        directionOfSwing = 'short';
+        newSwing = [prevCandle, candle];
+        continue;
+      }
+    }
+
+    newSwing.push(candle);
+  }
+
+  /*
+  basicSwings.forEach(swing => {
+    const color = swing.isLong ? constants.GREEN_COLOR : constants.RED_COLOR;
+
+    const newExtraSeries = chartCandles.addExtraSeries({
+      color,
+      // lineStyle,
+      lastValueVisible: false,
+    });
+
+    const startCandle = swing.candles[0];
+    const endCandle = swing.candles[swing.candles.length - 1];
+
+    const dataForSeries = [];
+
+    if (swing.isLong) {
+      dataForSeries.push({
+        value: startCandle.low,
+        time: startCandle.originalTimeUnix,
+      }, {
+        value: endCandle.high,
+        time: endCandle.originalTimeUnix,
+      });
+    } else {
+      dataForSeries.push({
+        value: startCandle.high,
+        time: startCandle.originalTimeUnix,
+      }, {
+        value: endCandle.low,
+        time: endCandle.originalTimeUnix,
+      });
+    }
+
+    chartCandles.drawSeries(newExtraSeries, dataForSeries);
+  });
+  // */
+
+  let swings = basicSwings;
+
+  for (let iteration = 0; iteration < numberCompressions; iteration += 1) {
+    const nextStepSwings = [];
+
+    for (let i = 0; i < swings.length; i += 1) {
+      const firstSwing = swings[i];
+      let secondSwing = swings[i + 1];
+      let thirdSwing = swings[i + 2];
+
+      if (!secondSwing || !thirdSwing) {
+        break;
+      }
+
+      if (firstSwing.isLong) {
+        if (thirdSwing.maxHigh < firstSwing.maxHigh) {
+          nextStepSwings.push({
+            isLong: true,
+            minLow: firstSwing.minLow,
+            maxHigh: firstSwing.maxHigh,
+            candles: firstSwing.candles,
+          });
+
+          continue;
+        }
+
+        newSwing = {
+          isLong: true,
+          minLow: firstSwing.minLow,
+          maxHigh: thirdSwing.maxHigh,
+          candles: [
+            ...firstSwing.candles,
+            ...secondSwing.candles,
+            ...thirdSwing.candles,
+          ],
+        };
+
+        let increment = 3;
+
+        while (1) {
+          const nextOneSwing = swings[i + increment];
+          const nextTwoSwing = swings[i + increment + 1];
+
+          if (!nextOneSwing || !nextTwoSwing
+            || nextOneSwing.minLow < secondSwing.minLow
+            || nextTwoSwing.maxHigh < thirdSwing.maxHigh) {
+            break;
+          }
+
+          newSwing.candles.push(
+            ...nextOneSwing.candles,
+            ...nextTwoSwing.candles,
+          );
+
+          newSwing.maxHigh = nextTwoSwing.maxHigh;
+          increment += 2;
+
+          secondSwing = nextOneSwing;
+          thirdSwing = nextTwoSwing;
+        }
+
+        i += (increment - 1);
+        nextStepSwings.push(newSwing);
+      } else {
+        if (thirdSwing.minLow > firstSwing.minLow) {
+          nextStepSwings.push({
+            isLong: false,
+            minLow: firstSwing.minLow,
+            maxHigh: firstSwing.maxHigh,
+            candles: firstSwing.candles,
+          });
+
+          continue;
+        }
+
+        newSwing = {
+          isLong: false,
+          minLow: thirdSwing.minLow,
+          maxHigh: firstSwing.maxHigh,
+          candles: [
+            ...firstSwing.candles,
+            ...secondSwing.candles,
+            ...thirdSwing.candles,
+          ],
+        };
+
+        let increment = 3;
+
+        while (1) {
+          const nextOneSwing = swings[i + increment];
+          const nextTwoSwing = swings[i + increment + 1];
+
+          if (!nextOneSwing || !nextTwoSwing
+            || nextOneSwing.maxHigh > secondSwing.maxHigh
+            || nextTwoSwing.minLow > thirdSwing.minLow) {
+            break;
+          }
+
+          newSwing.candles.push(
+            ...nextOneSwing.candles,
+            ...nextTwoSwing.candles,
+          );
+
+          newSwing.minLow = nextTwoSwing.minLow;
+          increment += 2;
+
+          secondSwing = nextOneSwing;
+          thirdSwing = nextTwoSwing;
+        }
+
+        i += (increment - 1);
+        nextStepSwings.push(newSwing);
+      }
+    }
+
+    swings = JSON.parse(JSON.stringify(nextStepSwings));
+  }
+
+  // const uniqueCandles = new Set();
+  //
+  // swings.forEach({ candles } => {
+  //   candles.forEach(candle => {
+  //     uniqueCandles
+  //   });
+  // });
+
+  swings.forEach(swing => {
+    const color = swing.isLong ? constants.GREEN_COLOR : constants.RED_COLOR;
+
+    const newExtraSeries = chartCandles.addExtraSeries({
+      color,
+      // lineStyle,
+      lastValueVisible: false,
+    });
+
+    const startCandle = swing.candles[0];
+    const endCandle = swing.candles[swing.candles.length - 1];
+
+    const dataForSeries = [];
+
+    if (swing.isLong) {
+      dataForSeries.push({
+        value: startCandle.low,
+        time: startCandle.originalTimeUnix,
+      }, {
+        value: endCandle.high,
+        time: endCandle.originalTimeUnix,
+      });
+    } else {
+      dataForSeries.push({
+        value: startCandle.high,
+        time: startCandle.originalTimeUnix,
+      }, {
+        value: endCandle.low,
+        time: endCandle.originalTimeUnix,
+      });
+    }
+
+    chartCandles.drawSeries(newExtraSeries, dataForSeries);
+
+    let sumBuyVolume = 0;
+    let sumSellVolume = 0;
+
+    const uniqueCandles = new Set();
+
+    for (let i = 1; i < swing.candles.length; i += 1) {
+      if (!uniqueCandles.has(swing.candles[i].originalTimeUnix)) {
+        if (swing.candles[i].isLong) {
+          sumBuyVolume += swing.candles[i].volume;
+        } else {
+          sumSellVolume += swing.candles[i].volume;
+        }
+
+        uniqueCandles.add(swing.candles[i].originalTimeUnix);
+      }
+    }
+
+    const shape = swing.isLong ? 'arrowDown' : 'arrowUp';
+    const position = swing.isLong ? 'aboveBar' : 'belowBar';
+    const sumVolume = sumBuyVolume + sumSellVolume;
+    const deltaVolume = sumBuyVolume - sumSellVolume;
+
+    const sumVolumeText = formatNumberToPretty(sumVolume * (swing.isLong ? swing.maxHigh : swing.minLow));
+    // const sumDeltaVolumeText = formatNumberToPretty(parseInt(deltaVolume * (swing.isLong ? swing.maxHigh : swing.minLow), 10));
+
+    const text = sumVolumeText;
+    // const text = `${sumVolumeText} (${sumDeltaVolumeText})`;
+
+    chartCandles.addMarker({
+      color,
+      shape,
+      position,
+      text,
+      time: swing.candles[swing.candles.length - 1].originalTimeUnix,
+    });
+  });
+
+  chartCandles.drawMarkers();
 };
 
 const splitDays = ({ instrumentId }) => {
