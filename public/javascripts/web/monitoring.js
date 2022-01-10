@@ -1,6 +1,6 @@
 /* global
 functions, makeRequest, getUnix, formatNumberToPretty,
-objects, moment, constants, ChartCandles, IndicatorVolume, IndicatorSuperTrend
+objects, moment, constants, wsClient, ChartCandles, IndicatorVolume, IndicatorSuperTrend
 */
 
 /* Constants */
@@ -28,6 +28,8 @@ const settings = {
   numberTouches: 0,
   allowedPercent: 0.2,
 
+  numberCompressions: 2,
+
   limitTimeFor1h: 14 * 24 * 60 * 60,
   limitTimeFor5m: 2 * 24 * 60 * 60,
 };
@@ -35,12 +37,17 @@ const settings = {
 const urlSearchParams = new URLSearchParams(window.location.search);
 const params = Object.fromEntries(urlSearchParams.entries());
 
-// const startDate = moment().utc()
-//   .startOf('month')
-//   .add(-1, 'months');
-//
-// const endDate = moment().utc()
-//   .endOf('hour');
+wsClient.onmessage = async data => {
+  const parsedData = JSON.parse(data.data);
+
+  if (parsedData.actionName) {
+    switch (parsedData.actionName) {
+      case 'futuresCandle5mData': updateLastCandle(parsedData.data, AVAILABLE_PERIODS.get('5m')); break;
+      case 'futuresCandle1hData': updateLastCandle(parsedData.data, AVAILABLE_PERIODS.get('1h')); break;
+      default: break;
+    }
+  }
+};
 
 /* JQuery */
 const $chartsContainer = $('.charts-container');
@@ -59,6 +66,11 @@ $(document).ready(async () => {
   $settings.find('.padding').val(settings.padding);
   $settings.find('.allowed-percent').val(settings.allowedPercent);
   $settings.find('.number-touches').val(settings.numberTouches);
+  $settings.find('.number-compressions').val(settings.numberCompressions);
+
+  if (params.interval && AVAILABLE_PERIODS.get(params.interval)) {
+    choosenPeriod = params.interval;
+  }
 
   // loading data
 
@@ -111,12 +123,15 @@ $(document).ready(async () => {
 
       await loadCharts({ instrumentId });
 
+      calculateSwings({ instrumentId });
       calculateFigureLines({ instrumentId });
       calculateFigureLevels({ instrumentId });
 
+      /*
       if (choosenPeriod === AVAILABLE_PERIODS.get('5m')) {
         splitDays({ instrumentId });
       }
+      */
 
       choosenInstrumentId = instrumentId;
     });
@@ -135,6 +150,7 @@ $(document).ready(async () => {
         case 'padding': settings.padding = newValue; break;
         case 'number-touches': settings.numberTouches = newValue; break;
         case 'allowed-percent': settings.allowedPercent = newValue; break;
+        case 'number-compressions': settings.numberCompressions = newValue; break;
 
         default: break;
       }
@@ -155,9 +171,11 @@ $(document).ready(async () => {
         calculateFigureLines({ instrumentId });
         calculateFigureLevels({ instrumentId });
 
+        /*
         if (choosenPeriod === AVAILABLE_PERIODS.get('5m')) {
           splitDays({ instrumentId });
         }
+        */
       }
     });
 
@@ -184,9 +202,11 @@ $(document).ready(async () => {
         calculateFigureLines({ instrumentId });
         calculateFigureLevels({ instrumentId });
 
+        /*
         if (choosenPeriod === AVAILABLE_PERIODS.get('5m')) {
           splitDays({ instrumentId });
         }
+        */
       }
     });
 
@@ -252,6 +272,10 @@ const loadCharts = async ({
 
   const startDate = choosenPeriod === AVAILABLE_PERIODS.get('5m') ?
     moment().utc().startOf('month') : moment().utc().startOf('month').add(-1, 'months');
+
+  wsClient.send(JSON.stringify({
+    actionName: 'unsubscribeFromAll',
+  }));
 
   instrumentDoc.candles_data = await getCandlesData({
     period: choosenPeriod,
@@ -338,6 +362,14 @@ const loadCharts = async ({
 
     // indicatorMicroSuperTrend.calculateAndDraw(chartCandles.originalData);
     // indicatorMacroSuperTrend.calculateAndDraw(chartCandles.originalData);
+
+    wsClient.send(JSON.stringify({
+      actionName: 'subscribe',
+      data: {
+        subscriptionName: `futuresCandle${choosenPeriod}Data`,
+        instrumentId: instrumentDoc._id,
+      },
+    }));
 
     const $ruler = $chartContainer.find('span.ruler');
     const $legend = $chartContainer.find('.legend');
@@ -427,6 +459,39 @@ const loadCharts = async ({
         timeVisible: true,
       },
     });
+  });
+};
+
+const updateLastCandle = (data, period) => {
+  if (period !== choosenPeriod
+    || data.instrumentId !== choosenInstrumentId) {
+    return true;
+  }
+
+  const instrumentDoc = instrumentsDocs.find(doc => doc._id === data.instrumentId);
+  const chartCandles = instrumentDoc.chart_candles;
+  const indicatorVolume = instrumentDoc.indicator_volume;
+
+  const {
+    startTime,
+    open,
+    close,
+    high,
+    low,
+    volume,
+  } = data;
+
+  chartCandles.drawSeries(chartCandles.mainSeries, {
+    open: parseFloat(open),
+    close: parseFloat(close),
+    high: parseFloat(high),
+    low: parseFloat(low),
+    time: startTime,
+  });
+
+  indicatorVolume.drawSeries(indicatorVolume.mainSeries, {
+    value: parseFloat(volume),
+    time: startTime,
   });
 };
 
@@ -869,6 +934,7 @@ const calculateFigureLines = ({ instrumentId }) => {
     }
   }
 
+  /*
   highestCandles.forEach(candle => {
     chartCandles.addMarker({
       shape: 'arrowDown',
@@ -884,8 +950,9 @@ const calculateFigureLines = ({ instrumentId }) => {
       time: candle.originalTimeUnix,
     });
   });
+  */
 
-  chartCandles.drawMarkers();
+  // chartCandles.drawMarkers();
 
   figureLines.forEach(([start, middle, end, {
     isLong,
@@ -893,10 +960,10 @@ const calculateFigureLines = ({ instrumentId }) => {
   }]) => {
     const key = isLong ? 'low' : 'high';
     const lineStyle = isActive ? 0 : 2;
-    const color = isLong ? constants.GREEN_COLOR : constants.RED_COLOR;
+    // const color = isLong ? constants.GREEN_COLOR : constants.RED_COLOR;
 
     const newExtraSeries = chartCandles.addExtraSeries({
-      color,
+      // color,
       lineStyle,
       lastValueVisible: false,
     }, {
@@ -1009,7 +1076,7 @@ const calculateSwings = ({ instrumentId }) => {
 
   let swings = basicSwings;
 
-  for (let iteration = 0; iteration < numberCompressions; iteration += 1) {
+  for (let iteration = 0; iteration < settings.numberCompressions; iteration += 1) {
     const nextStepSwings = [];
 
     for (let i = 0; i < swings.length; i += 1) {
@@ -1125,19 +1192,11 @@ const calculateSwings = ({ instrumentId }) => {
     swings = JSON.parse(JSON.stringify(nextStepSwings));
   }
 
-  // const uniqueCandles = new Set();
-  //
-  // swings.forEach({ candles } => {
-  //   candles.forEach(candle => {
-  //     uniqueCandles
-  //   });
-  // });
-
   swings.forEach(swing => {
     const color = swing.isLong ? constants.GREEN_COLOR : constants.RED_COLOR;
 
     const newExtraSeries = chartCandles.addExtraSeries({
-      color,
+      color: constants.YELLOW_COLOR,
       // lineStyle,
       lastValueVisible: false,
     });
@@ -1145,9 +1204,14 @@ const calculateSwings = ({ instrumentId }) => {
     const startCandle = swing.candles[0];
     const endCandle = swing.candles[swing.candles.length - 1];
 
+    let percentPerPrice;
+
     const dataForSeries = [];
 
     if (swing.isLong) {
+      const differenceBetweenHighAndLow = endCandle.high - startCandle.low;
+      percentPerPrice = 100 / (startCandle.low / differenceBetweenHighAndLow);
+
       dataForSeries.push({
         value: startCandle.low,
         time: startCandle.originalTimeUnix,
@@ -1156,6 +1220,9 @@ const calculateSwings = ({ instrumentId }) => {
         time: endCandle.originalTimeUnix,
       });
     } else {
+      const differenceBetweenHighAndLow = startCandle.high - endCandle.low;
+      percentPerPrice = 100 / (startCandle.high / differenceBetweenHighAndLow);
+
       dataForSeries.push({
         value: startCandle.high,
         time: startCandle.originalTimeUnix,
@@ -1167,33 +1234,35 @@ const calculateSwings = ({ instrumentId }) => {
 
     chartCandles.drawSeries(newExtraSeries, dataForSeries);
 
-    let sumBuyVolume = 0;
-    let sumSellVolume = 0;
+    let sumBuyVolumeInMoney = 0;
+    let sumSellVolumeInMoney = 0;
 
     const uniqueCandles = new Set();
 
     for (let i = 1; i < swing.candles.length; i += 1) {
       if (!uniqueCandles.has(swing.candles[i].originalTimeUnix)) {
+        const sumVolumeInMoney = swing.candles[i].volume * swing.candles[i].close;
+
         if (swing.candles[i].isLong) {
-          sumBuyVolume += swing.candles[i].volume;
+          sumBuyVolumeInMoney += sumVolumeInMoney;
         } else {
-          sumSellVolume += swing.candles[i].volume;
+          sumSellVolumeInMoney += sumVolumeInMoney;
         }
 
         uniqueCandles.add(swing.candles[i].originalTimeUnix);
       }
     }
 
-    const shape = swing.isLong ? 'arrowDown' : 'arrowUp';
+    const shape = swing.isLong ? 'arrowUp' : 'arrowDown';
     const position = swing.isLong ? 'aboveBar' : 'belowBar';
-    const sumVolume = sumBuyVolume + sumSellVolume;
-    const deltaVolume = sumBuyVolume - sumSellVolume;
+    const sumVolumeInMoney = sumBuyVolumeInMoney + sumSellVolumeInMoney;
+    const deltaVolumeInMoney = sumBuyVolumeInMoney - sumSellVolumeInMoney;
 
-    const sumVolumeText = formatNumberToPretty(sumVolume * (swing.isLong ? swing.maxHigh : swing.minLow));
-    // const sumDeltaVolumeText = formatNumberToPretty(parseInt(deltaVolume * (swing.isLong ? swing.maxHigh : swing.minLow), 10));
+    const sumVolumeText = formatNumberToPretty(sumVolumeInMoney);
+    const sumDeltaVolumeText = formatNumberToPretty(deltaVolumeInMoney);
 
-    const text = sumVolumeText;
-    // const text = `${sumVolumeText} (${sumDeltaVolumeText})`;
+    // const text = sumVolumeText;
+    const text = `${sumVolumeText} (${percentPerPrice.toFixed(1)}%, ${sumDeltaVolumeText})`;
 
     chartCandles.addMarker({
       color,

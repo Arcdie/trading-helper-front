@@ -21,6 +21,10 @@ block content
 					
 		.row
 			.settings
+				.number-compressions
+					p Сжатие для построения линии объемов
+					input.number-compressions(type="text")
+			
 				.padding
 					p Расстояние между поиском max high и min low
 					input.padding(type="text")
@@ -38,6 +42,7 @@ block scripts
 	script(src='/libs/trading-view-charts.min.js')
 	script(src='/libs/technical-indicators.min.js')
 
+	script(src='/javascripts/websocket.js')
 	script(src='/javascripts/chart-functions/chart-candles.js')
 	script(src='/javascripts/chart-functions/indicators/volume.js')
 	script(src='/javascripts/chart-functions/indicators/supertrend.js')
