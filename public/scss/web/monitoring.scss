@@ -63,6 +63,15 @@
       color: #0044e8;
     }
 
+    .last-swing-data {
+      position: absolute;
+      right: 83px;
+      top: -9999px;
+      font: 11px sans-serif;
+      z-index: 9;
+      color: #ff8d36;
+    }
+
     .actions-menu {
       display: none;
       margin-top: 12px;

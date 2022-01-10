@@ -639,6 +639,13 @@ input:checked + .slider:before {
       z-index: 999;
       font-size: 16px;
       color: #0044e8; }
+    .monitoring .charts-container .last-swing-data {
+      position: absolute;
+      right: 83px;
+      top: -9999px;
+      font: 11px sans-serif;
+      z-index: 9;
+      color: #ff8d36; }
     .monitoring .charts-container .actions-menu {
       display: none;
       margin-top: 12px; }

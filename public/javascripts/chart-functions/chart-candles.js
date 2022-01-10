@@ -132,13 +132,16 @@ class ChartCandles {
       minMove,
       precision,
 
+      ...extraParams,
       ...optionalParams,
       // lineType: LightweightCharts.LineType.Simple,
       // lineStyle: LightweightCharts.LineStyle.LargeDashed,
     });
 
     newExtraSeries.id = extraParams.id || new Date().getTime();
+
     this.extraSeries.push(newExtraSeries);
+
     return newExtraSeries;
   }
 

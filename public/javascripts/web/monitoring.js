@@ -271,6 +271,7 @@ const loadCharts = async ({
   const instrumentDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
 
   const startDate = choosenPeriod === AVAILABLE_PERIODS.get('5m') ?
+    // moment().utc().startOf('day') : moment().utc().startOf('month').add(-1, 'months');
     moment().utc().startOf('month') : moment().utc().startOf('month').add(-1, 'months');
 
   wsClient.send(JSON.stringify({
@@ -303,6 +304,7 @@ const loadCharts = async ({
         </div>
       </div>
       <span class="ruler">0%</span>
+      <span class="last-swing-data">12M</span>
       <div class="charts" style="height: ${windowHeight}px"></div>
     </div>`;
   });
@@ -479,20 +481,37 @@ const updateLastCandle = (data, period) => {
     high,
     low,
     volume,
+    isClosed,
   } = data;
+
+  let validTime = getUnix(startTime);
+
+  if (isClosed) {
+    validTime -= 120;
+  }
 
   chartCandles.drawSeries(chartCandles.mainSeries, {
     open: parseFloat(open),
     close: parseFloat(close),
     high: parseFloat(high),
     low: parseFloat(low),
-    time: startTime,
+    time: validTime,
   });
 
   indicatorVolume.drawSeries(indicatorVolume.mainSeries, {
     value: parseFloat(volume),
-    time: startTime,
+    time: validTime,
   });
+
+  calculateVolumeForLastSwing({ instrumentId: choosenInstrumentId });
+
+  $chartsContainer.find('.last-swing-data').css({
+    top: chartCandles.mainSeries.priceToCoordinate(close),
+  });
+
+  if (isClosed) {
+    calculateSwings({ instrumentId: choosenInstrumentId });
+  }
 };
 
 const calculateFigureLevels = ({ instrumentId }) => {
@@ -980,12 +999,81 @@ const calculateFigureLines = ({ instrumentId }) => {
   });
 };
 
+const calculateVolumeForLastSwing = ({ instrumentId }) => {
+  const instrumentDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
+
+  const chartCandles = instrumentDoc.chart_candles;
+  const candlesData = chartCandles.originalData;
+
+  const lCandles = candlesData.length;
+  const lSwings = (chartCandles.swings || []).length;
+
+  if (!lCandles || !lSwings) {
+    return true;
+  }
+
+  const lastSwing = chartCandles.swings[lSwings - 1];
+
+  const lastCandle = candlesData[lCandles - 1];
+  const lastCandleInSwing = lastSwing.candles[lastSwing.candles.length - 1];
+
+  const indexOfLastCandle = candlesData.findIndex(
+    candle => candle.originalTimeUnix === lastCandleInSwing.originalTimeUnix,
+  );
+
+  let percentPerPrice;
+  let isLongCurrentSwing;
+  let sumBuyVolumeInMoney = 0;
+  let sumSellVolumeInMoney = 0;
+
+  if (lastSwing.isLong) {
+    isLongCurrentSwing = instrumentDoc.price > lastCandleInSwing.high;
+  } else {
+    isLongCurrentSwing = instrumentDoc.price > lastCandleInSwing.low;
+  }
+
+  if (isLongCurrentSwing) {
+    const differenceBetweenHighAndLow = lastCandle.high - lastCandleInSwing.low;
+    percentPerPrice = 100 / (lastCandleInSwing.low / differenceBetweenHighAndLow);
+  } else {
+    const differenceBetweenHighAndLow = lastCandleInSwing.high - lastCandle.low;
+    percentPerPrice = 100 / (lastCandleInSwing.high / differenceBetweenHighAndLow);
+  }
+
+  for (let i = indexOfLastCandle; i < lCandles; i += 1) {
+    const sumVolumeInMoney = candlesData[i].volume * candlesData[i].close;
+
+    if (candlesData[i].isLong) {
+      sumBuyVolumeInMoney += sumVolumeInMoney;
+    } else {
+      sumSellVolumeInMoney += sumVolumeInMoney;
+    }
+  }
+
+  const sumVolumeInMoney = sumBuyVolumeInMoney + sumSellVolumeInMoney;
+  const deltaVolumeInMoney = sumBuyVolumeInMoney - sumSellVolumeInMoney;
+
+  const sumVolumeText = formatNumberToPretty(sumVolumeInMoney);
+  const sumDeltaVolumeText = formatNumberToPretty(deltaVolumeInMoney);
+
+  $chartsContainer.find('.last-swing-data')
+    .text(`${sumVolumeText} (${percentPerPrice.toFixed(1)}%, ${sumDeltaVolumeText})`);
+};
+
 const calculateSwings = ({ instrumentId }) => {
   const instrumentDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
 
   const chartCandles = instrumentDoc.chart_candles;
   const candlesData = chartCandles.originalData;
   const lCandles = candlesData.length;
+
+  const previousSwingSeries = chartCandles.extraSeries.filter(series => series.isSwing);
+
+  chartCandles.removeMarkers();
+
+  previousSwingSeries.forEach(extraSeries => {
+    chartCandles.removeSeries(extraSeries, false);
+  });
 
   if (!lCandles) {
     return true;
@@ -1192,6 +1280,7 @@ const calculateSwings = ({ instrumentId }) => {
     swings = JSON.parse(JSON.stringify(nextStepSwings));
   }
 
+  // /*
   swings.forEach(swing => {
     const color = swing.isLong ? constants.GREEN_COLOR : constants.RED_COLOR;
 
@@ -1199,6 +1288,8 @@ const calculateSwings = ({ instrumentId }) => {
       color: constants.YELLOW_COLOR,
       // lineStyle,
       lastValueVisible: false,
+    }, {
+      isSwing: true,
     });
 
     const startCandle = swing.candles[0];
@@ -1270,10 +1361,16 @@ const calculateSwings = ({ instrumentId }) => {
       position,
       text,
       time: swing.candles[swing.candles.length - 1].originalTimeUnix,
+
+      isSwing: true,
     });
   });
 
   chartCandles.drawMarkers();
+  chartCandles.swings = swings;
+  // */
+
+  calculateVolumeForLastSwing({ instrumentId });
 };
 
 const splitDays = ({ instrumentId }) => {
