@@ -1,6 +1,6 @@
 /* global
 functions, makeRequest, getUnix, formatNumberToPretty,
-objects, moment, constants, wsClient, ChartCandles, IndicatorVolume, IndicatorSuperTrend
+objects, moment, constants, wsClient, ChartCandles, IndicatorVolume, IndicatorCumulativeDeltaVolume
 */
 
 /* Constants */
@@ -332,6 +332,8 @@ const loadCharts = async ({
     }
 
     const chartCandles = new ChartCandles($rootContainer, DEFAULT_PERIOD, chartKeyDoc);
+    const indicatorCumulativeDeltaVolume = new IndicatorCumulativeDeltaVolume($rootContainer);
+
     const indicatorVolume = new IndicatorVolume($rootContainer);
 
     /*
@@ -351,11 +353,14 @@ const loadCharts = async ({
     chartCandles.chartKey = chartKey;
     chartKeyDoc.chart_candles = chartCandles;
     chartKeyDoc.indicator_volume = indicatorVolume;
+    chartKeyDoc.indicator_cumulative_delta_volume = indicatorCumulativeDeltaVolume;
     // chartKeyDoc.indicator_micro_supertrend = indicatorMicroSuperTrend;
     // chartKeyDoc.indicator_macro_supertrend = indicatorMacroSuperTrend;
 
     chartCandles.setOriginalData(chartKeyDoc.candles_data, false);
     chartCandles.drawSeries(chartCandles.mainSeries, chartCandles.originalData);
+
+    indicatorCumulativeDeltaVolume.calculateAndDraw(chartCandles.originalData);
 
     indicatorVolume.drawSeries(indicatorVolume.mainSeries, chartCandles.originalData.map(e => ({
       value: e.volume,
@@ -426,7 +431,7 @@ const loadCharts = async ({
       }
     });
 
-    listCharts.push(chartCandles, indicatorVolume);
+    listCharts.push(chartCandles, indicatorVolume, indicatorCumulativeDeltaVolume);
   });
 
   let isCrossHairMoving = false;
@@ -471,8 +476,12 @@ const updateLastCandle = (data, period) => {
   }
 
   const instrumentDoc = instrumentsDocs.find(doc => doc._id === data.instrumentId);
+
   const chartCandles = instrumentDoc.chart_candles;
   const indicatorVolume = instrumentDoc.indicator_volume;
+  const indicatorCumulativeDeltaVolume = instrumentDoc.indicator_cumulative_delta_volume;
+
+  const candlesData = chartCandles.originalData;
 
   const {
     startTime,
@@ -484,11 +493,33 @@ const updateLastCandle = (data, period) => {
     isClosed,
   } = data;
 
-  let validTime = getUnix(startTime);
+  const validTime = getUnix(startTime);
 
-  if (isClosed) {
-    validTime -= 120;
+  const preparedData = chartCandles.prepareNewData([{
+    time: startTime,
+    data: [open, close, low, high],
+    volume,
+  }], false);
+
+  if (!isClosed) {
+    candlesData[candlesData.length - 1] = preparedData[0];
+  } else {
+    candlesData.push(preparedData[0]);
   }
+
+  // if (period === AVAILABLE_PERIODS.get('5m')) {
+  //   const coeff = 5 * 60 * 1000;
+  //   const next5mInterval = (Math.ceil((validTime * 1000) / coeff) * coeff) / 1000;
+  //   validTime = next5mInterval;
+  // } else {
+  //   validTime -= (validTime % 3600);
+  // }
+
+  calculateVolumeForLastSwing({ instrumentId: choosenInstrumentId });
+
+  $chartsContainer.find('.last-swing-data').css({
+    top: chartCandles.mainSeries.priceToCoordinate(close) - 15,
+  });
 
   chartCandles.drawSeries(chartCandles.mainSeries, {
     open: parseFloat(open),
@@ -503,11 +534,7 @@ const updateLastCandle = (data, period) => {
     time: validTime,
   });
 
-  calculateVolumeForLastSwing({ instrumentId: choosenInstrumentId });
-
-  $chartsContainer.find('.last-swing-data').css({
-    top: chartCandles.mainSeries.priceToCoordinate(close),
-  });
+  indicatorCumulativeDeltaVolume.calculateAndDraw(chartCandles.originalData);
 
   if (isClosed) {
     calculateSwings({ instrumentId: choosenInstrumentId });
@@ -977,6 +1004,10 @@ const calculateFigureLines = ({ instrumentId }) => {
     isLong,
     isActive,
   }]) => {
+    if (!isActive) {
+      return true;
+    }
+
     const key = isLong ? 'low' : 'high';
     const lineStyle = isActive ? 0 : 2;
     // const color = isLong ? constants.GREEN_COLOR : constants.RED_COLOR;
@@ -1051,19 +1082,21 @@ const calculateVolumeForLastSwing = ({ instrumentId }) => {
   }
 
   const sumVolumeInMoney = sumBuyVolumeInMoney + sumSellVolumeInMoney;
-  const deltaVolumeInMoney = sumBuyVolumeInMoney - sumSellVolumeInMoney;
+  // const deltaVolumeInMoney = sumBuyVolumeInMoney - sumSellVolumeInMoney;
 
   const sumVolumeText = formatNumberToPretty(sumVolumeInMoney);
-  const sumDeltaVolumeText = formatNumberToPretty(deltaVolumeInMoney);
+  // const sumDeltaVolumeText = formatNumberToPretty(deltaVolumeInMoney);
 
   $chartsContainer.find('.last-swing-data')
-    .text(`${sumVolumeText} (${percentPerPrice.toFixed(1)}%, ${sumDeltaVolumeText})`);
+    .text(`${sumVolumeText} (${percentPerPrice.toFixed(1)}%)`);
 };
 
 const calculateSwings = ({ instrumentId }) => {
   const instrumentDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
 
   const chartCandles = instrumentDoc.chart_candles;
+  // const indicatorCumulativeDeltaVolume = instrumentDoc.indicator_cumulative_delta_volume;
+
   const candlesData = chartCandles.originalData;
   const lCandles = candlesData.length;
 
@@ -1328,10 +1361,11 @@ const calculateSwings = ({ instrumentId }) => {
     let sumBuyVolumeInMoney = 0;
     let sumSellVolumeInMoney = 0;
 
-    const uniqueCandles = new Set();
+    const uniqueCandles = [];
+    const uniqueCandlesUnix = new Set();
 
     for (let i = 1; i < swing.candles.length; i += 1) {
-      if (!uniqueCandles.has(swing.candles[i].originalTimeUnix)) {
+      if (!uniqueCandlesUnix.has(swing.candles[i].originalTimeUnix)) {
         const sumVolumeInMoney = swing.candles[i].volume * swing.candles[i].close;
 
         if (swing.candles[i].isLong) {
@@ -1340,20 +1374,20 @@ const calculateSwings = ({ instrumentId }) => {
           sumSellVolumeInMoney += sumVolumeInMoney;
         }
 
-        uniqueCandles.add(swing.candles[i].originalTimeUnix);
+        uniqueCandles.push(swing.candles[i]);
+        uniqueCandlesUnix.add(swing.candles[i].originalTimeUnix);
       }
     }
 
     const shape = swing.isLong ? 'arrowUp' : 'arrowDown';
     const position = swing.isLong ? 'aboveBar' : 'belowBar';
     const sumVolumeInMoney = sumBuyVolumeInMoney + sumSellVolumeInMoney;
-    const deltaVolumeInMoney = sumBuyVolumeInMoney - sumSellVolumeInMoney;
+    // const deltaVolumeInMoney = sumBuyVolumeInMoney - sumSellVolumeInMoney;
 
     const sumVolumeText = formatNumberToPretty(sumVolumeInMoney);
-    const sumDeltaVolumeText = formatNumberToPretty(deltaVolumeInMoney);
 
     // const text = sumVolumeText;
-    const text = `${sumVolumeText} (${percentPerPrice.toFixed(1)}%, ${sumDeltaVolumeText})`;
+    const text = `${sumVolumeText} (${percentPerPrice.toFixed(1)}%)`;
 
     chartCandles.addMarker({
       color,
