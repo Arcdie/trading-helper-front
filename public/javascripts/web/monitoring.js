@@ -210,17 +210,19 @@ $(document).ready(async () => {
       }
     });
 
-  if (params.symbol) {
-    const instrumentDoc = instrumentsDocs.find(doc => doc.name === params.symbol);
+  // wsClient.onopen = async () => {
+    if (params.symbol) {
+      const instrumentDoc = instrumentsDocs.find(doc => doc.name === params.symbol);
 
-    if (!instrumentDoc) {
-      alert('No doc with this symbol');
-    } else {
-      await $._data($($instrumentsList)
-        .get(0), 'events').click[0]
-        .handler(`#instrument-${instrumentDoc._id}`);
+      if (!instrumentDoc) {
+        alert('No doc with this symbol');
+      } else {
+        await $._data($($instrumentsList)
+          .get(0), 'events').click[0]
+          .handler(`#instrument-${instrumentDoc._id}`);
+      }
     }
-  }
+  // };
 
   $(document)
     .on('keyup', async e => {
@@ -336,39 +338,21 @@ const loadCharts = async ({
 
     const indicatorVolume = new IndicatorVolume($rootContainer);
 
-    /*
-    const indicatorMicroSuperTrend = new IndicatorSuperTrend(chartCandles.chart, {
-      factor: 3,
-      artPeriod: 10,
-      candlesPeriod: choosenPeriod,
-    });
-
-    const indicatorMacroSuperTrend = new IndicatorSuperTrend(chartCandles.chart, {
-      factor: 5,
-      artPeriod: 20,
-      candlesPeriod: choosenPeriod,
-    });
-    */
-
     chartCandles.chartKey = chartKey;
     chartKeyDoc.chart_candles = chartCandles;
     chartKeyDoc.indicator_volume = indicatorVolume;
     chartKeyDoc.indicator_cumulative_delta_volume = indicatorCumulativeDeltaVolume;
-    // chartKeyDoc.indicator_micro_supertrend = indicatorMicroSuperTrend;
-    // chartKeyDoc.indicator_macro_supertrend = indicatorMacroSuperTrend;
 
     chartCandles.setOriginalData(chartKeyDoc.candles_data, false);
     chartCandles.drawSeries(chartCandles.mainSeries, chartCandles.originalData);
-
-    indicatorCumulativeDeltaVolume.calculateAndDraw(chartCandles.originalData);
 
     indicatorVolume.drawSeries(indicatorVolume.mainSeries, chartCandles.originalData.map(e => ({
       value: e.volume,
       time: e.time,
     })));
 
-    // indicatorMicroSuperTrend.calculateAndDraw(chartCandles.originalData);
-    // indicatorMacroSuperTrend.calculateAndDraw(chartCandles.originalData);
+    const calculatedData = indicatorCumulativeDeltaVolume.calculateAndDraw(chartCandles.originalData);
+    indicatorCumulativeDeltaVolume.calculatedData = calculatedData;
 
     wsClient.send(JSON.stringify({
       actionName: 'subscribe',
@@ -482,6 +466,7 @@ const updateLastCandle = (data, period) => {
   const indicatorCumulativeDeltaVolume = instrumentDoc.indicator_cumulative_delta_volume;
 
   const candlesData = chartCandles.originalData;
+  const lCandles = candlesData.length;
 
   const {
     startTime,
@@ -493,52 +478,56 @@ const updateLastCandle = (data, period) => {
     isClosed,
   } = data;
 
-  const validTime = getUnix(startTime);
-
   const preparedData = chartCandles.prepareNewData([{
     time: startTime,
     data: [open, close, low, high],
     volume,
-  }], false);
+  }], false)[0];
 
   if (!isClosed) {
-    candlesData[candlesData.length - 1] = preparedData[0];
+    candlesData[lCandles - 1] = preparedData;
   } else {
-    candlesData.push(preparedData[0]);
+    candlesData.push(preparedData);
   }
 
-  // if (period === AVAILABLE_PERIODS.get('5m')) {
-  //   const coeff = 5 * 60 * 1000;
-  //   const next5mInterval = (Math.ceil((validTime * 1000) / coeff) * coeff) / 1000;
-  //   validTime = next5mInterval;
-  // } else {
-  //   validTime -= (validTime % 3600);
-  // }
+  chartCandles.drawSeries(chartCandles.mainSeries, preparedData);
+
+  indicatorVolume.drawSeries(indicatorVolume.mainSeries, {
+    value: preparedData.volume,
+    time: preparedData.originalTimeUnix,
+  });
+
+  const lDeltaVolumeData = indicatorCumulativeDeltaVolume.calculatedData.length;
+
+  const resultCalculateDelta = indicatorCumulativeDeltaVolume.calculateData([
+    indicatorCumulativeDeltaVolume.calculatedData[lDeltaVolumeData - 2],
+    preparedData,
+  ], indicatorCumulativeDeltaVolume.calculatedData[lDeltaVolumeData - 2].sumDelta)[1];
+
+  if (!isClosed) {
+    const lastValue = indicatorCumulativeDeltaVolume.calculatedData[lDeltaVolumeData - 1];
+
+    if (lastValue.originalTimeUnix !== resultCalculateDelta.originalTimeUnix) {
+      indicatorCumulativeDeltaVolume.calculatedData.push(resultCalculateDelta);
+    } else {
+      indicatorCumulativeDeltaVolume.calculatedData[lDeltaVolumeData - 1] = resultCalculateDelta;
+    }
+  } else {
+    indicatorCumulativeDeltaVolume.calculatedData.push(resultCalculateDelta);
+
+    calculateSwings({ instrumentId: choosenInstrumentId });
+  }
+
+  indicatorCumulativeDeltaVolume.drawSeries(
+    indicatorCumulativeDeltaVolume.mainSeries,
+    resultCalculateDelta,
+  );
 
   calculateVolumeForLastSwing({ instrumentId: choosenInstrumentId });
 
   $chartsContainer.find('.last-swing-data').css({
     top: chartCandles.mainSeries.priceToCoordinate(close) - 15,
   });
-
-  chartCandles.drawSeries(chartCandles.mainSeries, {
-    open: parseFloat(open),
-    close: parseFloat(close),
-    high: parseFloat(high),
-    low: parseFloat(low),
-    time: validTime,
-  });
-
-  indicatorVolume.drawSeries(indicatorVolume.mainSeries, {
-    value: parseFloat(volume),
-    time: validTime,
-  });
-
-  indicatorCumulativeDeltaVolume.calculateAndDraw(chartCandles.originalData);
-
-  if (isClosed) {
-    calculateSwings({ instrumentId: choosenInstrumentId });
-  }
 };
 
 const calculateFigureLevels = ({ instrumentId }) => {
@@ -711,7 +700,13 @@ const calculateFigureLines = ({ instrumentId }) => {
     for (let j = i + 1; j < highestCandles.length; j += 1) {
       const nextCandle = highestCandles[j];
 
-      if (candle.high < nextCandle.high) {
+      const indexOfSecondCandle = candlesData.findIndex(
+        tCandle => tCandle.originalTimeUnix === nextCandle.originalTimeUnix,
+      );
+
+      const numberCandles = indexOfSecondCandle - indexOfFirstCandle;
+
+      if (candle.high < nextCandle.high || numberCandles < 2) {
         continue;
       }
 
@@ -727,13 +722,8 @@ const calculateFigureLines = ({ instrumentId }) => {
       }
       */
 
+
       let indexOfEndCandle;
-
-      const indexOfSecondCandle = candlesData.findIndex(
-        tCandle => tCandle.originalTimeUnix === nextCandle.originalTimeUnix,
-      );
-
-      const numberCandles = indexOfSecondCandle - indexOfFirstCandle;
 
       const differenceBetweenHighs = candle.high - nextCandle.high;
       const numberReduceForPrice = differenceBetweenHighs / numberCandles;
@@ -853,7 +843,13 @@ const calculateFigureLines = ({ instrumentId }) => {
     for (let j = i + 1; j < lowestCandles.length; j += 1) {
       const nextCandle = lowestCandles[j];
 
-      if (candle.low > nextCandle.low) {
+      const indexOfSecondCandle = candlesData.findIndex(
+        tCandle => tCandle.originalTimeUnix === nextCandle.originalTimeUnix,
+      );
+
+      const numberCandles = indexOfSecondCandle - indexOfFirstCandle;
+
+      if (candle.low > nextCandle.low || numberCandles < 2) {
         continue;
       }
 
@@ -870,12 +866,6 @@ const calculateFigureLines = ({ instrumentId }) => {
       */
 
       let indexOfEndCandle;
-
-      const indexOfSecondCandle = candlesData.findIndex(
-        tCandle => tCandle.originalTimeUnix === nextCandle.originalTimeUnix,
-      );
-
-      const numberCandles = indexOfSecondCandle - indexOfFirstCandle;
 
       const differenceBetweenLows = nextCandle.low - candle.low;
       const numberReduceForPrice = differenceBetweenLows / numberCandles;
@@ -996,9 +986,9 @@ const calculateFigureLines = ({ instrumentId }) => {
       time: candle.originalTimeUnix,
     });
   });
-  */
 
-  // chartCandles.drawMarkers();
+  chartCandles.drawMarkers();
+  // */
 
   figureLines.forEach(([start, middle, end, {
     isLong,

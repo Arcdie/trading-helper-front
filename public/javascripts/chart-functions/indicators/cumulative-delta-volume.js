@@ -16,6 +16,7 @@ class IndicatorCumulativeDeltaVolume {
     this.addMainSeries({});
 
     this.extraSeries = [];
+    this.calculatedData = [];
   }
 
   appendChart($rootContainer) {
@@ -103,7 +104,9 @@ class IndicatorCumulativeDeltaVolume {
     }
   }
 
-  calculateData(inputData) {
+  calculateData(inputData, sumDelta = 0) {
+    // console.log('inputData', inputData);
+
     const workingData = JSON.parse(JSON.stringify(inputData));
     const lData = workingData.length;
 
@@ -115,11 +118,13 @@ class IndicatorCumulativeDeltaVolume {
       return ret || 0.5;
     };
 
-    let sumDelta = 0;
-
     for (let i = 0; i < lData; i += 1) {
       const candle = workingData[i];
       const prevCandle = workingData[i - 1];
+
+      if (candle.sumDelta || candle.sumDelta === 0) {
+        continue;
+      }
 
       const upperShadow = candle.high - Math.max(candle.open, candle.close);
       const bottomShadow = Math.min(candle.open, candle.close) - candle.low;
@@ -148,14 +153,14 @@ class IndicatorCumulativeDeltaVolume {
       const c = candle.sumDelta;
 
       const haClose = (o + h + l + c) / 4;
-      const haOpen = !prevCandle ? ((o + c) / 2) : ((prevCandle.haOpen + prevCandle.haClose) / 2);
+      const haOpen = !prevCandle ? ((o + c) / 2) : ((prevCandle.open + prevCandle.close) / 2);
       const haHigh = Math.max(h, Math.max(haOpen, haClose));
       const haLow = Math.min(l, Math.min(haOpen, haClose));
 
-      candle.haOpen = haOpen;
-      candle.haClose = haClose;
-      candle.haHigh = haHigh;
-      candle.haLow = haLow;
+      candle.open = parseInt(haOpen, 10);
+      candle.close = parseInt(haClose, 10);
+      candle.high = parseInt(haHigh, 10);
+      candle.low = parseInt(haLow, 10);
     }
 
     return workingData;
@@ -163,17 +168,7 @@ class IndicatorCumulativeDeltaVolume {
 
   calculateAndDraw(inputData) {
     const workingData = this.calculateData(inputData);
-
-    const dataForDraw = workingData.map(data => ({
-      open: data.haOpen,
-      close: data.haClose,
-      low: data.haLow,
-      high: data.haHigh,
-
-      time: data.originalTimeUnix,
-    }));
-
-    this.drawSeries(this.mainSeries, dataForDraw);
+    this.drawSeries(this.mainSeries, workingData);
 
     return workingData;
   }

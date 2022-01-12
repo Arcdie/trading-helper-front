@@ -29,6 +29,9 @@ class ChartCandles {
     this.extraSeries = [];
 
     this.originalData = [];
+
+    this.maxValue = 0;
+    this.minValue = 0;
   }
 
   appendChart($rootContainer) {
@@ -96,6 +99,9 @@ class ChartCandles {
           if (res && res.priceRange) {
             let wereChanges = false;
 
+            this.minValue = res.priceRange.minValue;
+            this.maxValue = res.priceRange.maxValue;
+
             if (this.maxTopPriceValue !== res.priceRange.maxValue) {
               wereChanges = true;
               this.maxTopPriceValue = res.priceRange.maxValue;
@@ -107,7 +113,7 @@ class ChartCandles {
             }
 
             if (wereChanges) {
-              this.changePriceRangeForExtraSeries(res.priceRange);
+              this.changePriceRangeForExtraSeries();
             }
           }
 
@@ -150,6 +156,8 @@ class ChartCandles {
   }
 
   drawSeries(series, data) {
+    this.changePriceRangeForExtraSeries();
+
     if (Array.isArray(data)) {
       series.setData(data);
     } else {
@@ -190,16 +198,13 @@ class ChartCandles {
     }
   }
 
-  changePriceRangeForExtraSeries({
-    minValue,
-    maxValue,
-  }) {
+  changePriceRangeForExtraSeries() {
     this.extraSeries.forEach(series => {
       series.applyOptions({
         autoscaleInfoProvider: () => ({
           priceRange: {
-            minValue,
-            maxValue,
+            minValue: this.minValue,
+            maxValue: this.maxValue,
           },
         }),
       });
