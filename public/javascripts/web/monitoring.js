@@ -1,6 +1,6 @@
 /* global
 functions, makeRequest, getUnix, formatNumberToPretty,
-objects, moment, constants, wsClient, ChartCandles, IndicatorVolume, IndicatorCumulativeDeltaVolume
+objects, moment, constants, wsClient, ChartCandles, IndicatorVolume, IndicatorMovingAverage, IndicatorCumulativeDeltaVolume
 */
 
 /* Constants */
@@ -29,6 +29,12 @@ const settings = {
   allowedPercent: 0.2,
 
   numberCompressions: 2,
+
+  periodForShortMA: 20,
+  periodForMediumMA: 50,
+
+  colorForShortMA: '#0800FF',
+  colorForMediumMA: '#2196F3',
 
   limitTimeFor1h: 14 * 24 * 60 * 60,
   limitTimeFor5m: 2 * 24 * 60 * 60,
@@ -334,6 +340,17 @@ const loadCharts = async ({
     }
 
     const chartCandles = new ChartCandles($rootContainer, DEFAULT_PERIOD, chartKeyDoc);
+
+    const indicatorMovingAverageShort = new IndicatorMovingAverage(chartCandles.chart, {
+      color: settings.colorForShortMA,
+      period: settings.periodForShortMA,
+    });
+
+    const indicatorMovingAverageMedium = new IndicatorMovingAverage(chartCandles.chart, {
+      color: settings.colorForMediumMA,
+      period: settings.periodForMediumMA,
+    });
+
     const indicatorCumulativeDeltaVolume = new IndicatorCumulativeDeltaVolume($rootContainer);
 
     const indicatorVolume = new IndicatorVolume($rootContainer);
@@ -341,6 +358,8 @@ const loadCharts = async ({
     chartCandles.chartKey = chartKey;
     chartKeyDoc.chart_candles = chartCandles;
     chartKeyDoc.indicator_volume = indicatorVolume;
+    chartKeyDoc.indicator_moving_average_short = indicatorMovingAverageShort;
+    chartKeyDoc.indicator_moving_average_medium = indicatorMovingAverageMedium;
     chartKeyDoc.indicator_cumulative_delta_volume = indicatorCumulativeDeltaVolume;
 
     chartCandles.setOriginalData(chartKeyDoc.candles_data, false);
@@ -351,7 +370,15 @@ const loadCharts = async ({
       time: e.time,
     })));
 
-    const calculatedData = indicatorCumulativeDeltaVolume.calculateAndDraw(chartCandles.originalData);
+    let calculatedData;
+
+    calculatedData = indicatorMovingAverageShort.calculateAndDraw(chartCandles.originalData);
+    indicatorMovingAverageShort.calculatedData = calculatedData;
+
+    calculatedData = indicatorMovingAverageMedium.calculateAndDraw(chartCandles.originalData);
+    indicatorMovingAverageMedium.calculatedData = calculatedData;
+
+    calculatedData = indicatorCumulativeDeltaVolume.calculateAndDraw(chartCandles.originalData);
     indicatorCumulativeDeltaVolume.calculatedData = calculatedData;
 
     wsClient.send(JSON.stringify({
@@ -463,10 +490,12 @@ const updateLastCandle = (data, period) => {
 
   const chartCandles = instrumentDoc.chart_candles;
   const indicatorVolume = instrumentDoc.indicator_volume;
+  const indicatorMovingAverageShort = instrumentDoc.indicator_moving_average_short;
+  const indicatorMovingAverageMedium = instrumentDoc.indicator_moving_average_medium;
   const indicatorCumulativeDeltaVolume = instrumentDoc.indicator_cumulative_delta_volume;
 
   const candlesData = chartCandles.originalData;
-  const lCandles = candlesData.length;
+  let lCandles = candlesData.length;
 
   const {
     startTime,
@@ -488,6 +517,7 @@ const updateLastCandle = (data, period) => {
     candlesData[lCandles - 1] = preparedData;
   } else {
     candlesData.push(preparedData);
+    lCandles += 1;
   }
 
   chartCandles.drawSeries(chartCandles.mainSeries, preparedData);
@@ -496,6 +526,16 @@ const updateLastCandle = (data, period) => {
     value: preparedData.volume,
     time: preparedData.originalTimeUnix,
   });
+
+  let resultCalculateMA;
+
+  const targetCandlesPeriod = candlesData.slice(lCandles - (settings.periodForMediumMA * 2), lCandles);
+
+  resultCalculateMA = indicatorMovingAverageShort.calculateData(targetCandlesPeriod)[lCandles - 1];
+  indicatorMovingAverageShort.drawSeries(indicatorMovingAverageShort.mainSeries, resultCalculateMA);
+
+  resultCalculateMA = indicatorMovingAverageMedium.calculateData(targetCandlesPeriod)[lCandles - 1];
+  indicatorMovingAverageMedium.drawSeries(indicatorMovingAverageMedium.mainSeries, resultCalculateMA);
 
   const lDeltaVolumeData = indicatorCumulativeDeltaVolume.calculatedData.length;
 
@@ -1634,8 +1674,8 @@ const getCandlesData = async ({
     instrumentId,
     startTime: startDate,
     endTime: endDate,
-    isFirstCall: false,
-    // isFirstCall: true,
+    // isFirstCall: false,
+    isFirstCall: true,
   };
 
   const resultGetCandles = await makeRequest({
