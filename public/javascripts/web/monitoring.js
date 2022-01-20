@@ -6,6 +6,8 @@ objects, moment, constants, wsClient, ChartCandles, IndicatorVolume, IndicatorMo
 /* Constants */
 
 const URL_GET_CANDLES = '/api/candles';
+const URL_ADD_NOTIFICATION = '/api/user-notifications';
+const URL_GET_NOTIFICATIONS = '/api/user-notifications';
 const URL_GET_ACTIVE_INSTRUMENTS = '/api/instruments/active';
 
 const AVAILABLE_PERIODS = new Map([
@@ -128,8 +130,9 @@ $(document).ready(async () => {
       $instrument.addClass('is_active');
 
       await loadCharts({ instrumentId });
+      await getAndDrawNotifications({ instrumentId });
 
-      calculateSwings({ instrumentId });
+      // calculateSwings({ instrumentId });
       calculateFigureLines({ instrumentId });
       calculateFigureLevels({ instrumentId });
 
@@ -173,7 +176,7 @@ $(document).ready(async () => {
 
         chartCandles.removeMarkers();
 
-        calculateSwings({ instrumentId });
+        // calculateSwings({ instrumentId });
         calculateFigureLines({ instrumentId });
         calculateFigureLevels({ instrumentId });
 
@@ -203,8 +206,9 @@ $(document).ready(async () => {
         const instrumentId = choosenInstrumentId;
 
         await loadCharts({ instrumentId });
+        await getAndDrawNotifications({ instrumentId });
 
-        calculateSwings({ instrumentId });
+        // calculateSwings({ instrumentId });
         calculateFigureLines({ instrumentId });
         calculateFigureLevels({ instrumentId });
 
@@ -214,21 +218,67 @@ $(document).ready(async () => {
         }
         */
       }
+    })
+    .on('click', '.add-notification', async () => {
+      if (!choosenInstrumentId) {
+        return true;
+      }
+
+      const instrumentDoc = instrumentsDocs.find(
+        doc => doc._id === choosenInstrumentId,
+      );
+
+      const chartCandles = instrumentDoc.chart_candles;
+
+      const lastPrice = parseFloat(chartCandles.lastPrice.toFixed(instrumentDoc.price_precision));
+
+      const resultAddNotification = await makeRequest({
+        method: 'POST',
+        url: URL_ADD_NOTIFICATION,
+
+        body: {
+          price: lastPrice,
+          instrumentId: instrumentDoc._id,
+          isLong: lastPrice > instrumentDoc.price,
+        },
+      });
+
+      if (!resultAddNotification || !resultAddNotification.status) {
+        alert(resultAddNotification.message || 'Cant makeRequest URL_ADD_NOTIFICATION');
+        return true;
+      }
+
+      const newExtraSeries = chartCandles.addExtraSeries({
+        color: constants.YELLOW_COLOR,
+        lineStyle: 3,
+        lastValueVisible: false,
+      }, {
+        isNotification: true,
+      });
+
+      const startCandle = chartCandles.originalData[0];
+      const endCandle = chartCandles.originalData[chartCandles.originalData.length - 1];
+
+      chartCandles.drawSeries(newExtraSeries, [{
+        value: lastPrice,
+        time: startCandle.originalTimeUnix,
+      }, {
+        value: lastPrice,
+        time: endCandle.originalTimeUnix,
+      }]);
     });
 
-  // wsClient.onopen = async () => {
-    if (params.symbol) {
-      const instrumentDoc = instrumentsDocs.find(doc => doc.name === params.symbol);
+  if (params.symbol) {
+    const instrumentDoc = instrumentsDocs.find(doc => doc.name === params.symbol);
 
-      if (!instrumentDoc) {
-        alert('No doc with this symbol');
-      } else {
-        await $._data($($instrumentsList)
-          .get(0), 'events').click[0]
-          .handler(`#instrument-${instrumentDoc._id}`);
-      }
+    if (!instrumentDoc) {
+      alert('No doc with this symbol');
+    } else {
+      await $._data($($instrumentsList)
+        .get(0), 'events').click[0]
+        .handler(`#instrument-${instrumentDoc._id}`);
     }
-  // };
+  }
 
   $(document)
     .on('keyup', async e => {
@@ -282,9 +332,9 @@ const loadCharts = async ({
     // moment().utc().startOf('day') : moment().utc().startOf('month').add(-1, 'months');
     moment().utc().startOf('month') : moment().utc().startOf('month').add(-1, 'months');
 
-  wsClient.send(JSON.stringify({
-    actionName: 'unsubscribeFromAll',
-  }));
+  // wsClient.send(JSON.stringify({
+  //   actionName: 'unsubscribeFromAll',
+  // }));
 
   instrumentDoc.candles_data = await getCandlesData({
     period: choosenPeriod,
@@ -313,6 +363,7 @@ const loadCharts = async ({
       </div>
       <span class="ruler">0%</span>
       <span class="last-swing-data">12M</span>
+      <div class="add-notification"><span>+</span></div>
       <div class="charts" style="height: ${windowHeight}px"></div>
     </div>`;
   });
@@ -341,6 +392,7 @@ const loadCharts = async ({
 
     const chartCandles = new ChartCandles($rootContainer, DEFAULT_PERIOD, chartKeyDoc);
 
+    /*
     const indicatorMovingAverageShort = new IndicatorMovingAverage(chartCandles.chart, {
       color: settings.colorForShortMA,
       period: settings.periodForShortMA,
@@ -350,17 +402,18 @@ const loadCharts = async ({
       color: settings.colorForMediumMA,
       period: settings.periodForMediumMA,
     });
+    */
 
-    const indicatorCumulativeDeltaVolume = new IndicatorCumulativeDeltaVolume($rootContainer);
+    // const indicatorCumulativeDeltaVolume = new IndicatorCumulativeDeltaVolume($rootContainer);
 
     const indicatorVolume = new IndicatorVolume($rootContainer);
 
     chartCandles.chartKey = chartKey;
     chartKeyDoc.chart_candles = chartCandles;
     chartKeyDoc.indicator_volume = indicatorVolume;
-    chartKeyDoc.indicator_moving_average_short = indicatorMovingAverageShort;
-    chartKeyDoc.indicator_moving_average_medium = indicatorMovingAverageMedium;
-    chartKeyDoc.indicator_cumulative_delta_volume = indicatorCumulativeDeltaVolume;
+    // chartKeyDoc.indicator_moving_average_short = indicatorMovingAverageShort;
+    // chartKeyDoc.indicator_moving_average_medium = indicatorMovingAverageMedium;
+    // chartKeyDoc.indicator_cumulative_delta_volume = indicatorCumulativeDeltaVolume;
 
     chartCandles.setOriginalData(chartKeyDoc.candles_data, false);
     chartCandles.drawSeries(chartCandles.mainSeries, chartCandles.originalData);
@@ -370,6 +423,7 @@ const loadCharts = async ({
       time: e.time,
     })));
 
+    /*
     let calculatedData;
 
     calculatedData = indicatorMovingAverageShort.calculateAndDraw(chartCandles.originalData);
@@ -377,9 +431,10 @@ const loadCharts = async ({
 
     calculatedData = indicatorMovingAverageMedium.calculateAndDraw(chartCandles.originalData);
     indicatorMovingAverageMedium.calculatedData = calculatedData;
+    */
 
-    calculatedData = indicatorCumulativeDeltaVolume.calculateAndDraw(chartCandles.originalData);
-    indicatorCumulativeDeltaVolume.calculatedData = calculatedData;
+    // calculatedData = indicatorCumulativeDeltaVolume.calculateAndDraw(chartCandles.originalData);
+    // indicatorCumulativeDeltaVolume.calculatedData = calculatedData;
 
     wsClient.send(JSON.stringify({
       actionName: 'subscribe',
@@ -390,6 +445,8 @@ const loadCharts = async ({
     }));
 
     const $ruler = $chartContainer.find('span.ruler');
+    const $addNotification = $chartsContainer.find('.add-notification');
+
     const $legend = $chartContainer.find('.legend');
     const $low = $legend.find('span.low');
     const $high = $legend.find('span.high');
@@ -418,12 +475,18 @@ const loadCharts = async ({
         const differenceBetweenInstrumentAndCoordinatePrices = Math.abs(chartKeyDoc.price - coordinateToPrice);
         const percentPerPrice = 100 / (chartKeyDoc.price / differenceBetweenInstrumentAndCoordinatePrices);
 
+        chartCandles.lastPrice = coordinateToPrice;
+
         $ruler
           .text(`${percentPerPrice.toFixed(1)}%`)
           .css({
             top: param.point.y - 25,
             left: param.point.x + 15,
           });
+
+        $addNotification.css({
+          top: param.point.y - 8,
+        });
       }
 
       if (param.time) {
@@ -442,7 +505,8 @@ const loadCharts = async ({
       }
     });
 
-    listCharts.push(chartCandles, indicatorVolume, indicatorCumulativeDeltaVolume);
+    listCharts.push(chartCandles, indicatorVolume);
+    // listCharts.push(chartCandles, indicatorVolume, indicatorCumulativeDeltaVolume);
   });
 
   let isCrossHairMoving = false;
@@ -480,6 +544,53 @@ const loadCharts = async ({
   });
 };
 
+const getAndDrawNotifications = async ({
+  instrumentId,
+}) => {
+  const instrumentDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
+
+  const resultGetNotification = await makeRequest({
+    method: 'GET',
+    url: URL_GET_NOTIFICATIONS,
+
+    query: {
+      instrumentId: instrumentDoc._id,
+    },
+  });
+
+  if (!resultGetNotification || !resultGetNotification.status) {
+    alert(resultGetNotification.message || 'Cant makeRequest URL_GET_NOTIFICATIONS');
+    return true;
+  }
+
+  if (!resultGetNotification.result || !resultGetNotification.result.length) {
+    return true;
+  }
+
+  const chartCandles = instrumentDoc.chart_candles;
+
+  const startCandle = chartCandles.originalData[0];
+  const endCandle = chartCandles.originalData[chartCandles.originalData.length - 1];
+
+  resultGetNotification.result.forEach(userNotification => {
+    const newExtraSeries = chartCandles.addExtraSeries({
+      color: constants.YELLOW_COLOR,
+      lineStyle: 3,
+      lastValueVisible: false,
+    }, {
+      isNotification: true,
+    });
+
+    chartCandles.drawSeries(newExtraSeries, [{
+      value: userNotification.price,
+      time: startCandle.originalTimeUnix,
+    }, {
+      value: userNotification.price,
+      time: endCandle.originalTimeUnix,
+    }]);
+  });
+};
+
 const updateLastCandle = (data, period) => {
   if (period !== choosenPeriod
     || data.instrumentId !== choosenInstrumentId) {
@@ -490,9 +601,9 @@ const updateLastCandle = (data, period) => {
 
   const chartCandles = instrumentDoc.chart_candles;
   const indicatorVolume = instrumentDoc.indicator_volume;
-  const indicatorMovingAverageShort = instrumentDoc.indicator_moving_average_short;
-  const indicatorMovingAverageMedium = instrumentDoc.indicator_moving_average_medium;
-  const indicatorCumulativeDeltaVolume = instrumentDoc.indicator_cumulative_delta_volume;
+  // const indicatorMovingAverageShort = instrumentDoc.indicator_moving_average_short;
+  // const indicatorMovingAverageMedium = instrumentDoc.indicator_moving_average_medium;
+  // const indicatorCumulativeDeltaVolume = instrumentDoc.indicator_cumulative_delta_volume;
 
   const candlesData = chartCandles.originalData;
   let lCandles = candlesData.length;
@@ -527,16 +638,7 @@ const updateLastCandle = (data, period) => {
     time: preparedData.originalTimeUnix,
   });
 
-  let resultCalculateMA;
-
-  const targetCandlesPeriod = candlesData.slice(lCandles - (settings.periodForMediumMA * 2), lCandles);
-
-  resultCalculateMA = indicatorMovingAverageShort.calculateData(targetCandlesPeriod)[lCandles - 1];
-  indicatorMovingAverageShort.drawSeries(indicatorMovingAverageShort.mainSeries, resultCalculateMA);
-
-  resultCalculateMA = indicatorMovingAverageMedium.calculateData(targetCandlesPeriod)[lCandles - 1];
-  indicatorMovingAverageMedium.drawSeries(indicatorMovingAverageMedium.mainSeries, resultCalculateMA);
-
+  /*
   const lDeltaVolumeData = indicatorCumulativeDeltaVolume.calculatedData.length;
 
   const resultCalculateDelta = indicatorCumulativeDeltaVolume.calculateData([
@@ -556,8 +658,28 @@ const updateLastCandle = (data, period) => {
     indicatorCumulativeDeltaVolume.calculatedData.push(resultCalculateDelta);
 
     calculateSwings({ instrumentId: choosenInstrumentId });
-  }
 
+    /*
+    let resultCalculateMA;
+    const targetCandlesPeriod = candlesData.slice(lCandles - (settings.periodForMediumMA * 2), lCandles);
+
+    resultCalculateMA = indicatorMovingAverageShort.calculateData(targetCandlesPeriod);
+
+    indicatorMovingAverageShort.drawSeries(
+      indicatorMovingAverageShort.mainSeries,
+      resultCalculateMA[resultCalculateMA.length - 1],
+    );
+
+    resultCalculateMA = indicatorMovingAverageMedium.calculateData(targetCandlesPeriod);
+
+    indicatorMovingAverageMedium.drawSeries(
+      indicatorMovingAverageMedium.mainSeries,
+      resultCalculateMA[resultCalculateMA.length - 1],
+    );
+  }
+  */
+
+  /*
   indicatorCumulativeDeltaVolume.drawSeries(
     indicatorCumulativeDeltaVolume.mainSeries,
     resultCalculateDelta,
@@ -568,6 +690,7 @@ const updateLastCandle = (data, period) => {
   $chartsContainer.find('.last-swing-data').css({
     top: chartCandles.mainSeries.priceToCoordinate(close) - 15,
   });
+  */
 };
 
 const calculateFigureLevels = ({ instrumentId }) => {
@@ -610,7 +733,7 @@ const calculateFigureLevels = ({ instrumentId }) => {
         candle => candle.originalTimeUnix === level.startOfLevelUnix,
       );
 
-      let endOfLevelUnix = getUnix();
+      let endOfLevelUnix = candlesData[lCandles - 1].originalTimeUnix;
 
       for (let j = candleIndex; j < lCandles; j += 1) {
         if (candlesData[j].low < level.levelPrice) {
@@ -635,7 +758,7 @@ const calculateFigureLevels = ({ instrumentId }) => {
         candle => candle.originalTimeUnix === level.startOfLevelUnix,
       );
 
-      let endOfLevelUnix = getUnix();
+      let endOfLevelUnix = candlesData[lCandles - 1].originalTimeUnix;
 
       for (let j = candleIndex; j < lCandles; j += 1) {
         if (candlesData[j].high > level.levelPrice) {

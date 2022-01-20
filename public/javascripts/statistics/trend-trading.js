@@ -9,8 +9,8 @@ const URL_GET_CANDLES = '/api/candles';
 const URL_GET_ACTIVE_INSTRUMENTS = '/api/instruments/active';
 
 const AVAILABLE_PERIODS = new Map([
-  ['5M', '5m'],
-  ['1H', '1h'],
+  ['5m', '5m'],
+  ['1h', '1h'],
 ]);
 
 const AVAILABLE_HISTORY_MODES = new Map([
@@ -20,15 +20,18 @@ const AVAILABLE_HISTORY_MODES = new Map([
 
 const WORK_AMOUNT = 10;
 const BINANCE_COMMISSION = 0.04;
-const DEFAULT_PERIOD = AVAILABLE_PERIODS.get('1H');
+const DEFAULT_PERIOD = AVAILABLE_PERIODS.get('5m');
 // const HISTORY_MODE = AVAILABLE_HISTORY_MODES.get('candles');
 
 /* Variables */
 
 const settings = {
   stopLossPercent: 2,
-  considerBtcMircoTrend: true,
+  considerBtcMircoTrend: false,
   considerFuturesMircoTrend: false,
+
+  factorForPriceChange: 3,
+  candlesForCalculateAveragePercent: 36, // 3 hours (5m)
 };
 
 let instrumentsDocs = [];
@@ -310,7 +313,7 @@ const loadCharts = async ({
         </div>
         <div class="row">
           <div class="chart-periods">
-            <div class="1h is_worked is_active" data-period="1h"><span>1H</span></div>
+            <div class="5m is_worked is_active" data-period="5m"><span>5M</span></div>
           </div>
         </div>
         <div class="actions-menu">
@@ -351,6 +354,7 @@ const loadCharts = async ({
     const chartCandles = new ChartCandles($rootContainer, choosenPeriod, chartKeyDoc);
     const indicatorVolume = new IndicatorVolume($rootContainer);
 
+    /*
     const indicatorMicroSuperTrend = new IndicatorSuperTrend(chartCandles.chart, {
       factor: 3,
       artPeriod: 10,
@@ -362,12 +366,13 @@ const loadCharts = async ({
       artPeriod: 20,
       candlesPeriod: choosenPeriod,
     });
+    */
 
     chartCandles.chartKey = chartKey;
     chartKeyDoc.chart_candles = chartCandles;
     chartKeyDoc.indicator_volume = indicatorVolume;
-    chartKeyDoc.indicator_micro_supertrend = indicatorMicroSuperTrend;
-    chartKeyDoc.indicator_macro_supertrend = indicatorMacroSuperTrend;
+    // chartKeyDoc.indicator_micro_supertrend = indicatorMicroSuperTrend;
+    // chartKeyDoc.indicator_macro_supertrend = indicatorMacroSuperTrend;
 
     chartCandles.setOriginalData(chartKeyDoc.candles_data, false);
     chartCandles.drawSeries(chartCandles.mainSeries, chartCandles.originalData);
@@ -377,8 +382,8 @@ const loadCharts = async ({
       time: e.time,
     })));
 
-    indicatorMicroSuperTrend.calculateAndDraw(chartCandles.originalData);
-    indicatorMacroSuperTrend.calculateAndDraw(chartCandles.originalData);
+    // indicatorMicroSuperTrend.calculateAndDraw(chartCandles.originalData);
+    // indicatorMacroSuperTrend.calculateAndDraw(chartCandles.originalData);
 
     const $ruler = $chartContainer.find('span.ruler');
     const $legend = $chartContainer.find('.legend');
@@ -523,8 +528,8 @@ const calculateTrades = async ({ instrumentId }) => {
     const currentCandle = candlesOriginalData[i];
 
     checkMyTrades(instrumentDoc, currentCandle, {
-      microTrendData,
-      macroTrendData,
+      // microTrendData,
+      // macroTrendData,
     });
 
     // const doesExistActiveTrade = instrumentDoc.my_trades
@@ -532,13 +537,13 @@ const calculateTrades = async ({ instrumentId }) => {
 
     const result = strategyFunctionLong({
       candlesData,
-      microTrendData,
-      macroTrendData,
+      // microTrendData,
+      // macroTrendData,
 
-      microTrendDataBtc,
-      macroTrendDataBtc,
-      microTrendDataUpperTimerame,
-      macroTrendDataUpperTimeframe,
+      // microTrendDataBtc,
+      // macroTrendDataBtc,
+      // microTrendDataUpperTimerame,
+      // macroTrendDataUpperTimeframe,
     }, {
       ...currentCandle,
       isClosed: true,

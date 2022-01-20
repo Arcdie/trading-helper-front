@@ -10,15 +10,15 @@ const URL_GET_CONSTANTS = '/api/strategies/priceRebounds/constants';
 const URL_CREATE_USER_TRADE_BOUND = '/api/user-trade-bounds/for-statistics';
 
 const AVAILABLE_PERIODS = new Map([
-  // ['1M', '1m'],
-  // ['5M', '5m'],
+  // ['1m', '1m'],
+  ['5m', '5m'],
 
-  ['1H', '1h'],
+  // ['1h', '1h'],
 ]);
 
 const WORK_AMOUNT = 10;
 const BINANCE_COMMISSION = 0.04;
-const DEFAULT_PERIOD = AVAILABLE_PERIODS.get('1H');
+const DEFAULT_PERIOD = AVAILABLE_PERIODS.get('5m');
 
 /* Variables */
 
@@ -39,9 +39,7 @@ const choosenPeriod = DEFAULT_PERIOD;
 const windowHeight = window.innerHeight;
 
 const startDate = moment().utc()
-  .startOf('day')
-  // .add(-1, 'days');
-  .add(-14, 'days');
+  .startOf('month');
 
 const endDate = moment().utc()
   .startOf('day').add(-1, 'hour');
@@ -54,8 +52,8 @@ const wsConnectionLink = 'localhost';
 
 const wsConnectionPort = wsConnectionLink !== 'localhost' ? 3104 : 3105;
 
-// const wsClient = false;
-const wsClient = new WebSocket(`ws://${wsConnectionLink}:${wsConnectionPort}`);
+const wsClient = false;
+// const wsClient = new WebSocket(`ws://${wsConnectionLink}:${wsConnectionPort}`);
 
 /* JQuery */
 const $report = $('.report');
@@ -82,11 +80,12 @@ $(document).ready(async () => {
     return true;
   }
 
-  settings.stopLossPercent = 1;
+  settings.stopLossPercent = 2;
   settings.factorForPriceChange = resultGetConstants.result.FACTOR_FOR_PRICE_CHANGE;
   settings.considerBtcMircoTrend = resultGetConstants.result.DOES_CONSIDER_BTC_MICRO_TREND;
   settings.considerFuturesMircoTrend = resultGetConstants.result.DOES_CONSIDER_FUTURES_MICRO_TREND;
-  settings.candlesForCalculateAveragePercent = 24;
+  settings.candlesForCalculateAveragePercent = 36; // 3 hours (5m)
+  // settings.candlesForCalculateAveragePercent = 24;
 
   $settings.find('.stoploss-percent').val(settings.stopLossPercent);
   $settings.find('.factor-for-price-change').val(settings.factorForPriceChange);
@@ -586,7 +585,7 @@ const calculateCandles = async ({ instrumentId }) => {
   let periods = instrumentDoc.trades;
 
   switch (choosenPeriod) {
-    case AVAILABLE_PERIODS.get('5M'): {
+    case AVAILABLE_PERIODS.get('5m'): {
       const coeff = 5 * 60 * 1000;
       let timeUnixOfFirstCandle = periods[0][0].originalTimeUnix;
 
@@ -638,7 +637,7 @@ const calculateCandles = async ({ instrumentId }) => {
       break;
     }
 
-    case AVAILABLE_PERIODS.get('1H'): {
+    case AVAILABLE_PERIODS.get('1h'): {
       let timeUnixOfFirstCandle = periods[0][0].originalTimeUnix;
 
       const divider = timeUnixOfFirstCandle % 3600;
@@ -988,20 +987,20 @@ const checkMyTrades = async (instrumentDoc, { price, timeUnix }, isFinish = fals
         let validTradeEndedAt;
         let validTradeStartedAt;
 
-        if (choosenPeriod === AVAILABLE_PERIODS.get('1M')) {
+        if (choosenPeriod === AVAILABLE_PERIODS.get('1m')) {
           validTradeStartedAt = moment(myTrade.tradeStartedAt * 1000).utc()
             .startOf('minute').unix();
 
           validTradeEndedAt = moment(myTrade.tradeEndedAt * 1000).utc()
             .startOf('minute').unix() + 60;
-        } else if (choosenPeriod === AVAILABLE_PERIODS.get('5M')) {
+        } else if (choosenPeriod === AVAILABLE_PERIODS.get('5m')) {
           const coeff = 5 * 60 * 1000;
           const nextIntervalForEndedAtUnix = (Math.ceil((myTrade.tradeEndedAt * 1000) / coeff) * coeff) / 1000;
           const prevIntervalForStartedAtUnix = ((Math.ceil((myTrade.tradeStartedAt * 1000) / coeff) * coeff) / 1000) - 300;
 
           validTradeStartedAt = prevIntervalForStartedAtUnix;
           validTradeEndedAt = nextIntervalForEndedAtUnix;
-        } else if (choosenPeriod === AVAILABLE_PERIODS.get('1H')) {
+        } else if (choosenPeriod === AVAILABLE_PERIODS.get('1h')) {
           validTradeStartedAt = myTrade.tradeStartedAt - (myTrade.tradeStartedAt % 3600);
           validTradeEndedAt = (myTrade.tradeEndedAt - (myTrade.tradeEndedAt % 3600)) + 3600;
         }

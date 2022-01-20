@@ -32,6 +32,9 @@ class ChartCandles {
 
     this.maxValue = 0;
     this.minValue = 0;
+
+    // for notifications
+    this.lastPrice = 0;
   }
 
   appendChart($rootContainer) {

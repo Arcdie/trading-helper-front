@@ -646,6 +646,22 @@ input:checked + .slider:before {
       font: 11px sans-serif;
       z-index: 9;
       color: #ff8d36; }
+    .monitoring .charts-container .add-notification {
+      width: 20px;
+      height: 20px;
+      cursor: pointer;
+      text-align: center;
+      background-color: black;
+      border-radius: 1000px;
+      position: absolute;
+      right: 83px;
+      top: -9999px;
+      z-index: 9; }
+      .monitoring .charts-container .add-notification span {
+        color: white;
+        font-size: 20px;
+        position: relative;
+        top: -1px; }
     .monitoring .charts-container .actions-menu {
       display: none;
       margin-top: 12px; }
@@ -700,13 +716,13 @@ input:checked + .slider:before {
           display: block; }
     .monitoring .charts-container .chart-candles {
       width: 100%;
-      height: 65%;
+      height: 80%;
       border: 1px solid black;
       border-right: none;
       box-sizing: border-box; }
     .monitoring .charts-container .chart-volume {
       width: 100%;
-      height: 15%;
+      height: 20%;
       border: 1px solid black;
       border-right: none;
       box-sizing: border-box; }
