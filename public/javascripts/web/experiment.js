@@ -1,6 +1,6 @@
 /* global
 functions, makeRequest,
-objects, moment, constants, ChartCandles, IndicatorVolume, IndicatorSuperTrend
+objects, moment, constants, ChartCandles, IndicatorVolume, IndicatorMovingAverage
 */
 
 /* Constants */
@@ -16,33 +16,38 @@ const DEFAULT_PERIOD = AVAILABLE_PERIODS.get('5m');
 
 /* Variables */
 
+// const startDate = moment().utc()
+//   .add(-5, 'days');
+//   // .startOf('month');
+//
+// const endDate = moment().utc()
+//   .startOf('hour');
+
+let startTimeOfTargetPeriod = moment();
+const endTimeOfTargetPeriod = moment();
+
 let instrumentsDocs = [];
 
 let choosenInstrumentId;
-const numberCompressions = 2;
 const windowHeight = window.innerHeight;
 
 const urlSearchParams = new URLSearchParams(window.location.search);
 const params = Object.fromEntries(urlSearchParams.entries());
 
-// const startDate = moment.unix(1641668399);
-const startDate = moment.unix(1641669600 - 5);
-const endDate = moment.unix(1641729900);
-
 const choosenPeriod = DEFAULT_PERIOD;
+
+const settings = {
+  periodForShortMA: 20,
+  periodForMediumMA: 50,
+
+  colorForShortMA: '#0800FF',
+  colorForMediumMA: '#2196F3',
+};
 
 /* JQuery */
 const $chartsContainer = $('.charts-container');
 
-const $instrumentsContainer = $('.instruments-container');
-const $instrumentsList = $instrumentsContainer.find('.instruments-list .list');
-
 $(document).ready(async () => {
-  // start settings
-
-  $instrumentsContainer
-    .css({ maxHeight: windowHeight });
-
   // loading data
 
   const resultGetInstruments = await makeRequest({
@@ -58,67 +63,55 @@ $(document).ready(async () => {
 
   instrumentsDocs = resultGetInstruments.result;
 
-  // main logic
-  renderListInstruments(instrumentsDocs);
+  const btcDoc = instrumentsDocs.find(doc => doc.name === 'BTCUSDTPERP');
+  choosenInstrumentId = btcDoc._id;
 
-  $('.search input')
-    .on('keyup', function () {
-      const value = $(this).val().toLowerCase();
-
-      let targetDocs = instrumentsDocs;
-
-      if (value) {
-        targetDocs = targetDocs.filter(doc => doc.name
-          .toLowerCase()
-          .includes(value),
-        );
-      }
-
-      renderListInstruments(targetDocs);
-    });
-
-  $instrumentsList
-    .on('click', '.instrument', async function (elem) {
-      const $instrument = elem.type ? $(this) : $(elem);
-      const instrumentId = $instrument.data('instrumentid');
-
-      if (choosenInstrumentId === instrumentId) {
-        return true;
-      }
-
-      $instrumentsList
-        .find('.instrument')
-        .removeClass('is_active');
-
-      $instrument.addClass('is_active');
-
-      await loadCharts({ instrumentId });
-
-      calculateSwings({ instrumentId });
-
-      // splitDays({ instrumentId });
-
-      choosenInstrumentId = instrumentId;
-    });
-
-  if (params.symbol) {
-    const instrumentDoc = instrumentsDocs.find(doc => doc.name === params.symbol);
-
-    if (!instrumentDoc) {
-      alert('No doc with this symbol');
-    } else {
-      await $._data($($instrumentsList)
-        .get(0), 'events').click[0]
-        .handler(`#instrument-${instrumentDoc._id}`);
-    }
-  }
+  await loadCharts(choosenInstrumentId);
 });
 
 /* Functions */
 
-const loadCharts = async ({
-  instrumentId,
-}) => {
+const calculateCorrelation = () => {
+  const btcDoc = instrumentsDocs.find(doc => doc.name === 'BTCUSDTPERP');
+
+  const results = [];
+
+  instrumentsDocs
+    .filter(doc => doc.is_futures && doc.is_active)
+    .forEach(doc => {
+      const candlesData = doc.candles_data;
+      const lCandlesData = candlesData.length;
+
+      const startValue = candlesData[0].open;
+      const endValue = candlesData[lCandlesData - 1].close;
+
+      const differenceBetweenValues = Math.abs(startValue - endValue);
+      const percentPerPrice = 100 / (startValue / differenceBetweenValues);
+
+      results.push({
+        instrumentName: doc.name,
+        result: percentPerPrice,
+      });
+    });
+
+  const sortedResults = results.sort((a, b) => a.result < b.result ? -1 : 1);
+
+  const candlesData = btcDoc.candles_data;
+  const lCandlesData = candlesData.length;
+  const startValue = candlesData[0].open;
+  const endValue = candlesData[lCandlesData - 1].close;
+
+  const differenceBetweenValues = Math.abs(startValue - endValue);
+  const percentPerPrice = 100 / (startValue / differenceBetweenValues);
+
+  console.log(btcDoc.name, `${percentPerPrice.toFixed(2)}%`);
+
+  sortedResults.forEach(result => {
+    console.log(result.instrumentName, `${result.result.toFixed(2)}%`);
+  });
+};
+
+const loadCharts = async (instrumentId) => {
   $chartsContainer.empty();
 
   const instrumentDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
@@ -127,8 +120,10 @@ const loadCharts = async ({
     period: choosenPeriod,
     instrumentId: instrumentDoc._id,
 
-    startTime: startDate.toISOString(),
-    endTime: endDate.toISOString(),
+    // startTime: startDate.toISOString(),
+    // endTime: endDate.toISOString(),
+
+    isFirstCall: true,
   });
 
   const chartKeys = ['futures'];
@@ -164,22 +159,21 @@ const loadCharts = async ({
 
     switch (chartKey) {
       case 'futures': { chartKeyDoc = instrumentDoc; break; }
-
-      case 'btc': {
-        const btcDoc = instrumentsDocs.find(doc => doc.name === 'BTCUSDTPERP');
-        chartKeyDoc = btcDoc;
-        break;
-      }
-
       default: break;
     }
 
     const chartCandles = new ChartCandles($rootContainer, choosenPeriod, chartKeyDoc);
     const indicatorVolume = new IndicatorVolume($rootContainer);
 
+    const indicatorMovingAverageMedium = new IndicatorMovingAverage(chartCandles.chart, {
+      color: settings.colorForMediumMA,
+      period: settings.periodForMediumMA,
+    });
+
     chartCandles.chartKey = chartKey;
     chartKeyDoc.chart_candles = chartCandles;
     chartKeyDoc.indicator_volume = indicatorVolume;
+    chartKeyDoc.indicator_moving_average_medium = indicatorMovingAverageMedium;
 
     chartCandles.setOriginalData(chartKeyDoc.candles_data, false);
     chartCandles.drawSeries(chartCandles.mainSeries, chartCandles.originalData);
@@ -189,6 +183,9 @@ const loadCharts = async ({
       time: e.time,
     })));
 
+    const calculatedData = indicatorMovingAverageMedium.calculateAndDraw(chartCandles.originalData);
+    indicatorMovingAverageMedium.calculatedData = calculatedData;
+
     const $ruler = $chartContainer.find('span.ruler');
     const $legend = $chartContainer.find('.legend');
     const $low = $legend.find('span.low');
@@ -196,6 +193,26 @@ const loadCharts = async ({
     const $open = $legend.find('span.open');
     const $close = $legend.find('span.close');
     const $percent = $legend.find('span.percent');
+
+    chartCandles.chart.subscribeClick(async (param) => {
+      if (param.time) {
+        startTimeOfTargetPeriod = param.time;
+
+        const candlesData = await getCandlesData({
+          period: choosenPeriod,
+
+          endTime: endTimeOfTargetPeriod.toISOString(),
+          startTime: moment.unix(startTimeOfTargetPeriod).toISOString(),
+        });
+
+        instrumentsDocs.forEach(doc => {
+          doc.candles_data = candlesData.filter(candle => candle.instrument_id === doc._id);
+          doc.candles_data = chartCandles.prepareNewData(doc.candles_data, false);
+        });
+
+        calculateCorrelation();
+      }
+    });
 
     chartCandles.chart.subscribeCrosshairMove((param) => {
       if (param.point) {
@@ -265,323 +282,13 @@ const loadCharts = async ({
   });
 };
 
-const calculateSwings = ({ instrumentId }) => {
-  const instrumentDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
-
-  const chartCandles = instrumentDoc.chart_candles;
-  const candlesData = chartCandles.originalData;
-  const lCandles = candlesData.length;
-
-  if (!lCandles) {
-    return true;
-  }
-
-  const basicSwings = [];
-
-  let directionOfSwing;
-  let newSwing = [candlesData[0]];
-
-  for (let i = 1; i < lCandles; i += 1) {
-    const candle = candlesData[i];
-    const prevCandle = candlesData[i - 1];
-
-    if (newSwing.length === 1) {
-      directionOfSwing = candle.low < prevCandle.low ? 'short' : 'long';
-    }
-
-    if (directionOfSwing === 'short') {
-      if (candle.low > prevCandle.low) {
-        basicSwings.push({
-          isLong: false,
-          candles: newSwing,
-          maxHigh: newSwing[0].high,
-          minLow: newSwing[newSwing.length - 1].low,
-        });
-
-        directionOfSwing = 'long';
-        newSwing = [prevCandle, candle];
-        continue;
-      }
-
-      newSwing.push(candle);
-    } else {
-      if (candle.high < prevCandle.high) {
-        basicSwings.push({
-          isLong: true,
-          candles: newSwing,
-          minLow: newSwing[0].low,
-          maxHigh: newSwing[newSwing.length - 1].high,
-        });
-
-        directionOfSwing = 'short';
-        newSwing = [prevCandle, candle];
-        continue;
-      }
-    }
-
-    newSwing.push(candle);
-  }
-
-  /*
-  basicSwings.forEach(swing => {
-    const color = swing.isLong ? constants.GREEN_COLOR : constants.RED_COLOR;
-
-    const newExtraSeries = chartCandles.addExtraSeries({
-      color,
-      // lineStyle,
-      lastValueVisible: false,
-    });
-
-    const startCandle = swing.candles[0];
-    const endCandle = swing.candles[swing.candles.length - 1];
-
-    const dataForSeries = [];
-
-    if (swing.isLong) {
-      dataForSeries.push({
-        value: startCandle.low,
-        time: startCandle.originalTimeUnix,
-      }, {
-        value: endCandle.high,
-        time: endCandle.originalTimeUnix,
-      });
-    } else {
-      dataForSeries.push({
-        value: startCandle.high,
-        time: startCandle.originalTimeUnix,
-      }, {
-        value: endCandle.low,
-        time: endCandle.originalTimeUnix,
-      });
-    }
-
-    chartCandles.drawSeries(newExtraSeries, dataForSeries);
-  });
-  // */
-
-  let swings = basicSwings;
-
-  for (let iteration = 0; iteration < numberCompressions; iteration += 1) {
-    const nextStepSwings = [];
-
-    for (let i = 0; i < swings.length; i += 1) {
-      const firstSwing = swings[i];
-      let secondSwing = swings[i + 1];
-      let thirdSwing = swings[i + 2];
-
-      if (!secondSwing || !thirdSwing) {
-        break;
-      }
-
-      if (firstSwing.isLong) {
-        if (thirdSwing.maxHigh < firstSwing.maxHigh) {
-          nextStepSwings.push({
-            isLong: true,
-            minLow: firstSwing.minLow,
-            maxHigh: firstSwing.maxHigh,
-            candles: firstSwing.candles,
-          });
-
-          continue;
-        }
-
-        newSwing = {
-          isLong: true,
-          minLow: firstSwing.minLow,
-          maxHigh: thirdSwing.maxHigh,
-          candles: [
-            ...firstSwing.candles,
-            ...secondSwing.candles,
-            ...thirdSwing.candles,
-          ],
-        };
-
-        let increment = 3;
-
-        while (1) {
-          const nextOneSwing = swings[i + increment];
-          const nextTwoSwing = swings[i + increment + 1];
-
-          if (!nextOneSwing || !nextTwoSwing
-            || nextOneSwing.minLow < secondSwing.minLow
-            || nextTwoSwing.maxHigh < thirdSwing.maxHigh) {
-            break;
-          }
-
-          newSwing.candles.push(
-            ...nextOneSwing.candles,
-            ...nextTwoSwing.candles,
-          );
-
-          newSwing.maxHigh = nextTwoSwing.maxHigh;
-          increment += 2;
-
-          secondSwing = nextOneSwing;
-          thirdSwing = nextTwoSwing;
-        }
-
-        i += (increment - 1);
-        nextStepSwings.push(newSwing);
-      } else {
-        if (thirdSwing.minLow > firstSwing.minLow) {
-          nextStepSwings.push({
-            isLong: false,
-            minLow: firstSwing.minLow,
-            maxHigh: firstSwing.maxHigh,
-            candles: firstSwing.candles,
-          });
-
-          continue;
-        }
-
-        newSwing = {
-          isLong: false,
-          minLow: thirdSwing.minLow,
-          maxHigh: firstSwing.maxHigh,
-          candles: [
-            ...firstSwing.candles,
-            ...secondSwing.candles,
-            ...thirdSwing.candles,
-          ],
-        };
-
-        let increment = 3;
-
-        while (1) {
-          const nextOneSwing = swings[i + increment];
-          const nextTwoSwing = swings[i + increment + 1];
-
-          if (!nextOneSwing || !nextTwoSwing
-            || nextOneSwing.maxHigh > secondSwing.maxHigh
-            || nextTwoSwing.minLow > thirdSwing.minLow) {
-            break;
-          }
-
-          newSwing.candles.push(
-            ...nextOneSwing.candles,
-            ...nextTwoSwing.candles,
-          );
-
-          newSwing.minLow = nextTwoSwing.minLow;
-          increment += 2;
-
-          secondSwing = nextOneSwing;
-          thirdSwing = nextTwoSwing;
-        }
-
-        i += (increment - 1);
-        nextStepSwings.push(newSwing);
-      }
-    }
-
-    swings = JSON.parse(JSON.stringify(nextStepSwings));
-  }
-
-  // const uniqueCandles = new Set();
-  //
-  // swings.forEach({ candles } => {
-  //   candles.forEach(candle => {
-  //     uniqueCandles
-  //   });
-  // });
-
-  swings.forEach(swing => {
-    const color = swing.isLong ? constants.GREEN_COLOR : constants.RED_COLOR;
-
-    const newExtraSeries = chartCandles.addExtraSeries({
-      color,
-      // lineStyle,
-      lastValueVisible: false,
-    });
-
-    const startCandle = swing.candles[0];
-    const endCandle = swing.candles[swing.candles.length - 1];
-
-    const dataForSeries = [];
-
-    if (swing.isLong) {
-      dataForSeries.push({
-        value: startCandle.low,
-        time: startCandle.originalTimeUnix,
-      }, {
-        value: endCandle.high,
-        time: endCandle.originalTimeUnix,
-      });
-    } else {
-      dataForSeries.push({
-        value: startCandle.high,
-        time: startCandle.originalTimeUnix,
-      }, {
-        value: endCandle.low,
-        time: endCandle.originalTimeUnix,
-      });
-    }
-
-    chartCandles.drawSeries(newExtraSeries, dataForSeries);
-
-    let sumBuyVolume = 0;
-    let sumSellVolume = 0;
-
-    const uniqueCandles = new Set();
-
-    for (let i = 1; i < swing.candles.length; i += 1) {
-      if (!uniqueCandles.has(swing.candles[i].originalTimeUnix)) {
-        if (swing.candles[i].isLong) {
-          sumBuyVolume += swing.candles[i].volume;
-        } else {
-          sumSellVolume += swing.candles[i].volume;
-        }
-
-        uniqueCandles.add(swing.candles[i].originalTimeUnix);
-      }
-    }
-
-    const shape = swing.isLong ? 'arrowDown' : 'arrowUp';
-    const position = swing.isLong ? 'aboveBar' : 'belowBar';
-    const sumVolume = sumBuyVolume + sumSellVolume;
-    const deltaVolume = sumBuyVolume - sumSellVolume;
-
-    const sumVolumeText = formatNumberToPretty(sumVolume * (swing.isLong ? swing.maxHigh : swing.minLow));
-    // const sumDeltaVolumeText = formatNumberToPretty(parseInt(deltaVolume * (swing.isLong ? swing.maxHigh : swing.minLow), 10));
-
-    const text = sumVolumeText;
-    // const text = `${sumVolumeText} (${sumDeltaVolumeText})`;
-
-    chartCandles.addMarker({
-      color,
-      shape,
-      position,
-      text,
-      time: swing.candles[swing.candles.length - 1].originalTimeUnix,
-    });
-  });
-
-  chartCandles.drawMarkers();
-};
-
-const renderListInstruments = (instrumentsDocs) => {
-  let appendInstrumentsStr = '';
-
-  instrumentsDocs
-    .forEach(doc => {
-      appendInstrumentsStr += `<div
-        id="instrument-${doc._id}"
-        class="instrument"
-        data-instrumentid=${doc._id}>
-        <span class="instrument-name">${doc.name}</span>
-      </div>`;
-    });
-
-  $instrumentsList
-    .empty()
-    .append(appendInstrumentsStr);
-};
-
 const getCandlesData = async ({
   instrumentId,
   period,
   startTime,
   endTime,
+
+  isFirstCall,
 }) => {
   console.log('start loading');
 
@@ -594,12 +301,15 @@ const getCandlesData = async ({
   }
 
   const query = {
-    instrumentId,
     startTime,
     endTime,
-    // isFirstCall: false,
-    isFirstCall: true,
+    isFirstCall: isFirstCall || false,
+    // isFirstCall: true,
   };
+
+  if (instrumentId) {
+    query.instrumentId = instrumentId;
+  }
 
   const resultGetCandles = await makeRequest({
     method: 'GET',

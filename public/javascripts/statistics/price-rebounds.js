@@ -1,6 +1,6 @@
 /* global
 functions, makeRequest, getUnix, sleep,
-objects, constants, moment, ChartCandles, IndicatorVolume, IndicatorSuperTrend
+objects, constants, moment, ChartCandles, IndicatorVolume, IndicatorMovingAverage
 */
 
 /* Constants */
@@ -30,6 +30,14 @@ let choosenInstrumentId;
 let priceJumps = [];
 let instrumentsDocs = [];
 
+const settings = {
+  periodForShortMA: 20,
+  periodForMediumMA: 50,
+
+  colorForShortMA: '#0800FF',
+  colorForMediumMA: '#2196F3',
+};
+
 // const startTime = moment().utc()
 //   .startOf('day')
 //   .add(-7, 'days');
@@ -57,7 +65,7 @@ $(document).ready(async () => {
 
   considerBtcMircoTrend = false;
   considerFuturesMircoTrend = false;
-  stopLossPercent = 2;
+  stopLossPercent = 0.2;
   factorForPriceChange = 3;
   candlesForCalculateAveragePercent = 36;
 
@@ -346,6 +354,11 @@ const loadCharts = async ({
     const chartCandles = new ChartCandles($rootContainer, DEFAULT_PERIOD, chartKeyDoc);
     const indicatorVolume = new IndicatorVolume($rootContainer);
 
+    const indicatorMovingAverageMedium = new IndicatorMovingAverage(chartCandles.chart, {
+      color: settings.colorForMediumMA,
+      period: settings.periodForMediumMA,
+    });
+
     /*
     const indicatorMicroSuperTrend = new IndicatorSuperTrend(chartCandles.chart, {
       factor: 3,
@@ -369,12 +382,16 @@ const loadCharts = async ({
       time: e.time,
     })));
 
+    const calculatedData = indicatorMovingAverageMedium.calculateAndDraw(chartCandles.originalData);
+    indicatorMovingAverageMedium.calculatedData = calculatedData;
+
     // const calculatedData = indicatorMicroSuperTrend.calculateAndDraw(chartCandles.originalData);
 
     // indicatorMacroSuperTrend.calculateAndDraw(chartCandles.originalData);
 
     chartKeyDoc.chart_candles = chartCandles;
     chartKeyDoc.indicator_volume = indicatorVolume;
+    chartKeyDoc.indicator_moving_average_medium = indicatorMovingAverageMedium;
     // chartKeyDoc.indicator_micro_supertrend = indicatorMicroSuperTrend;
     // chartKeyDoc.indicator_macro_supertrend = indicatorMacroSuperTrend;
 
@@ -562,10 +579,11 @@ const splitDays = ({ instrumentId }) => {
 
 const calculatePriceJumps = ({ instrumentId }) => {
   const btcDoc = instrumentsDocs.find(doc => doc.name === 'BTCUSDTPERP');
-  const futuresDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
+  const instrumentDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
 
   const priceJumps = [];
-  const futuresChartCandles = futuresDoc.chart_candles;
+  const futuresChartCandles = instrumentDoc.chart_candles;
+  const indicatorMovingAverageMedium = instrumentDoc.indicator_moving_average_medium;
 
   const futuresOriginalData = futuresChartCandles.originalData;
   const lOriginalData = futuresOriginalData.length;
@@ -591,12 +609,14 @@ const calculatePriceJumps = ({ instrumentId }) => {
     averagePercent = parseFloat((averagePercent / candlesForCalculateAveragePercent).toFixed(2));
 
     const currentCandle = futuresOriginalData[i];
-    const isLong = currentCandle.close > currentCandle.open;
-    // const differenceBetweenPrices = Math.abs(currentCandle.open - currentCandle.close);
+    const currentCandleMA = indicatorMovingAverageMedium.calculatedData[i];
 
-    const differenceBetweenPrices = Math.abs(
-      isLong ? currentCandle.high - currentCandle.open : currentCandle.open - currentCandle.low,
-    );
+    const isLong = currentCandle.close > currentCandle.open;
+    const differenceBetweenPrices = Math.abs(currentCandle.open - currentCandle.close);
+
+    // const differenceBetweenPrices = Math.abs(
+    //   isLong ? currentCandle.high - currentCandle.open : currentCandle.open - currentCandle.low,
+    // );
 
     const percentPerPrice = 100 / (currentCandle.open / differenceBetweenPrices);
 
@@ -614,7 +634,7 @@ const calculatePriceJumps = ({ instrumentId }) => {
       }
 
       if (considerFuturesMircoTrend) {
-        const targetFuturesCandle = futuresDoc.indicator_micro_supertrend_data
+        const targetFuturesCandle = instrumentDoc.indicator_micro_supertrend_data
           .find(data => data.originalTimeUnix === currentCandle.originalTimeUnix);
 
         if ((targetFuturesCandle.isLong && !isLong)
@@ -624,6 +644,14 @@ const calculatePriceJumps = ({ instrumentId }) => {
       }
 
       if (!isGreenLight) {
+        continue;
+      }
+
+      if (!isLong) {
+        continue;
+      }
+
+      if (currentCandleMA.value > currentCandle.open) {
         continue;
       }
 
