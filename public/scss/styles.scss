@@ -14,11 +14,13 @@
 @import './web/profile.scss';
 @import './web/utilities.scss';
 @import './web/experiment.scss';
-@import './web/monitoring.scss';
 @import './web/volume-monitoring.scss';
 @import './web/levels-monitoring.scss';
 @import './web/volume-statistics.scss';
 @import './web/robots-statistics.scss';
+
+@import './web/monitoring.scss';
+@import './web/monitoring-correlation.scss';
 
 // Profit
 @import './profit/monitoring.scss';

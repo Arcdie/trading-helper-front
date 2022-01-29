@@ -5,8 +5,8 @@ objects */
 class WebsocketBinance {
   constructor({
     isFutures,
-  }) {
-    this.streams = [];
+  }, streams = []) {
+    this.streams = streams;
 
     this.isActive = false;
     this.connection = false;
@@ -25,26 +25,32 @@ class WebsocketBinance {
   }
 
   setConnection() {
-    const connectionLink = this.isFutures ?
-      'wss://fstream.binance.com/ws' :
+    let connectionLink = this.isFutures ?
+      'wss://fstream.binance.com/stream?streams=' :
       'wss://stream.binance.com:9443/ws';
+
+    if (this.streams.length) {
+      this.streams.forEach(streamName => {
+        connectionLink += streamName;
+      });
+
+      connectionLink = connectionLink.substring(0, connectionLink.length - 1);
+    }
 
     this.connection = new WebSocket(connectionLink);
 
     this.connection.onopen = () => {
       this.isActive = true;
 
-      /*
       this.intervalPong = setInterval(() => {
         if (this.connection) {
-          // this.connection.send('pong');
+          this.connection.send('pong');
         }
       }, 1000 * 60); // 1 minute;
-      */
 
-      this.streams.forEach(streamName => {
-        this.sendSubscribeRequest(streamName);
-      });
+      // this.streams.forEach(streamName => {
+      //   this.sendSubscribeRequest(streamName);
+      // });
 
       this.connection.onmessage = data => {
         this.onmessage(data);
@@ -52,7 +58,8 @@ class WebsocketBinance {
     };
 
     this.connection.onclose = event => {
-      // clearInterval(this.intervalPong);
+      clearInterval(this.intervalPong);
+
       console.log('Соединение c binance было разорвано', event);
       this.isActive = false;
       this.setConnection();
@@ -67,6 +74,7 @@ class WebsocketBinance {
   removeStream(streamName) {
     this.streams = this.streams
       .filter(stream => stream !== streamName);
+
     this.sendUnsubscribeRequest(streamName);
   }
 

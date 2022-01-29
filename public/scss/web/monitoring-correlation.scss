@@ -1,0 +1,73 @@
+.monitoring-correlation {
+  padding: 20px;
+
+  .container {
+    display: flex;
+    flex-wrap: nowrap;
+
+    .period {
+      min-width: 200px;
+      display: flex;
+      border: 1px solid black;
+      border-bottom: none;
+      border-right: none;
+      flex-wrap: nowrap;
+      flex-direction: column;
+      box-sizing: border-box;
+
+      &:last-child {
+        border-right: 1px solid black;
+      }
+
+      .instruments {
+        order: 3;
+        max-height: 300px;
+        overflow-y: scroll;
+        display: flex;
+        flex-direction: column;
+
+        .instrument {
+          padding: 9px 15px;
+          border-bottom: 1px solid black;
+
+          &.red {
+            background-color: #ff8f6b4f;
+          }
+
+          &.green {
+            background-color: #c3fdc5;
+          }
+
+          span {
+            float: right;
+          }
+        }
+      }
+
+      .btc {
+        order: 2;
+        padding: 9px 15px;
+        border-bottom: 1px solid black;
+
+        &.red {
+          background-color: #ff8f6b4f;
+        }
+
+        &.green {
+          background-color: #c3fdc5;
+        }
+
+        span {
+          float: right;
+        }
+      }
+
+      .time {
+        order: 1;
+        padding: 9px 7px;
+        text-align: center;
+        border-bottom: 1px solid black;
+      }
+    }
+  }
+}
