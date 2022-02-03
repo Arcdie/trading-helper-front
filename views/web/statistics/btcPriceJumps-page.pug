@@ -1,21 +1,23 @@
-extends ../app
+extends ../../app
 
 block variables
 	-
-		const pageTitle = 'Experiment';
+		const pageTitle = 'Статистика btcPriceJumps';
 
 block content
-	.page.experiment
+	.page.statistics
 		.row
 			.charts-container
 
+		.row
+			.settings
+
 block scripts
 	script(src='/libs/moment.min.js')
-	script(src='/libs/statistics.min.js')
 	script(src='/libs/trading-view-charts.min.js')
 
 	script(src='/javascripts/chart-functions/chart-candles.js')
 	script(src='/javascripts/chart-functions/indicators/volume.js')
 	script(src='/javascripts/chart-functions/indicators/moving-average.js')
 
-	script(src='/javascripts/web/experiment.js')
+	script(src='/javascripts/statistics/btc-price-jumps.js')

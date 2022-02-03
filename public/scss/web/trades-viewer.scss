@@ -1,0 +1,287 @@
+.trades-viewer {
+  padding: 10px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+
+  .row {
+    display: flex;
+    border-top: 1px solid black;
+    margin-top: 15px;
+
+    &:first-child {
+      margin-top: 0px;
+      border-top: none;
+    }
+  }
+
+  .charts-container {
+    width: 100%;
+    display: inline-block;
+    box-sizing: border-box;
+    position: relative;
+
+    .chart-container {
+      position: relative;
+
+      &.spot, &.futures {
+        .actions-menu {
+          display: block;
+        }
+      }
+    }
+
+    .charts-nav {
+      position: absolute;
+      z-index: 999;
+      top: 15px;
+      left: 15px;
+
+      .row {
+        display: flex;
+        align-items: center;
+        border-top: none;
+      }
+    }
+
+    .legend {
+      p.values {
+        span {
+          color: #000FFF;
+          margin-left: 2px;
+          margin-right: 5px;
+        }
+      }
+    }
+
+    .ruler {
+      position: absolute;
+      left: -9999px;
+      top: -9999px;
+      z-index: 999;
+      font-size: 16px;
+      color: #0044e8;
+    }
+
+    .actions-menu {
+      display: none;
+      margin-top: 12px;
+
+      .chart-slider {
+        display: inline-block;
+
+        p {
+          display: inline-block;
+          margin: 0 8px;
+          font: 17px sans-serif;
+
+          span {
+            &.current-slide {
+              margin-right: 3px;
+            }
+
+            &.amount-slides {
+              margin-left: 3px;
+            }
+          }
+        }
+
+        button {
+          display: inline-block;
+          background-color: transparent;
+          border-radius: 100px;
+          cursor: pointer;
+          font-size: 17px;
+        }
+      }
+
+      .volume-timelife {
+        width: 16px;
+        display: inline-block;
+        margin-left: 11px;
+
+        input[type="text"] {
+          width: 100%;
+          height: 100%;
+          text-align: center;
+          position: relative;
+          bottom: 2px;
+        }
+      }
+    }
+
+    .chart-periods {
+      display: flex;
+      margin-top: 12px;
+
+      div {
+        &.is_worked {
+          display: flex;
+          justify-content: center;
+          align-items: center;
+        }
+
+        &.is_active {
+          border-color: #00bf20;
+        }
+
+        width: 40px;
+        height: 40px;
+        cursor: pointer;
+        display: none;
+        box-sizing: border-box;
+        margin-right: 5px;
+        position: relative;
+        border: 1px dashed #d9d9d9;
+        background-color: white;
+
+        span {
+          margin: 8px auto;
+          text-align: center;
+          display: block;
+        }
+      }
+    }
+
+    .chart-candles {
+      width: 100%;
+      height: 85%;
+      border: 1px solid black;
+      border-right: none;
+      box-sizing: border-box;
+    }
+
+    .chart-volume {
+      width: 100%;
+      height: 15%;
+      border: 1px solid black;
+      border-right: none;
+      box-sizing: border-box;
+    }
+
+    .chart-line {
+      width: 100%;
+      height: 100%;
+      border: 1px solid black;
+      border-right: none;
+      box-sizing: border-box;
+    }
+  }
+
+  .settings {
+    padding-top: 15px;
+
+    div {
+      margin-bottom: 10px;
+
+      p {
+        margin-bottom: 3px;
+      }
+
+      input[type="text"] {
+
+      }
+    }
+  }
+
+  .report {
+    width: 100%;
+    position: relative;
+    padding-top: 15px;
+
+    table.main-table {
+      width: 100%;
+      margin-top: -5px;
+
+      td {
+        &.red {
+          background-color: #ff000047;
+        }
+
+        &.green {
+          background-color: #07c007b0;
+        }
+      }
+
+      th {
+        width: 10%;
+        padding-bottom: 10px;
+        border-bottom: 1px solid black;
+
+        &.instrument-name {
+          width: 6%;
+        }
+      }
+
+      // td {
+      //   &.instrument-name {
+      //     width: 6%;
+      //   }
+      // }
+
+      tr {
+        // border-bottom: 1px solid black;
+
+        &.result {
+          table {
+            tr {
+              border-bottom: none;
+            }
+          }
+        }
+
+        &.instrument {
+          table {
+            border-top: 1px solid black;
+          }
+        }
+
+        td {
+          border-right: 1px solid black;
+
+          &:last-child {
+            border-right: none;
+          }
+
+          table {
+            width: 100%;
+            // border-spacing: 0px 15px;
+            // border-collapse: separate;
+
+            tr {
+              &:last-child {
+                td {
+                  border-bottom: none;
+                }
+              }
+
+              text-align: center;
+
+              &.trade {
+                &:hover {
+                  cursor: pointer;
+                  background-color: #cccccc80;
+                }
+              }
+
+              th {
+                padding: 10px 0px;
+                border-bottom: 1px solid black;
+              }
+
+              td {
+                &:last-child {
+                  border-right: none;
+                }
+
+                padding: 10px 0px;
+                border-bottom: 1px solid black;
+                border-right: 1px solid black;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

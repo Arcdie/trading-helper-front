@@ -1,0 +1,39 @@
+extends ../../app
+
+block variables
+	-
+		const pageTitle = 'Статистика levelRebounds';
+
+block content
+	.page.statistics
+		.row
+			.charts-container
+
+			.instruments-container
+				.search
+					input(type="text" placeholder="Поиск")
+			
+				.instruments-list
+					.headlines
+						span.instrument-name Инструмент
+
+					.list
+
+		.row
+			.settings
+				.stoploss-percent
+					p StopLoss %
+					input.stoploss-percent(type="text")
+
+		.row
+			.report
+
+block scripts
+	script(src='/libs/moment.min.js')
+	script(src='/libs/trading-view-charts.min.js')
+	script(src='/libs/technical-indicators.min.js')
+
+	script(src='/javascripts/chart-functions/chart-candles.js')
+	script(src='/javascripts/chart-functions/indicators/volume.js')
+
+	script(src='/javascripts/statistics/level-rebounds.js')

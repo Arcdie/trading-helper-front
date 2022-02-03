@@ -2,20 +2,32 @@ extends ../app
 
 block variables
 	-
-		const pageTitle = 'Experiment';
+		const pageTitle = 'Редактор уровней';
 
 block content
-	.page.experiment
+	.page.monitoring
 		.row
 			.charts-container
 
+			.instruments-container
+				.search
+					input(type="text" placeholder="Поиск")
+			
+				.instruments-list
+					.headlines
+						span.instrument-name Инструмент
+
+					.list
+					
+		.row
+			.settings
+
 block scripts
 	script(src='/libs/moment.min.js')
-	script(src='/libs/statistics.min.js')
 	script(src='/libs/trading-view-charts.min.js')
 
 	script(src='/javascripts/chart-functions/chart-candles.js')
 	script(src='/javascripts/chart-functions/indicators/volume.js')
 	script(src='/javascripts/chart-functions/indicators/moving-average.js')
 
-	script(src='/javascripts/web/experiment.js')
+	script(src='/javascripts/web/levels-editor.js')

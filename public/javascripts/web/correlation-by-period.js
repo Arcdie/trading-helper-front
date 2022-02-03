@@ -1,6 +1,6 @@
 /* global
 functions, makeRequest,
-objects, moment, constants, ChartCandles, IndicatorVolume, IndicatorMovingAverage, Statistics
+objects, moment, constants, ChartCandles, IndicatorVolume, IndicatorMovingAverage
 */
 
 /* Constants */
@@ -16,14 +16,15 @@ const DEFAULT_PERIOD = AVAILABLE_PERIODS.get('5m');
 
 /* Variables */
 
-const startDate = moment.unix(1643414400).utc()
+// const startDate = moment().utc()
+//   .add(-5, 'days');
+//   // .startOf('month');
+//
+// const endDate = moment().utc()
+//   .startOf('hour');
 
-  // .add(-2, 'days')
-  // .startOf('month');
-
-const endDate = moment.unix(1643500800);
-
-let targetPeriodUnix;
+let startTimeOfTargetPeriod = moment();
+const endTimeOfTargetPeriod = moment();
 
 let instrumentsDocs = [];
 
@@ -65,34 +66,65 @@ $(document).ready(async () => {
   const btcDoc = instrumentsDocs.find(doc => doc.name === 'BTCUSDTPERP');
   choosenInstrumentId = btcDoc._id;
 
-  const candlesData = await getCandlesData({
-    period: choosenPeriod,
-
-    startTime: startDate.toISOString(),
-    endTime: endDate.toISOString(),
-
-    isFirstCall: false,
-  });
-
-  instrumentsDocs.forEach(doc => {
-    doc.candles_data = candlesData.filter(candle => candle.instrument_id === doc._id);
-
-    if (doc._id === btcDoc._id) {
-      return true;
-    }
-
-    doc.candles_data = prepareNewData(doc.candles_data, false);
-  });
-
   await loadCharts(choosenInstrumentId);
 });
 
 /* Functions */
 
+const calculateCorrelation = () => {
+  const btcDoc = instrumentsDocs.find(doc => doc.name === 'BTCUSDTPERP');
+
+  const results = [];
+
+  instrumentsDocs
+    .filter(doc => doc.is_futures && doc.is_active)
+    .forEach(doc => {
+      const candlesData = doc.candles_data;
+      const lCandlesData = candlesData.length;
+
+      const startValue = candlesData[0].open;
+      const endValue = candlesData[lCandlesData - 1].close;
+
+      const differenceBetweenValues = Math.abs(startValue - endValue);
+      const percentPerPrice = 100 / (startValue / differenceBetweenValues);
+
+      results.push({
+        instrumentName: doc.name,
+        result: percentPerPrice,
+      });
+    });
+
+  const sortedResults = results.sort((a, b) => a.result < b.result ? -1 : 1);
+
+  const candlesData = btcDoc.candles_data;
+  const lCandlesData = candlesData.length;
+  const startValue = candlesData[0].open;
+  const endValue = candlesData[lCandlesData - 1].close;
+
+  const differenceBetweenValues = Math.abs(startValue - endValue);
+  const percentPerPrice = 100 / (startValue / differenceBetweenValues);
+
+  console.log(btcDoc.name, `${percentPerPrice.toFixed(2)}%`);
+
+  sortedResults.forEach(result => {
+    console.log(result.instrumentName, `${result.result.toFixed(2)}%`);
+  });
+};
+
 const loadCharts = async (instrumentId) => {
   $chartsContainer.empty();
 
   const instrumentDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
+
+  instrumentDoc.candles_data = await getCandlesData({
+    period: choosenPeriod,
+    instrumentId: instrumentDoc._id,
+
+    // startTime: startDate.toISOString(),
+    // endTime: endDate.toISOString(),
+
+    isFirstCall: true,
+  });
 
   const chartKeys = ['futures'];
 
@@ -164,7 +196,20 @@ const loadCharts = async (instrumentId) => {
 
     chartCandles.chart.subscribeClick(async (param) => {
       if (param.time) {
-        targetPeriodUnix = param.time;
+        startTimeOfTargetPeriod = param.time;
+
+        const candlesData = await getCandlesData({
+          period: choosenPeriod,
+
+          endTime: endTimeOfTargetPeriod.toISOString(),
+          startTime: moment.unix(startTimeOfTargetPeriod).toISOString(),
+        });
+
+        instrumentsDocs.forEach(doc => {
+          doc.candles_data = candlesData.filter(candle => candle.instrument_id === doc._id);
+          doc.candles_data = chartCandles.prepareNewData(doc.candles_data, false);
+        });
+
         calculateCorrelation();
       }
     });
@@ -236,117 +281,6 @@ const loadCharts = async (instrumentId) => {
     });
   });
 };
-
-const calculateCorrelation = () => {
-  const btcDoc = instrumentsDocs.find(doc => doc.name === 'BTCUSDTPERP');
-
-  const results = [];
-
-  console.clear();
-
-  const chartCandles = btcDoc.chart_candles;
-  const btcCandlesData = chartCandles.originalData;
-
-  btcCandlesData.forEach(candle => {
-    const startValue = candle.open;
-    const endValue = candle.close;
-
-    const differenceBetweenValues = endValue - startValue;
-    const percentPerPrice = parseFloat((100 / (startValue / differenceBetweenValues)).toFixed(2));
-
-    candle.changeInPercent = percentPerPrice;
-  });
-
-  instrumentsDocs
-    .filter(doc => doc.is_futures && doc.is_active)
-    .forEach(doc => {
-      const candlesData = doc.candles_data;
-
-      candlesData.forEach(candle => {
-        const startValue = candle.open;
-        const endValue = candle.close;
-
-        const differenceBetweenValues = endValue - startValue;
-        const percentPerPrice = parseFloat((100 / (startValue / differenceBetweenValues)).toFixed(2));
-
-        candle.changeInPercent = percentPerPrice;
-      });
-    });
-
-  const indexOfEndPeriod = btcCandlesData.findIndex(
-    candle => candle.originalTimeUnix === targetPeriodUnix,
-  );
-
-  const bodyVars = {
-    btc: 'metric',
-    instrument: 'metric',
-  };
-
-  instrumentsDocs
-    .filter(doc => doc.is_futures && doc.is_active && doc.name !== 'BTCUSDTPERP')
-    .forEach(doc => {
-      const candlesData = doc.candles_data.slice(0, indexOfEndPeriod);
-
-      const bodyMeasurements = [];
-
-      candlesData.forEach((candle, index) => {
-        bodyMeasurements.push({
-          instrument: candle.changeInPercent,
-          btc: btcCandlesData[index].changeInPercent,
-        });
-      });
-
-
-      const stats = new Statistics(bodyMeasurements, bodyVars);
-
-      const r = stats.correlationCoefficient('instrument', 'btc');
-
-      results.push({
-        instrumentName: doc.name,
-        coeff: r.correlationCoefficient.toFixed(1),
-        result: doc.candles_data[indexOfEndPeriod].changeInPercent,
-        originalTime: doc.candles_data[indexOfEndPeriod].originalTime,
-      });
-    });
-
-  console.log(btcDoc.name, `${btcCandlesData[indexOfEndPeriod].changeInPercent}%`, btcCandlesData[indexOfEndPeriod].originalTime);
-
-  const sortedResults = results.sort((a, b) => a.result > b.result ? -1 : 1);
-
-  sortedResults.forEach(result => {
-    console.log(result.instrumentName, `${result.result.toFixed(2)}%`, result.coeff);
-  });
-};
-
-const prepareNewData = (instrumentData) => {
-  const validData = instrumentData
-    .map(data => {
-      const timeUnix = getUnix(data.time);
-
-      return {
-        originalTime: data.time,
-        originalTimeUnix: timeUnix,
-        time: timeUnix,
-
-        open: data.data[0],
-        close: data.data[1],
-        low: data.data[2],
-        high: data.data[3],
-        volume: data.volume,
-
-        isLong: data.data[1] > data.data[0],
-      };
-    })
-    .sort((a, b) => {
-      if (a.originalTimeUnix < b.originalTimeUnix) {
-        return -1;
-      }
-
-      return 1;
-    });
-
-  return validData;
-}
 
 const getCandlesData = async ({
   instrumentId,

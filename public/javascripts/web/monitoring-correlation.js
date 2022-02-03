@@ -85,14 +85,14 @@ $(document).ready(async () => {
 
           $elem.css('order', index);
 
-          if ($elem.hasClass('green') && doc.correlationPercent < 0) {
-            $elem.toggleClass('green', 'red');
-          } else if ($elem.hasClass('red') && doc.correlationPercent > 0) {
-            $elem.toggleClass('red', 'green');
-          } else if (doc.correlationPercent > 0) {
-            $elem.addClass('green');
+          if (doc.correlationPercent < 0) {
+            $elem
+              .removeClass('green')
+              .addClass('red');
           } else {
-            $elem.addClass('red');
+            $elem
+              .removeClass('red')
+              .addClass('green');
           }
         }
       });
@@ -102,14 +102,14 @@ $(document).ready(async () => {
     const $elem = $lastPeriod.find('.btc');
     $elem.find('span').text(`${btcDoc.correlationPercent.toFixed(2)}%`);
 
-    if ($elem.hasClass('green') && btcDoc.correlationPercent < 0) {
-      $elem.toggleClass('green', 'red');
-    } else if ($elem.hasClass('red') && btcDoc.correlationPercent > 0) {
-      $elem.toggleClass('red', 'green');
-    } else if (btcDoc.correlationPercent > 0) {
-      $elem.addClass('green');
+    if (btcDoc.correlationPercent < 0) {
+      $elem
+        .removeClass('green')
+        .addClass('red');
     } else {
-      $elem.addClass('red');
+      $elem
+        .removeClass('red')
+        .addClass('green');
     }
   }, 3 * 1000);
 
