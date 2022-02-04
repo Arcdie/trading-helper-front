@@ -41,8 +41,8 @@ const choosenPeriod = DEFAULT_PERIOD;
 const windowHeight = window.innerHeight;
 
 // 1 december 2021 - 1 january 2022
-const startDate = moment.unix(1638316800).utc();
-const endDate = moment.unix(1640995200).utc();
+const startDate = moment().utc().startOf('month').add(-1, 'months');
+const endDate = moment().utc().endOf('hour');
 
 const urlSearchParams = new URLSearchParams(window.location.search);
 const params = Object.fromEntries(urlSearchParams.entries());
@@ -354,7 +354,7 @@ const loadCharts = async ({
     const chartCandles = new ChartCandles($rootContainer, choosenPeriod, chartKeyDoc);
     const indicatorVolume = new IndicatorVolume($rootContainer);
 
-    /*
+    // /*
     const indicatorMicroSuperTrend = new IndicatorSuperTrend(chartCandles.chart, {
       factor: 3,
       artPeriod: 10,
@@ -366,13 +366,13 @@ const loadCharts = async ({
       artPeriod: 20,
       candlesPeriod: choosenPeriod,
     });
-    */
+    // */
 
     chartCandles.chartKey = chartKey;
     chartKeyDoc.chart_candles = chartCandles;
     chartKeyDoc.indicator_volume = indicatorVolume;
-    // chartKeyDoc.indicator_micro_supertrend = indicatorMicroSuperTrend;
-    // chartKeyDoc.indicator_macro_supertrend = indicatorMacroSuperTrend;
+    chartKeyDoc.indicator_micro_supertrend = indicatorMicroSuperTrend;
+    chartKeyDoc.indicator_macro_supertrend = indicatorMacroSuperTrend;
 
     chartCandles.setOriginalData(chartKeyDoc.candles_data, false);
     chartCandles.drawSeries(chartCandles.mainSeries, chartCandles.originalData);
@@ -537,13 +537,13 @@ const calculateTrades = async ({ instrumentId }) => {
 
     const result = strategyFunctionLong({
       candlesData,
-      // microTrendData,
-      // macroTrendData,
+      microTrendData,
+      macroTrendData,
 
-      // microTrendDataBtc,
-      // macroTrendDataBtc,
-      // microTrendDataUpperTimerame,
-      // macroTrendDataUpperTimeframe,
+      microTrendDataBtc,
+      macroTrendDataBtc,
+      microTrendDataUpperTimerame,
+      macroTrendDataUpperTimeframe,
     }, {
       ...currentCandle,
       isClosed: true,
@@ -732,6 +732,7 @@ const strategyFunctionLong = ({
     return false;
   }
 
+  /*
   const indexOfBtcCandle = microTrendDataBtc.findIndex(
     data => data.originalTimeUnix === lastMacroTrendData.originalTimeUnix,
   );
@@ -740,6 +741,7 @@ const strategyFunctionLong = ({
     || macroTrendDataBtc[indexOfBtcCandle].isLong) {
     return false;
   }
+  */
 
   return {
     ...currentCandle,
