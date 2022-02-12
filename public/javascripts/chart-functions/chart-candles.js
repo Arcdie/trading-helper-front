@@ -141,13 +141,16 @@ class ChartCandles {
       minMove,
       precision,
 
-      ...extraParams,
       ...optionalParams,
       // lineType: LightweightCharts.LineType.Simple,
       // lineStyle: LightweightCharts.LineStyle.LargeDashed,
     });
 
     newExtraSeries.id = extraParams.id || new Date().getTime();
+
+    Object.keys(extraParams).forEach(key => {
+      newExtraSeries[key] = extraParams[key];
+    });
 
     this.extraSeries.push(newExtraSeries);
 

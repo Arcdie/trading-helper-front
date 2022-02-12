@@ -1,0 +1,30 @@
+extends ../app
+
+block variables
+	-
+		const pageTitle = 'Мониторинг наклонок';
+
+block content
+	.page.monitoring
+		.row
+			.charts-container
+
+			.instruments-container
+				.search
+					input(type="text" placeholder="Поиск")
+			
+				.instruments-list
+					.headlines
+						span.instrument-name Инструмент
+
+					.list
+
+block scripts
+	script(src='/libs/moment.min.js')
+	script(src='/libs/trading-view-charts.min.js')
+
+	script(src='/javascripts/chart-functions/chart-candles.js')
+	script(src='/javascripts/chart-functions/indicators/volume.js')
+	script(src='/javascripts/chart-functions/indicators/moving-average.js')
+
+	script(src='/javascripts/web/figure-lines-monitoring.js')

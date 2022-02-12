@@ -8,8 +8,7 @@ objects, windows, moment, user, wsClient, ChartCandles, IndicatorVolume, Indicat
 const URL_UPDATE_USER = '/api/users';
 const URL_GET_CANDLES = '/api/candles';
 const URL_GET_ACTIVE_INSTRUMENTS = '/api/instruments/active';
-const URL_GET_USER_LEVEL_BOUNDS = '/api/user-level-bounds';
-const URL_ADD_USER_LEVELS_BOUNDS = '/api/user-level-bounds/add-levels';
+const URL_GET_USER_LEVEL_BOUNDS = '/api/user-figure-level-bounds';
 
 const AVAILABLE_PERIODS = new Map([
   ['1M', '1m'],
@@ -37,7 +36,7 @@ const userTimezone = -(new Date().getTimezoneOffset());
 
 const LIMIT_GET_CANDLES = 320;
 // const LIMIT_GET_CANDLES = Math.ceil(windowWidth / 6);
-const DEFAULT_PERIOD = AVAILABLE_PERIODS.get('5M');
+const DEFAULT_PERIOD = AVAILABLE_PERIODS.get('1H');
 
 let choosenInstrumentId;
 let choosenPeriod = DEFAULT_PERIOD;
@@ -304,74 +303,6 @@ $(document).ready(async () => {
       choosenInstrumentId = instrumentId;
       await loadChart({ instrumentId });
     });
-
-  $('.md-content')
-    .on('click', '.levels-settings #save-settings', async function () {
-      const isDrawLevelsFor1hCandles = $('#is_draw_levels_for_1h_candles').is(':checked');
-      const isDrawLevelsFor4hCandles = $('#is_draw_levels_for_4h_candles').is(':checked');
-      const isDrawLevelsForDayCandles = $('#is_draw_levels_for_1d_candles').is(':checked');
-
-      const numberCandlesForCalculate1hLevels = parseInt($('#number_candles_for_calculate_1h_levels input').val(), 10);
-      const numberCandlesForCalculate4hLevels = parseInt($('#number_candles_for_calculate_4h_levels input').val(), 10);
-      const numberCandlesForCalculateDayLevels = parseInt($('#number_candles_for_calculate_1d_levels input').val(), 10);
-
-      if (!numberCandlesForCalculate1hLevels || Number.isNaN(numberCandlesForCalculate1hLevels)) {
-        alert('Неправильно заполнено поле "К-во свечей для расчета часовых уровней"');
-        return false;
-      }
-
-      if (!numberCandlesForCalculate4hLevels || Number.isNaN(numberCandlesForCalculate4hLevels)) {
-        alert('Неправильно заполнено поле "К-во свечей для расчета 4х-часовых уровней"');
-        return false;
-      }
-
-      if (!numberCandlesForCalculateDayLevels || Number.isNaN(numberCandlesForCalculateDayLevels)) {
-        alert('Неправильно заполнено поле "К-во свечей для расчета дневных уровней"');
-        return false;
-      }
-
-      $(this).prop('disabled', true);
-
-      const resultUpdate = await makeRequest({
-        method: 'PATCH',
-        url: `${URL_UPDATE_USER}/${user._id}`,
-        body: {
-          isDrawLevelsFor1hCandles,
-          isDrawLevelsFor4hCandles,
-          isDrawLevelsForDayCandles,
-          numberCandlesForCalculate1hLevels,
-          numberCandlesForCalculate4hLevels,
-          numberCandlesForCalculateDayLevels,
-        },
-      });
-
-      if (!resultUpdate || !resultUpdate.status) {
-        alert(resultUpdate.message || 'Couldnt makeRequest URL_UPDATE_USER');
-        return false;
-      }
-
-      user.levels_monitoring_settings = {
-        is_draw_levels_for_1h_candles: isDrawLevelsFor1hCandles,
-        is_draw_levels_for_4h_candles: isDrawLevelsFor4hCandles,
-        is_draw_levels_for_1d_candles: isDrawLevelsForDayCandles,
-        number_candles_for_calculate_1h_levels: numberCandlesForCalculate1hLevels,
-        number_candles_for_calculate_4h_levels: numberCandlesForCalculate4hLevels,
-        number_candles_for_calculate_1d_levels: numberCandlesForCalculateDayLevels,
-      };
-
-      $('.shadow').click();
-
-      initPopWindow(windows.getLevelsLoadingPage(instrumentsDocs.length));
-
-      await makeRequest({
-        method: 'POST',
-        url: URL_ADD_USER_LEVELS_BOUNDS,
-
-        body: {
-          userId: user._id,
-        },
-      });
-    });
 });
 
 const renderListInstruments = targetDocs => {
@@ -549,6 +480,7 @@ const loadChart = async ({
   chartCandles = new ChartCandles($rootContainer, choosenPeriod, targetDoc);
   indicatorVolume = new IndicatorVolume($rootContainer);
 
+  /*
   indicatorMicroSuperTrend = new IndicatorSuperTrend(chartCandles.chart, {
     factor: 3,
     artPeriod: 10,
@@ -560,6 +492,7 @@ const loadChart = async ({
     artPeriod: 20,
     candlesPeriod: choosenPeriod,
   });
+  */
 
   chartCandles.setOriginalData(resultGetCandles.result);
 
@@ -572,8 +505,8 @@ const loadChart = async ({
     time: e.time,
   })));
 
-  indicatorMicroSuperTrend.calculateAndDraw(chartCandles.originalData);
-  indicatorMacroSuperTrend.calculateAndDraw(chartCandles.originalData);
+  // indicatorMicroSuperTrend.calculateAndDraw(chartCandles.originalData);
+  // indicatorMacroSuperTrend.calculateAndDraw(chartCandles.originalData);
 
   wsClient.send(JSON.stringify({
     actionName: 'subscribe',
@@ -721,8 +654,8 @@ const loadChart = async ({
           time: e.time,
         })));
 
-        indicatorMicroSuperTrend.calculateAndDraw(chartCandles.originalData);
-        indicatorMacroSuperTrend.calculateAndDraw(chartCandles.originalData);
+        // indicatorMicroSuperTrend.calculateAndDraw(chartCandles.originalData);
+        // indicatorMacroSuperTrend.calculateAndDraw(chartCandles.originalData);
 
         drawLevelLines({
           instrumentId,

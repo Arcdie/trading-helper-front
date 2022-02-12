@@ -19,6 +19,7 @@ const constants = {
   RED_COLOR: '#FF5252',
   GREEN_COLOR: '#4CAF50',
   YELLOW_COLOR: '#FFE002',
+  BLUE_COLOR: '#2196F3',
 };
 
 /* Functions */

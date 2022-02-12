@@ -2,7 +2,7 @@ extends ../app
 
 block variables
 	-
-		const pageTitle = 'Редактор уровней';
+		const pageTitle = 'Редактор наклонок';
 
 block content
 	.page.monitoring
@@ -18,9 +18,6 @@ block content
 						span.instrument-name Инструмент
 
 					.list
-					
-		.row
-			.settings
 
 block scripts
 	script(src='/libs/moment.min.js')
@@ -30,4 +27,4 @@ block scripts
 	script(src='/javascripts/chart-functions/indicators/volume.js')
 	script(src='/javascripts/chart-functions/indicators/moving-average.js')
 
-	script(src='/javascripts/web/levels-editor.js')
+	script(src='/javascripts/web/figure-lines-editor.js')
