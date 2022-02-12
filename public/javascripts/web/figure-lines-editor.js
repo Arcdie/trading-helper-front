@@ -533,16 +533,18 @@ const drawFigureLines = ({ instrumentId }) => {
     let indexOfEndCandle = false;
     let currentPrice = candlesData[indexOfFirstCandle].low;
 
-    for (let j = indexOfFirstCandle + 1; j < lCandles; j += 1) {
-      currentPrice += figureLineBound.price_angle;
+    if (!figureLineBound.is_worked) {
+      for (let j = indexOfFirstCandle + 1; j < lCandles; j += 1) {
+        currentPrice += figureLineBound.price_angle;
 
-      const price = candlesData[j].isLong ? candlesData[j].open : candlesData[j].close;
-      const limitPrice = currentPrice - (currentPrice * (settings.ALLOWED_PERCENT / 100));
-      const limitPriceForHigh = currentPrice - (currentPrice * ((settings.ALLOWED_PERCENT * 2) / 100));
+        const price = candlesData[j].isLong ? candlesData[j].open : candlesData[j].close;
+        const limitPrice = currentPrice - (currentPrice * (settings.ALLOWED_PERCENT / 100));
+        const limitPriceForHigh = currentPrice - (currentPrice * ((settings.ALLOWED_PERCENT * 2) / 100));
 
-      if (price < limitPrice || candlesData[j].low < limitPriceForHigh) {
-        indexOfEndCandle = j;
-        break;
+        if (price < limitPrice || candlesData[j].low < limitPriceForHigh) {
+          indexOfEndCandle = j;
+          break;
+        }
       }
     }
 

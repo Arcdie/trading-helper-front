@@ -1,14 +1,14 @@
-
-
 /* global
 functions, makeRequest, getUnix,
-objects, constants, moment, ChartCandles, IndicatorVolume
+objects, user, constants, moment, ChartCandles, IndicatorVolume
 */
 
 /* Constants */
 
 const URL_GET_CANDLES = '/api/candles';
 const URL_GET_ACTIVE_INSTRUMENTS = '/api/instruments/active';
+const URL_GET_USER_FIGURE_LEVEL_BOUNDS = '/api/user-figure-level-bounds';
+const URL_CHANGE_USER_FIGURE_LEVEL_BOUND = '/api/user-figure-level-bounds';
 
 const AVAILABLE_PERIODS = new Map([
   ['5m', '5m'],
@@ -19,37 +19,24 @@ const AVAILABLE_PERIODS = new Map([
 
 const windowHeight = window.innerHeight;
 
-let choosenInstrumentId;
-let choosenPeriod = AVAILABLE_PERIODS.get('1h');
-
-let levels = [];
 let instrumentsDocs = [];
 
-const settings = {
-  [AVAILABLE_PERIODS.get('5m')]: {
-    distanceFromLeftSide: 100,
-    distanceFromRightSide: 100,
-  },
+let choosedFigureLevel = false;
+let prevChoosedFigureLevel = false;
 
-  [AVAILABLE_PERIODS.get('1h')]: {
-    distanceFromLeftSide: 30,
-    distanceFromRightSide: 30,
-  },
-
-  percentForCountTouch: 0.2,
-};
+let choosenInstrumentId;
+let choosenPeriod = AVAILABLE_PERIODS.get('1h');
 
 const urlSearchParams = new URLSearchParams(window.location.search);
 const params = Object.fromEntries(urlSearchParams.entries());
 
+const settings = {};
+
 /* JQuery */
-const $report = $('.report');
 const $chartsContainer = $('.charts-container');
 
 const $instrumentsContainer = $('.instruments-container');
 const $instrumentsList = $instrumentsContainer.find('.instruments-list .list');
-
-const $settings = $('.settings');
 
 $(document).ready(async () => {
   // start settings
@@ -71,6 +58,26 @@ $(document).ready(async () => {
   }
 
   instrumentsDocs = resultGetInstruments.result;
+
+  const resultGetFigureBounds = await makeRequest({
+    method: 'GET',
+    url: URL_GET_USER_FIGURE_LEVEL_BOUNDS,
+    query: {
+      isActive: true,
+      userId: user._id,
+    },
+  });
+
+  if (!resultGetFigureBounds || !resultGetFigureBounds.status) {
+    alert(resultGetFigureBounds.message || 'Cant makeRequest URL_GET_USER_FIGURE_LEVEL_BOUNDS');
+    return true;
+  }
+
+  instrumentsDocs.forEach(doc => {
+    doc.user_figure_level_bounds = resultGetFigureBounds.result.filter(
+      bound => bound.instrument_id === doc._id,
+    );
+  });
 
   // main logic
   renderListInstruments(instrumentsDocs);
@@ -109,31 +116,79 @@ $(document).ready(async () => {
       choosenInstrumentId = instrumentId;
 
       await loadCharts({ instrumentId });
-      levels = calculateFigureLevels({ instrumentId });
+      drawFigureLevels({ instrumentId });
     });
 
-  $settings
-    .find('input[type="text"]')
-    .on('change', function () {
-      const className = $(this).attr('class');
-      const newValue = parseFloat($(this).val());
-
-      if (!newValue || Number.isNaN(newValue)) {
+  $(document)
+    .on('keyup', async e => {
+      if (!choosenInstrumentId) {
         return true;
       }
 
-      switch (className) {
-        default: break;
+      // arrow right
+      if (e.keyCode === 39) {
+        const indexOfInstrumentDoc = instrumentsDocs
+          .findIndex(doc => doc._id === choosenInstrumentId);
+
+        const nextIndex = indexOfInstrumentDoc + 1;
+
+        if (!instrumentsDocs[nextIndex]) {
+          return true;
+        }
+
+        $instrumentsList
+          .find('.instrument').eq(nextIndex)
+          .click();
       }
 
-      if (choosenInstrumentId) {
-        const instrumentId = choosenInstrumentId;
+      if (choosedFigureLevel) {
+        if (e.keyCode === 8) {
+          // -
+          const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
+          const chartCandles = instrumentDoc.chart_candles;
 
-        // priceJumps = calculatePriceJumps({ instrumentId });
-        // drawMarkersForPriceJumps({ instrumentId }, priceJumps);
-        //
-        // const calculatedProfit = calculateProfit({ instrumentId }, priceJumps);
-        // makeReport({ instrumentId }, calculatedProfit);
+          chartCandles.removeSeries(choosedFigureLevel.series, false);
+          instrumentDoc.user_figure_level_bounds = instrumentDoc.user_figure_level_bounds.filter(
+            bound => bound._id !== choosedFigureLevel.bound._id,
+          );
+
+          await changeUserFigureLevelBound({
+            boundId: choosedFigureLevel.bound._id,
+          }, {
+            isActive: false,
+            isModerated: true,
+          });
+
+          choosedFigureLevel = false;
+        } else if (e.keyCode === 187) {
+          // +
+          choosedFigureLevel.series.applyOptions({ color: constants.BLUE_COLOR });
+
+          await changeUserFigureLevelBound({
+            boundId: choosedFigureLevel.bound._id,
+          }, {
+            isModerated: true,
+          });
+
+          choosedFigureLevel = false;
+        } else if (e.keyCode === 48) {
+          choosedFigureLevel.series.applyOptions({ color: constants.RED_COLOR });
+        }
+      }
+
+      // -
+      if (e.keyCode === 189) {
+        if (prevChoosedFigureLevel) {
+          const resultChange = await changeUserFigureLevelBound({
+            boundId: prevChoosedFigureLevel._id,
+          }, {
+            isActive: true,
+          });
+
+          if (resultChange) {
+            prevChoosedFigureLevel = false;
+          }
+        }
       }
     });
 
@@ -200,13 +255,7 @@ const loadCharts = async ({
             <div class="1h is_worked  ${choosenPeriod === AVAILABLE_PERIODS.get('1h') ? 'is_active' : ''}" data-period="1h"><span>1H</span></div>
           </div>
         </div>
-        <div class="actions-menu">
-          <div class="chart-slider ${chartKey}">
-            <button class="previous"><</button>
-            <p><span class="current-slide">0</span>/<span class="amount-slides">0</span></p>
-            <button class="next">></button>
-          </div>
-        </div>
+        <div class="actions-menu"></div>
       </div>
       <span class="ruler">0%</span>
       <div class="charts" style="height: ${windowHeight}px"></div>
@@ -258,20 +307,109 @@ const loadCharts = async ({
     const $close = $legend.find('span.close');
     const $percent = $legend.find('span.percent');
 
-    if (chartKey === 'futures') {
-      chartCandles.chart.subscribeClick((param) => {
-        if (param.time && levels.length) {
-          const existedSeries = chartCandles.extraSeries.find(
-            series => series.id === param.time,
+    chartCandles.chart.subscribeClick(async (param) => {
+      if (param.time) {
+        let existedSeries = chartCandles.extraSeries.find(
+          series => series.originalTimeUnix === param.time,
+        );
+
+        if (!existedSeries) {
+          let indexOfNearestBoundFromLeft;
+          let indexOfNearestBoundFromRight;
+          const candles = chartCandles.originalData;
+          const lCandles = candles.length;
+
+          const candleIndex = candles.findIndex(
+            c => c.originalTimeUnix === param.time,
           );
 
-          if (existedSeries) {
-            chartCandles.removeSeries(existedSeries, false);
-            levels = levels.filter(level => param.time !== level.startOfLevelUnix);
+          for (let i = candleIndex; i >= 0; i -= 1) {
+            const candle = candles[i];
+            indexOfNearestBoundFromLeft = i;
+
+            const doesExistBoundWithThisIndex = futuresDoc.user_figure_level_bounds.find(
+              bound => getUnix(bound.level_start_candle_time) === candle.originalTimeUnix,
+            );
+
+            if (doesExistBoundWithThisIndex) {
+              break;
+            }
+
+            if (i === 1) {
+              indexOfNearestBoundFromLeft = false;
+            }
           }
+
+          for (let i = candleIndex; i < lCandles; i += 1) {
+            const candle = candles[i];
+            indexOfNearestBoundFromRight = i;
+
+            const doesExistBoundWithThisIndex = futuresDoc.user_figure_level_bounds.find(
+              bound => getUnix(bound.level_start_candle_time) === candle.originalTimeUnix,
+            );
+
+            if (doesExistBoundWithThisIndex) {
+              break;
+            }
+
+            if (i === lCandles - 1) {
+              indexOfNearestBoundFromRight = false;
+            }
+          }
+
+          if (!indexOfNearestBoundFromLeft && !indexOfNearestBoundFromRight) {
+            return true;
+          }
+
+          let targetCandle;
+
+          if (!indexOfNearestBoundFromLeft) {
+            targetCandle = candles[indexOfNearestBoundFromRight];
+          } else if (!indexOfNearestBoundFromRight) {
+            targetCandle = candles[indexOfNearestBoundFromLeft];
+          } else {
+            const differeneceBetweenCandleAndBoundFromLeft = candleIndex - indexOfNearestBoundFromLeft;
+            const differeneceBetweenCandleAndBoundFromRight = indexOfNearestBoundFromRight - candleIndex;
+
+            if (differeneceBetweenCandleAndBoundFromLeft < differeneceBetweenCandleAndBoundFromRight) {
+              targetCandle = candles[indexOfNearestBoundFromLeft];
+            } else {
+              targetCandle = candles[indexOfNearestBoundFromRight];
+            }
+          }
+
+          const existedBound = futuresDoc.user_figure_level_bounds.find(
+            bound => getUnix(bound.level_start_candle_time) === targetCandle.originalTimeUnix,
+          );
+
+          existedSeries = chartCandles.extraSeries.find(
+            series => series.boundId === existedBound._id
+              && series.originalTimeUnix === getUnix(existedBound.level_start_candle_time),
+          );
+
+          if (!existedSeries) {
+            alert('No existedSeries');
+            return true;
+          }
+
+          choosedFigureLevel = {
+            series: existedSeries,
+            bound: existedBound,
+          };
+
+          console.log('choosedFigureLevel', choosedFigureLevel.bound.level_start_candle_time);
+        } else {
+          choosedFigureLevel = {
+            series: existedSeries,
+            bound: futuresDoc.user_figure_level_bounds.find(
+              bound => getUnix(bound.level_start_candle_time) === param.time,
+            ),
+          };
         }
-      });
-    }
+
+        prevChoosedFigureLevel = JSON.parse(JSON.stringify(choosedFigureLevel.bound));
+      }
+    });
 
     chartCandles.chart.subscribeCrosshairMove((param) => {
       if (param.point) {
@@ -341,267 +479,104 @@ const loadCharts = async ({
   });
 };
 
-const calculateFigureLevels = ({ instrumentId }) => {
+const drawFigureLevels = ({ instrumentId }) => {
   const instrumentDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
 
   const chartCandles = instrumentDoc.chart_candles;
   const candlesData = chartCandles.originalData;
+  const userFigureLevelBounds = instrumentDoc.user_figure_level_bounds;
 
   const lCandles = candlesData.length;
+  const lBounds = userFigureLevelBounds.length;
 
-  if (!lCandles) {
+  if (!lCandles || !lBounds) {
     return true;
   }
 
-  const newLevels = [];
+  const figureLevels = [];
 
-  const highLevels = getHighLevels({
-    candles: candlesData,
-    distanceFromLeftSide: settings[choosenPeriod].distanceFromLeftSide,
-    distanceFromRightSide: settings[choosenPeriod].distanceFromRightSide,
-  });
+  for (let i = 0; i < lBounds; i += 1) {
+    const figureLevelBound = userFigureLevelBounds[i];
+    const levelStartCandleTimeUnix = getUnix(figureLevelBound.level_start_candle_time);
 
-  const lowLevels = getLowLevels({
-    candles: candlesData,
-    distanceFromLeftSide: settings[choosenPeriod].distanceFromLeftSide,
-    distanceFromRightSide: settings[choosenPeriod].distanceFromRightSide,
-  });
-
-  if ((!highLevels || !highLevels.length)
-    && (!lowLevels || !lowLevels.length)) {
-    return true;
-  }
-
-  highLevels.forEach(level => {
-    const doesExistLevelWithThisPrice = newLevels.some(l => l.levelPrice === level.levelPrice);
-
-    if (doesExistLevelWithThisPrice) {
-      return true;
-    }
-
-    const indexOfLevelStart = candlesData.findIndex(
-      candle => candle.originalTimeUnix === level.startOfLevelUnix,
+    const indexOfFirstCandle = candlesData.findIndex(
+      tCandle => tCandle.originalTimeUnix === levelStartCandleTimeUnix,
     );
 
-    const touches = [];
-    let indexOfLevelEnd = lCandles - 1;
-    let endOfLevelUnix = candlesData[lCandles - 1].originalTimeUnix;
+    if (!~indexOfFirstCandle) {
+      continue;
+    }
 
-    const allowedDistanceFromLevel = level.levelPrice - (level.levelPrice * (settings.percentForCountTouch / 100));
+    let indexOfEndCandle = false;
 
-    for (let j = indexOfLevelStart; j < lCandles; j += 1) {
-      if (candlesData[j].close > level.levelPrice) {
-        indexOfLevelEnd = j;
-        endOfLevelUnix = candlesData[j].originalTimeUnix;
-        break;
+    if (!figureLevelBound.is_worked) {
+      for (let j = indexOfFirstCandle + 1; j < lCandles; j += 1) {
+        const candleExtremum = candlesData[j].isLong ? candlesData[j].high : candlesData[j].low;
+
+        if ((figureLevelBound.is_long && candleExtremum > figureLevelBound.level_price)
+          || (!figureLevelBound.is_long && candleExtremum < figureLevelBound.level_price)) {
+          indexOfEndCandle = j;
+          break;
+        }
       }
     }
 
-    for (let j = indexOfLevelStart + 2; j < indexOfLevelEnd; j += 1) {
-      if (candlesData[j].high >= allowedDistanceFromLevel) {
-        touches.push({
-          index: j,
-          originalTimeUnix: candlesData[j].originalTimeUnix,
-        });
-      }
+    if (!indexOfEndCandle) {
+      indexOfEndCandle = lCandles - 1;
     }
 
-    touches.forEach(touch => {
-      chartCandles.addMarker({
-        shape: 'arrowDown',
-        position: 'aboveBar',
-        color: constants.YELLOW_COLOR,
-        time: touch.originalTimeUnix,
-      });
+    figureLevels.push({
+      boundId: figureLevelBound._id,
+      isLong: figureLevelBound.is_long,
+      isWorked: figureLevelBound.is_worked,
+      isModerated: figureLevelBound.is_moderated,
+      levelPrice: figureLevelBound.level_price,
+      indexOfFirstCandle,
+      indexOfEndCandle,
     });
-
-    newLevels.push({
-      ...level,
-      isLong: true,
-      endOfLevelUnix,
-      numberTouches: touches.length,
-    });
-  });
-
-  lowLevels.forEach(level => {
-    const doesExistLevelWithThisPrice = newLevels.some(l => l.levelPrice === level.levelPrice);
-
-    if (doesExistLevelWithThisPrice) {
-      return true;
-    }
-
-    const indexOfLevelStart = candlesData.findIndex(
-      candle => candle.originalTimeUnix === level.startOfLevelUnix,
-    );
-
-    const touches = [];
-    let indexOfLevelEnd = lCandles - 1;
-    let endOfLevelUnix = candlesData[lCandles - 1].originalTimeUnix;
-
-    const allowedDistanceFromLevel = level.levelPrice + (level.levelPrice * (settings.percentForCountTouch / 100));
-
-    for (let j = indexOfLevelStart; j < lCandles; j += 1) {
-      if (candlesData[j].close < level.levelPrice) {
-        indexOfLevelEnd = j;
-        endOfLevelUnix = candlesData[j].originalTimeUnix;
-        break;
-      }
-    }
-
-    for (let j = indexOfLevelStart + 2; j < indexOfLevelEnd; j += 1) {
-      if (candlesData[j].low <= allowedDistanceFromLevel) {
-        touches.push({
-          index: j,
-          originalTimeUnix: candlesData[j].originalTimeUnix,
-        });
-      }
-    }
-
-    touches.forEach(touch => {
-      chartCandles.addMarker({
-        shape: 'arrowUp',
-        position: 'belowBar',
-        color: constants.YELLOW_COLOR,
-        time: touch.originalTimeUnix,
-      });
-    });
-
-    newLevels.push({
-      ...level,
-      isLong: false,
-      endOfLevelUnix,
-      numberTouches: touches.length,
-    });
-  });
-
-  newLevels.forEach(level => {
-    const newCandleExtraSeries = chartCandles.addExtraSeries({
-      // priceScaleId: 'level',
-      lastValueVisible: false,
-    }, {
-      id: level.startOfLevelUnix,
-    });
-
-    chartCandles.drawSeries(newCandleExtraSeries, [{
-      value: level.levelPrice,
-      time: level.startOfLevelUnix,
-    }, {
-      value: level.levelPrice,
-      time: level.endOfLevelUnix,
-    }]);
-  });
-
-  return newLevels;
-};
-
-const getHighLevels = ({
-  candles,
-  distanceFromLeftSide,
-  distanceFromRightSide,
-}) => {
-  if (!candles || !candles.length) {
-    return [];
   }
 
-  const levels = [];
-  const lCandles = candles.length;
+  if (figureLevels.length) {
+    figureLevels.forEach(figureLevel => {
+      const lineStyle = figureLevel.isWorked ? 2 : 0;
+      const color = figureLevel.isModerated ? constants.BLUE_COLOR : constants.GREEN_COLOR;
 
-  candles.forEach((candle, index) => {
-    if ((lCandles - index) < distanceFromRightSide) {
-      return true;
-    }
-
-    let isHighest = true;
-    let isHighCrossed = false;
-
-    for (let i = index; i < lCandles; i += 1) {
-      const tmpCandle = candles[i];
-
-      if (tmpCandle.high > candle.high) {
-        isHighCrossed = true;
-        break;
-      }
-    }
-
-    if (!isHighCrossed) {
-      for (let i = 1; i < distanceFromLeftSide + 1; i += 1) {
-        const tmpCandle = candles[index - i];
-
-        if (!tmpCandle) {
-          break;
-        }
-
-        if (tmpCandle.high > candle.high) {
-          isHighest = false;
-          break;
-        }
-      }
-    }
-
-    if (!isHighCrossed && isHighest) {
-      levels.push({
-        levelPrice: candle.high,
-        startOfLevelUnix: candle.originalTimeUnix,
+      const newExtraSeries = chartCandles.addExtraSeries({
+        color,
+        lineStyle,
+        lastValueVisible: false,
+      }, {
+        boundId: figureLevel.boundId,
+        originalTimeUnix: candlesData[figureLevel.indexOfFirstCandle].originalTimeUnix,
       });
-    }
-  });
 
-  return levels;
+      chartCandles.drawSeries(
+        newExtraSeries,
+        [{
+          value: figureLevel.levelPrice,
+          time: candlesData[figureLevel.indexOfFirstCandle].originalTimeUnix,
+        }, {
+          value: figureLevel.levelPrice,
+          time: candlesData[figureLevel.indexOfEndCandle].originalTimeUnix,
+        }],
+      );
+    });
+  }
 };
 
-const getLowLevels = ({
-  candles,
-  distanceFromLeftSide,
-  distanceFromRightSide,
-}) => {
-  if (!candles || !candles.length) {
-    return [];
-  }
-
-  const levels = [];
-  const lCandles = candles.length;
-
-  candles.forEach((candle, index) => {
-    if ((lCandles - index) < distanceFromRightSide) {
-      return true;
-    }
-
-    let isLowest = true;
-    let isLowCrossed = false;
-
-    for (let i = index; i < lCandles; i += 1) {
-      const tmpCandle = candles[i];
-
-      if (tmpCandle.low < candle.low) {
-        isLowCrossed = true;
-        break;
-      }
-    }
-
-    if (!isLowCrossed) {
-      for (let i = 1; i < distanceFromLeftSide + 1; i += 1) {
-        const tmpCandle = candles[index - i];
-
-        if (!tmpCandle) {
-          break;
-        }
-
-        if (tmpCandle.low < candle.low) {
-          isLowest = false;
-          break;
-        }
-      }
-    }
-
-    if (!isLowCrossed && isLowest) {
-      levels.push({
-        levelPrice: candle.low,
-        startOfLevelUnix: candle.originalTimeUnix,
-      });
-    }
+const changeUserFigureLevelBound = async ({ boundId }, changes = {}) => {
+  const resultRequest = await makeRequest({
+    method: 'PUT',
+    url: `${URL_CHANGE_USER_FIGURE_LEVEL_BOUND}/${boundId}`,
+    body: changes,
   });
 
-  return levels;
+  if (!resultRequest || !resultRequest.status) {
+    alert(resultRequest.message || `Cant makeRequest ${URL_CHANGE_USER_FIGURE_LEVEL_BOUND}`);
+    return false;
+  }
+
+  return resultRequest.result;
 };
 
 const getCandlesData = async ({
