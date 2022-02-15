@@ -75,6 +75,7 @@ $(document).ready(async () => {
     query: {
       isActive: true,
       userId: user._id,
+      // timeframe: params.timeframe,
     },
   });
 
@@ -152,13 +153,16 @@ $(document).ready(async () => {
       }
 
       if (choosedFigureLine) {
+        const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
+        const chartCandles = instrumentDoc.chart_candles;
+
         if (e.keyCode === 8) {
           // -
-          const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
-          const chartCandles = instrumentDoc.chart_candles;
-
           chartCandles.removeSeries(choosedFigureLine.series, false);
+          chartCandles.removeMarker({ id: choosedFigureLine.bound._id });
+
           console.log('extraSeries.length', chartCandles.extraSeries.length);
+
           instrumentDoc.user_figure_line_bounds = instrumentDoc.user_figure_line_bounds.filter(
             bound => bound._id !== choosedFigureLine.bound._id,
           );
@@ -175,6 +179,10 @@ $(document).ready(async () => {
           // +
           choosedFigureLine.series.applyOptions({ color: constants.BLUE_COLOR });
 
+          chartCandles.changeMarker({ id: choosedFigureLine.bound._id }, {
+            color: constants.BLUE_COLOR,
+          });
+
           await changeUserFigureLineBound({
             boundId: choosedFigureLine.bound._id,
           }, {
@@ -184,6 +192,10 @@ $(document).ready(async () => {
           choosedFigureLine = false;
         } else if (e.keyCode === 48) {
           choosedFigureLine.series.applyOptions({ color: constants.RED_COLOR });
+
+          chartCandles.changeMarker({ id: choosedFigureLine.bound._id }, {
+            color: constants.RED_COLOR,
+          });
         }
       }
 
@@ -214,6 +226,15 @@ $(document).ready(async () => {
         .handler(`#instrument-${instrumentDoc._id}`);
     }
   }
+
+  if (params.timeframe) {
+    if (!AVAILABLE_PERIODS.get(params.timeframe)) {
+      alert('Invalid timeframe');
+      return true;
+    }
+
+    choosenPeriod = params.timeframe;
+  }
 });
 
 const renderListInstruments = (instrumentsDocs) => {
@@ -225,7 +246,7 @@ const renderListInstruments = (instrumentsDocs) => {
     .forEach(doc => {
       appendInstrumentsStr += `<div
         id="instrument-${doc._id}"
-        class="instrument"
+        class="instrument ${choosenInstrumentId === doc._id ? 'is_active' : ''}"
         data-instrumentid=${doc._id}>
         <span class="instrument-name">${doc.name}</span>
       </div>`;
@@ -633,7 +654,20 @@ const drawFigureLines = ({ instrumentId }) => {
           time: candlesData[figureLine.indexOfEndCandle].originalTimeUnix,
         }],
       );
+
+      const shape = figureLine.isLong ? 'arrowUp' : 'arrowDown';
+      const position = figureLine.isLong ? 'belowBar' : 'aboveBar';
+
+      chartCandles.addMarker({
+        id: figureLine.boundId,
+        shape,
+        color,
+        position,
+        time: candlesData[figureLine.indexOfFirstCandle].originalTimeUnix,
+      });
     });
+
+    chartCandles.drawMarkers();
   }
 };
 

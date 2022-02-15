@@ -21,7 +21,7 @@ const BINANCE_COMMISSION = 0.02;
 const windowHeight = window.innerHeight;
 
 let choosenInstrumentId;
-const choosenPeriod = AVAILABLE_PERIODS.get('1h');
+const choosenPeriod = AVAILABLE_PERIODS.get('5m');
 
 let levels = [];
 let instrumentsDocs = [];
@@ -607,9 +607,9 @@ const calculateFigureLevels = ({ instrumentId }) => {
   }
 
   newLevels.forEach(level => {
-    if (level.endOfLevelUnix < dividerDateUnix) {
-      return true;
-    }
+    // if (level.endOfLevelUnix < dividerDateUnix) {
+    //   return true;
+    // }
 
     const newCandleExtraSeries = chartCandles.addExtraSeries({
       lastValueVisible: false,
@@ -638,7 +638,8 @@ const calculateTrades = ({ instrumentId }) => {
     candle => candle.originalTimeUnix === dividerDateUnix,
   );
 
-  const candlesData = chartCandles.originalData.slice(indexDividerCandle, chartCandles.originalData.length);
+  const candlesData = chartCandles.originalData;
+  // const candlesData = chartCandles.originalData.slice(indexDividerCandle, chartCandles.originalData.length);
   const lCandlesData = candlesData.length;
 
   const intervalSettings = settings[choosenPeriod];

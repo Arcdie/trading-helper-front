@@ -183,8 +183,27 @@ class ChartCandles {
     })));
   }
 
+  changeMarker({ id }, changes) {
+    const targetMarkerIndex = this.markers.findIndex(marker => marker.id === id);
+
+    if (~targetMarkerIndex) {
+      this.markers[targetMarkerIndex] = {
+        ...this.markers[targetMarkerIndex],
+        ...changes,
+      };
+
+      this.drawMarkers();
+    }
+  }
+
+  removeMarker({ id }) {
+    this.markers = this.markers.filter(marker => marker.id !== id);
+    this.drawMarkers();
+  }
+
   removeMarkers() {
     this.markers = [];
+    this.drawMarkers();
   }
 
   removeChart() {
@@ -198,8 +217,10 @@ class ChartCandles {
     if (isMainSeries) {
       this.mainSeries = false;
     } else {
+      const key = series.boundId ? 'boundId' : 'id';
+
       this.extraSeries = this.extraSeries.filter(
-        extraSeries => extraSeries.id !== series.id,
+        extraSeries => extraSeries[key] !== series[key],
       );
     }
   }
