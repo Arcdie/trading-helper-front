@@ -132,7 +132,7 @@ $(document).ready(async () => {
       await loadCharts({ instrumentId });
       await getAndDrawNotifications({ instrumentId });
 
-      // calculateSwings({ instrumentId });
+      calculateSwings({ instrumentId });
       calculateFigureLines({ instrumentId });
       calculateFigureLevels({ instrumentId });
 
@@ -176,7 +176,7 @@ $(document).ready(async () => {
 
         chartCandles.removeMarkers();
 
-        // calculateSwings({ instrumentId });
+        calculateSwings({ instrumentId });
         calculateFigureLines({ instrumentId });
         calculateFigureLevels({ instrumentId });
 
@@ -208,7 +208,7 @@ $(document).ready(async () => {
         await loadCharts({ instrumentId });
         await getAndDrawNotifications({ instrumentId });
 
-        // calculateSwings({ instrumentId });
+        calculateSwings({ instrumentId });
         calculateFigureLines({ instrumentId });
         calculateFigureLevels({ instrumentId });
 
@@ -637,6 +637,10 @@ const updateLastCandle = (data, period) => {
     value: preparedData.volume,
     time: preparedData.originalTimeUnix,
   });
+
+  if (isClosed) {
+    calculateSwings({ instrumentId: choosenInstrumentId });
+  }
 
   /*
   const lDeltaVolumeData = indicatorCumulativeDeltaVolume.calculatedData.length;

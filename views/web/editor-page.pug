@@ -2,10 +2,10 @@ extends ../app
 
 block variables
 	-
-		const pageTitle = 'Experiment';
+		const pageTitle = 'Редактор';
 
 block content
-	.page.monitoring
+	.page.editor
 		.row
 			.charts-container
 
@@ -18,13 +18,18 @@ block content
 						span.instrument-name Инструмент
 
 					.list
+					
+		.row
+			.settings
 
 block scripts
 	script(src='/libs/moment.min.js')
 	script(src='/libs/trading-view-charts.min.js')
+	script(src='/libs/technical-indicators.min.js')
 
+	script(src='/javascripts/websocket.js')
 	script(src='/javascripts/chart-functions/chart-candles.js')
 	script(src='/javascripts/chart-functions/indicators/volume.js')
-	script(src='/javascripts/chart-functions/indicators/moving-average.js')
+	//- script(src='/javascripts/chart-functions/indicators/moving-average.js')
 
-	script(src='/javascripts/web/experiment.js')
+	script(src='/javascripts/web/editor.js')

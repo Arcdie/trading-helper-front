@@ -7,9 +7,9 @@
     "watcher": "nodemon -e scss -x \"npm run build-css\""
   },
   "devDependencies": {
-    "eslint": "^4.19.1",
-    "eslint-config-airbnb-base": "^12.1.0",
-    "eslint-plugin-import": "^2.12.0",
+    "eslint": "^8.27.0",
+    "eslint-config-airbnb-base": "^15.0.0",
+    "eslint-plugin-import": "^2.26.0"
     "node-sass": "^6.0.1"
   }
 }
