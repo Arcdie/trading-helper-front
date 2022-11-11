@@ -133,7 +133,7 @@ $(document).ready(async () => {
       await getAndDrawNotifications({ instrumentId });
 
       calculateSwings({ instrumentId });
-      // calculateFigureLines({ instrumentId });
+      calculateFigureLines({ instrumentId });
       calculateFigureLevels({ instrumentId });
 
       /*
@@ -177,7 +177,7 @@ $(document).ready(async () => {
         chartCandles.removeMarkers();
 
         calculateSwings({ instrumentId });
-        // calculateFigureLines({ instrumentId });
+        calculateFigureLines({ instrumentId });
         calculateFigureLevels({ instrumentId });
 
         /*
@@ -209,7 +209,7 @@ $(document).ready(async () => {
         await getAndDrawNotifications({ instrumentId });
 
         calculateSwings({ instrumentId });
-        // calculateFigureLines({ instrumentId });
+        calculateFigureLines({ instrumentId });
         calculateFigureLevels({ instrumentId });
 
         /*
@@ -328,9 +328,9 @@ const loadCharts = async ({
 
   const instrumentDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
 
-  const startDate = choosenPeriod === AVAILABLE_PERIODS.get('5m')
+  const startDate = choosenPeriod === AVAILABLE_PERIODS.get('5m') ?
     // moment().utc().startOf('day') : moment().utc().startOf('month').add(-1, 'months');
-    ? moment().utc().startOf('month') : moment().utc().startOf('month').add(-1, 'months');
+    moment().utc().startOf('month') : moment().utc().startOf('month').add(-1, 'months');
 
   // wsClient.send(JSON.stringify({
   //   actionName: 'unsubscribeFromAll',
@@ -392,7 +392,7 @@ const loadCharts = async ({
 
     const chartCandles = new ChartCandles($rootContainer, DEFAULT_PERIOD, chartKeyDoc);
 
-    // /*
+    /*
     const indicatorMovingAverageShort = new IndicatorMovingAverage(chartCandles.chart, {
       color: settings.colorForShortMA,
       period: settings.periodForShortMA,
@@ -402,7 +402,7 @@ const loadCharts = async ({
       color: settings.colorForMediumMA,
       period: settings.periodForMediumMA,
     });
-    // */
+    */
 
     // const indicatorCumulativeDeltaVolume = new IndicatorCumulativeDeltaVolume($rootContainer);
 
@@ -411,8 +411,8 @@ const loadCharts = async ({
     chartCandles.chartKey = chartKey;
     chartKeyDoc.chart_candles = chartCandles;
     chartKeyDoc.indicator_volume = indicatorVolume;
-    chartKeyDoc.indicator_moving_average_short = indicatorMovingAverageShort;
-    chartKeyDoc.indicator_moving_average_medium = indicatorMovingAverageMedium;
+    // chartKeyDoc.indicator_moving_average_short = indicatorMovingAverageShort;
+    // chartKeyDoc.indicator_moving_average_medium = indicatorMovingAverageMedium;
     // chartKeyDoc.indicator_cumulative_delta_volume = indicatorCumulativeDeltaVolume;
 
     chartCandles.setOriginalData(chartKeyDoc.candles_data, false);
@@ -423,7 +423,7 @@ const loadCharts = async ({
       time: e.time,
     })));
 
-    // /*
+    /*
     let calculatedData;
 
     calculatedData = indicatorMovingAverageShort.calculateAndDraw(chartCandles.originalData);
@@ -431,7 +431,7 @@ const loadCharts = async ({
 
     calculatedData = indicatorMovingAverageMedium.calculateAndDraw(chartCandles.originalData);
     indicatorMovingAverageMedium.calculatedData = calculatedData;
-    // */
+    */
 
     // calculatedData = indicatorCumulativeDeltaVolume.calculateAndDraw(chartCandles.originalData);
     // indicatorCumulativeDeltaVolume.calculatedData = calculatedData;
@@ -601,8 +601,8 @@ const updateLastCandle = (data, period) => {
 
   const chartCandles = instrumentDoc.chart_candles;
   const indicatorVolume = instrumentDoc.indicator_volume;
-  const indicatorMovingAverageShort = instrumentDoc.indicator_moving_average_short;
-  const indicatorMovingAverageMedium = instrumentDoc.indicator_moving_average_medium;
+  // const indicatorMovingAverageShort = instrumentDoc.indicator_moving_average_short;
+  // const indicatorMovingAverageMedium = instrumentDoc.indicator_moving_average_medium;
   // const indicatorCumulativeDeltaVolume = instrumentDoc.indicator_cumulative_delta_volume;
 
   const candlesData = chartCandles.originalData;
@@ -649,22 +649,21 @@ const updateLastCandle = (data, period) => {
     indicatorCumulativeDeltaVolume.calculatedData[lDeltaVolumeData - 2],
     preparedData,
   ], indicatorCumulativeDeltaVolume.calculatedData[lDeltaVolumeData - 2].sumDelta)[1];
-  */
 
   if (!isClosed) {
-    // const lastValue = indicatorCumulativeDeltaVolume.calculatedData[lDeltaVolumeData - 1];
+    const lastValue = indicatorCumulativeDeltaVolume.calculatedData[lDeltaVolumeData - 1];
 
-    // if (lastValue.originalTimeUnix !== resultCalculateDelta.originalTimeUnix) {
-    //   indicatorCumulativeDeltaVolume.calculatedData.push(resultCalculateDelta);
-    // } else {
-    //   indicatorCumulativeDeltaVolume.calculatedData[lDeltaVolumeData - 1] = resultCalculateDelta;
-    // }
+    if (lastValue.originalTimeUnix !== resultCalculateDelta.originalTimeUnix) {
+      indicatorCumulativeDeltaVolume.calculatedData.push(resultCalculateDelta);
+    } else {
+      indicatorCumulativeDeltaVolume.calculatedData[lDeltaVolumeData - 1] = resultCalculateDelta;
+    }
   } else {
-    // indicatorCumulativeDeltaVolume.calculatedData.push(resultCalculateDelta);
+    indicatorCumulativeDeltaVolume.calculatedData.push(resultCalculateDelta);
 
     calculateSwings({ instrumentId: choosenInstrumentId });
 
-    // /*
+    /*
     let resultCalculateMA;
     const targetCandlesPeriod = candlesData.slice(lCandles - (settings.periodForMediumMA * 2), lCandles);
 
@@ -682,20 +681,20 @@ const updateLastCandle = (data, period) => {
       resultCalculateMA[resultCalculateMA.length - 1],
     );
   }
-  // */
+  */
 
   /*
   indicatorCumulativeDeltaVolume.drawSeries(
     indicatorCumulativeDeltaVolume.mainSeries,
     resultCalculateDelta,
   );
-  */
 
   calculateVolumeForLastSwing({ instrumentId: choosenInstrumentId });
 
   $chartsContainer.find('.last-swing-data').css({
     top: chartCandles.mainSeries.priceToCoordinate(close) - 15,
   });
+  */
 };
 
 const calculateFigureLevels = ({ instrumentId }) => {
@@ -1802,8 +1801,8 @@ const getCandlesData = async ({
     instrumentId,
     startTime: startDate,
     endTime: endDate,
-    isFirstCall: false,
-    // isFirstCall: true,
+    // isFirstCall: false,
+    isFirstCall: true,
   };
 
   const resultGetCandles = await makeRequest({

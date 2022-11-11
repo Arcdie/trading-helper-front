@@ -2,7 +2,7 @@
 
 const wsConnectionPort = 3100;
 const wsConnectionLink = location.host === 'localhost:3000' ?
-  'ws://localhost' : 'wss://trading-helper.ru';
+  'ws://localhost' : 'wss://trading-helper.fun';
 
 const wsClient = new WebSocket(`${wsConnectionLink}:${wsConnectionPort}?userId=${user._id}`);
 
