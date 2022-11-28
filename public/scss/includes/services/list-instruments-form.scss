@@ -1,0 +1,88 @@
+.instruments-container {
+  width: 11%;
+  overflow-y: scroll;
+  display: inline-block;
+  box-sizing: border-box;
+  border: 1px solid black;
+
+  .search {
+    width: 100%;
+    height: 35px;
+    position: relative;
+
+    input[type="text"] {
+      width: 100%;
+      height: 100%;
+      box-sizing: border-box;
+      border-right: none;
+      border-top: none;
+      border-left: none;
+      padding: 0 8px;
+      outline: none;
+    }
+  }
+
+  .instruments-list {
+    width: 100%;
+
+    .headlines {
+      text-align: left;
+      padding: 5px 10px;
+      border-bottom: 1px solid black;
+
+      span {
+        cursor: pointer;
+        display: inline-block;
+        box-sizing: border-box;
+
+        &.is_active {
+          background-color: #00a1ff59;
+        }
+
+        &.instrument-name {
+          width: 80%;
+        }
+
+        &.amount-volume {
+          width: 18%;
+          text-align: center;
+        }
+      }
+    }
+
+    .list {
+      display: flex;
+      overflow-y: scroll;
+      flex-direction: column;
+
+      .instrument {
+        &.is_active {
+          background-color: #0066ff61 !important;
+        }
+
+        &:hover {
+          background-color: #0066ff1f;
+        }
+
+        cursor: pointer;
+        padding: 10px 10px;
+        border-bottom: 1px solid black;
+
+        span {
+          cursor: pointer;
+          display: inline-block;
+          box-sizing: border-box;
+
+          &.instrument-name {
+            width: 77%;
+          }
+
+          &.amount {
+            width: 18%;
+            text-align: center;
+          }
+        }
+      }
+    }
+  }
+}

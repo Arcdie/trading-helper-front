@@ -254,8 +254,8 @@ class ChartCandles {
         return {
           originalTime: data.time,
           originalTimeUnix: timeUnix,
-          time: isUnixTime ?
-            timeUnix + (userTimezone * 60)
+          time: isUnixTime
+            ? timeUnix + (userTimezone * 60)
             : moment(data.time).add(userTimezone, 'minutes').format('YYYY-MM-DD'),
 
           open: data.data[0],

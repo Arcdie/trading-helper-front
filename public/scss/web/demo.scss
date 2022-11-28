@@ -1,4 +1,4 @@
-.monitoring {
+.demo {
   padding: 10px;
   position: relative;
   display: flex;
@@ -6,6 +6,7 @@
 
   .row {
     display: flex;
+    position: relative;
     border-top: 1px solid black;
     margin-top: 15px;
 
@@ -172,6 +173,30 @@
       }
     }
 
+    .drawing {
+      display: flex;
+
+      div {
+        &.is_active {
+          border-color: #00bf20;
+        }
+
+        width: 40px;
+        height: 40px;
+        cursor: pointer;
+        box-sizing: border-box;
+        margin-right: 5px;
+        position: relative;
+        border: 1px dashed #d9d9d9;
+        background-color: white;
+
+        img {
+          width: 100%;
+          height: 100%;
+        }
+      }
+    }
+
     .chart-candles {
       width: 100%;
       height: 80%;
@@ -196,110 +221,6 @@
       border: 1px solid black;
       border-right: none;
       box-sizing: border-box;
-    }
-  }
-
-  .instruments-container {
-    width: 11%;
-    overflow-y: scroll;
-    display: inline-block;
-    box-sizing: border-box;
-    border: 1px solid black;
-
-    .search {
-      width: 100%;
-      height: 35px;
-      position: relative;
-
-      input[type="text"] {
-        width: 100%;
-        height: 100%;
-        box-sizing: border-box;
-        border-right: none;
-        border-top: none;
-        border-left: none;
-        padding: 0 8px;
-        outline: none;
-      }
-
-      button.show-trading-form {
-        width: 33px;
-        height: 33px;
-        background-color: transparent;
-        border: none;
-        position: absolute;
-        right: 0;
-        cursor: pointer;
-        margin-top: 2px;
-
-        img {
-          width: 100%;
-        }
-      }
-    }
-
-    .instruments-list {
-      width: 100%;
-
-      .headlines {
-        text-align: left;
-        padding: 5px 10px;
-        border-bottom: 1px solid black;
-
-        span {
-          cursor: pointer;
-          display: inline-block;
-          box-sizing: border-box;
-
-          &.is_active {
-            background-color: #00a1ff59;
-          }
-
-          &.instrument-name {
-            width: 80%;
-          }
-
-          &.amount-volume {
-            width: 18%;
-            text-align: center;
-          }
-        }
-      }
-
-      .list {
-        display: flex;
-        overflow-y: scroll;
-        flex-direction: column;
-
-        .instrument {
-          &.is_active {
-            background-color: #0066ff61 !important;
-          }
-
-          &:hover {
-            background-color: #0066ff1f;
-          }
-
-          cursor: pointer;
-          padding: 10px 10px;
-          border-bottom: 1px solid black;
-
-          span {
-            cursor: pointer;
-            display: inline-block;
-            box-sizing: border-box;
-
-            &.instrument-name {
-              width: 77%;
-            }
-
-            &.amount {
-              width: 18%;
-              text-align: center;
-            }
-          }
-        }
-      }
     }
   }
 

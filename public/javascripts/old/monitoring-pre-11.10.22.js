@@ -1,3 +1,5 @@
+//- Logic before decision of making demo & live trading
+
 /* global
 functions, makeRequest, getUnix, formatNumberToPretty,
 objects, moment, constants, wsClient, ChartCandles, IndicatorVolume, IndicatorMovingAverage, IndicatorCumulativeDeltaVolume

@@ -209,7 +209,6 @@
     .search {
       width: 100%;
       height: 35px;
-      position: relative;
 
       input[type="text"] {
         width: 100%;
@@ -220,21 +219,6 @@
         border-left: none;
         padding: 0 8px;
         outline: none;
-      }
-
-      button.show-trading-form {
-        width: 33px;
-        height: 33px;
-        background-color: transparent;
-        border: none;
-        position: absolute;
-        right: 0;
-        cursor: pointer;
-        margin-top: 2px;
-
-        img {
-          width: 100%;
-        }
       }
     }
 

@@ -8,6 +8,10 @@
 @import './includes/loader.scss';
 @import './includes/switchers.scss';
 
+// Services
+@import './includes/services/trading-form.scss';
+@import './includes/services/list-instruments-form.scss';
+
 // Web
 @import './web/auth.scss';
 @import './web/logs.scss';
@@ -20,6 +24,7 @@
 @import './web/volume-statistics.scss';
 @import './web/robots-statistics.scss';
 
+@import './web/demo.scss';
 @import './web/editor.scss';
 @import './web/monitoring.scss';
 @import './web/monitoring-correlation.scss';

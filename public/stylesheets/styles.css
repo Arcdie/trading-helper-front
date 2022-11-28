@@ -233,6 +233,150 @@ input:checked + .slider:before {
 .slider.round:before {
   border-radius: 50%; }
 
+button#show-trading-form {
+  width: 33px;
+  height: 33px;
+  outline: none;
+  background-color: transparent;
+  border: none;
+  position: absolute;
+  right: 0;
+  cursor: pointer;
+  margin-top: 2px; }
+  button#show-trading-form img {
+    width: 100%; }
+
+.trading-form {
+  display: none;
+  height: 152px;
+  box-sizing: border-box;
+  border: 1px solid black;
+  position: absolute;
+  right: 0;
+  background-color: white;
+  z-index: 2; }
+  .trading-form.is_active {
+    display: block; }
+  .trading-form .action-block {
+    display: flex; }
+    .trading-form .action-block div {
+      width: 50%;
+      display: flex;
+      flex-direction: column; }
+      .trading-form .action-block div button {
+        cursor: pointer;
+        border: none;
+        outline: none;
+        padding: 10px; }
+      .trading-form .action-block div input[type="text"] {
+        padding: 5px;
+        outline: none;
+        border: none;
+        text-align: center;
+        box-sizing: border-box;
+        border-bottom: 1px solid black; }
+      .trading-form .action-block div.buy button {
+        background-color: #3dff2bc2; }
+        .trading-form .action-block div.buy button:hover {
+          background-color: #3dff2b61; }
+      .trading-form .action-block div.sell button {
+        background-color: #fa1010c2; }
+        .trading-form .action-block div.sell button:hover {
+          background-color: #fa101063; }
+      .trading-form .action-block div.sell input[type="text"] {
+        border-left: 1px solid black; }
+  .trading-form .risks-block {
+    display: flex; }
+    .trading-form .risks-block div {
+      width: 50%;
+      display: flex;
+      flex-direction: column; }
+      .trading-form .risks-block div button {
+        cursor: pointer;
+        border: none;
+        padding: 5px; }
+      .trading-form .risks-block div input[type="text"] {
+        padding: 5px;
+        outline: none;
+        border: none;
+        text-align: center;
+        box-sizing: border-box;
+        border-bottom: 1px solid black; }
+      .trading-form .risks-block div.tp button {
+        background-color: #3dff2bc2; }
+        .trading-form .risks-block div.tp button:hover {
+          background-color: #3dff2b61; }
+      .trading-form .risks-block div.sl button {
+        background-color: #fa1010c2; }
+        .trading-form .risks-block div.sl button:hover {
+          background-color: #fa101063; }
+      .trading-form .risks-block div.sl input[type="text"] {
+        border-left: 1px solid black; }
+  .trading-form .sum-block input[type="text"] {
+    border: none;
+    text-align: center;
+    width: 100%;
+    display: block;
+    padding: 10px 0; }
+
+.instruments-container {
+  width: 11%;
+  overflow-y: scroll;
+  display: inline-block;
+  box-sizing: border-box;
+  border: 1px solid black; }
+  .instruments-container .search {
+    width: 100%;
+    height: 35px;
+    position: relative; }
+    .instruments-container .search input[type="text"] {
+      width: 100%;
+      height: 100%;
+      box-sizing: border-box;
+      border-right: none;
+      border-top: none;
+      border-left: none;
+      padding: 0 8px;
+      outline: none; }
+  .instruments-container .instruments-list {
+    width: 100%; }
+    .instruments-container .instruments-list .headlines {
+      text-align: left;
+      padding: 5px 10px;
+      border-bottom: 1px solid black; }
+      .instruments-container .instruments-list .headlines span {
+        cursor: pointer;
+        display: inline-block;
+        box-sizing: border-box; }
+        .instruments-container .instruments-list .headlines span.is_active {
+          background-color: #00a1ff59; }
+        .instruments-container .instruments-list .headlines span.instrument-name {
+          width: 80%; }
+        .instruments-container .instruments-list .headlines span.amount-volume {
+          width: 18%;
+          text-align: center; }
+    .instruments-container .instruments-list .list {
+      display: flex;
+      overflow-y: scroll;
+      flex-direction: column; }
+      .instruments-container .instruments-list .list .instrument {
+        cursor: pointer;
+        padding: 10px 10px;
+        border-bottom: 1px solid black; }
+        .instruments-container .instruments-list .list .instrument.is_active {
+          background-color: #0066ff61 !important; }
+        .instruments-container .instruments-list .list .instrument:hover {
+          background-color: #0066ff1f; }
+        .instruments-container .instruments-list .list .instrument span {
+          cursor: pointer;
+          display: inline-block;
+          box-sizing: border-box; }
+          .instruments-container .instruments-list .list .instrument span.instrument-name {
+            width: 77%; }
+          .instruments-container .instruments-list .list .instrument span.amount {
+            width: 18%;
+            text-align: center; }
+
 .login, .registration {
   padding: 15px;
   position: relative; }
@@ -1316,6 +1460,207 @@ input:checked + .slider:before {
         padding: 10px;
         text-align: center; }
 
+.demo {
+  padding: 10px;
+  position: relative;
+  display: flex;
+  flex-direction: column; }
+  .demo .row {
+    display: flex;
+    position: relative;
+    border-top: 1px solid black;
+    margin-top: 15px; }
+    .demo .row:first-child {
+      margin-top: 0px;
+      border-top: none; }
+  .demo .charts-container {
+    width: 90%;
+    display: inline-block;
+    box-sizing: border-box;
+    position: relative; }
+    .demo .charts-container .chart-container {
+      position: relative; }
+      .demo .charts-container .chart-container.spot .actions-menu, .demo .charts-container .chart-container.futures .actions-menu {
+        display: block; }
+    .demo .charts-container .charts-nav {
+      position: absolute;
+      z-index: 999;
+      top: 15px;
+      left: 15px; }
+      .demo .charts-container .charts-nav .row {
+        display: flex;
+        align-items: center;
+        border-top: none; }
+    .demo .charts-container .legend p.values span {
+      color: #000FFF;
+      margin-left: 2px;
+      margin-right: 5px; }
+    .demo .charts-container .ruler {
+      position: absolute;
+      left: -9999px;
+      top: -9999px;
+      z-index: 999;
+      font-size: 16px;
+      color: #0044e8; }
+    .demo .charts-container .last-swing-data {
+      position: absolute;
+      right: 83px;
+      top: -9999px;
+      font: 11px sans-serif;
+      z-index: 9;
+      color: #ff8d36; }
+    .demo .charts-container .add-notification {
+      width: 20px;
+      height: 20px;
+      cursor: pointer;
+      text-align: center;
+      background-color: black;
+      border-radius: 1000px;
+      position: absolute;
+      right: 83px;
+      top: -9999px;
+      z-index: 9; }
+      .demo .charts-container .add-notification span {
+        color: white;
+        font-size: 20px;
+        position: relative;
+        top: -1px; }
+    .demo .charts-container .actions-menu {
+      display: none;
+      margin-top: 12px; }
+      .demo .charts-container .actions-menu .chart-slider {
+        display: inline-block; }
+        .demo .charts-container .actions-menu .chart-slider p {
+          display: inline-block;
+          margin: 0 8px;
+          font: 17px sans-serif; }
+          .demo .charts-container .actions-menu .chart-slider p span.current-slide {
+            margin-right: 3px; }
+          .demo .charts-container .actions-menu .chart-slider p span.amount-slides {
+            margin-left: 3px; }
+        .demo .charts-container .actions-menu .chart-slider button {
+          display: inline-block;
+          background-color: transparent;
+          border-radius: 100px;
+          cursor: pointer;
+          font-size: 17px; }
+      .demo .charts-container .actions-menu .volume-timelife {
+        width: 16px;
+        display: inline-block;
+        margin-left: 11px; }
+        .demo .charts-container .actions-menu .volume-timelife input[type="text"] {
+          width: 100%;
+          height: 100%;
+          text-align: center;
+          position: relative;
+          bottom: 2px; }
+    .demo .charts-container .chart-periods {
+      display: flex;
+      margin-top: 12px; }
+      .demo .charts-container .chart-periods div {
+        width: 40px;
+        height: 40px;
+        cursor: pointer;
+        display: none;
+        box-sizing: border-box;
+        margin-right: 5px;
+        position: relative;
+        border: 1px dashed #d9d9d9;
+        background-color: white; }
+        .demo .charts-container .chart-periods div.is_worked {
+          display: flex;
+          justify-content: center;
+          align-items: center; }
+        .demo .charts-container .chart-periods div.is_active {
+          border-color: #00bf20; }
+        .demo .charts-container .chart-periods div span {
+          margin: 8px auto;
+          text-align: center;
+          display: block; }
+    .demo .charts-container .drawing {
+      display: flex; }
+      .demo .charts-container .drawing div {
+        width: 40px;
+        height: 40px;
+        cursor: pointer;
+        box-sizing: border-box;
+        margin-right: 5px;
+        position: relative;
+        border: 1px dashed #d9d9d9;
+        background-color: white; }
+        .demo .charts-container .drawing div.is_active {
+          border-color: #00bf20; }
+        .demo .charts-container .drawing div img {
+          width: 100%;
+          height: 100%; }
+    .demo .charts-container .chart-candles {
+      width: 100%;
+      height: 80%;
+      border: 1px solid black;
+      border-right: none;
+      box-sizing: border-box; }
+    .demo .charts-container .chart-volume {
+      width: 100%;
+      height: 20%;
+      border: 1px solid black;
+      border-right: none;
+      box-sizing: border-box; }
+    .demo .charts-container .chart-cumulative-delta-volume {
+      width: 100%;
+      height: 20%;
+      border: 1px solid black;
+      border-right: none;
+      box-sizing: border-box; }
+  .demo .settings {
+    padding-top: 15px; }
+    .demo .settings div {
+      margin-bottom: 10px; }
+      .demo .settings div p {
+        margin-bottom: 3px; }
+  .demo .report {
+    width: 100%;
+    position: relative;
+    padding-top: 15px; }
+    .demo .report table.main-table {
+      width: 100%;
+      margin-top: -5px; }
+      .demo .report table.main-table td.red {
+        background-color: #ff000047; }
+      .demo .report table.main-table td.green {
+        background-color: #07c007b0; }
+      .demo .report table.main-table th {
+        width: 10%;
+        padding-bottom: 10px;
+        border-bottom: 1px solid black; }
+        .demo .report table.main-table th.instrument-name {
+          width: 6%; }
+      .demo .report table.main-table tr.result table tr {
+        border-bottom: none; }
+      .demo .report table.main-table tr.instrument table {
+        border-top: 1px solid black; }
+      .demo .report table.main-table tr td {
+        border-right: 1px solid black; }
+        .demo .report table.main-table tr td:last-child {
+          border-right: none; }
+        .demo .report table.main-table tr td table {
+          width: 100%; }
+          .demo .report table.main-table tr td table tr {
+            text-align: center; }
+            .demo .report table.main-table tr td table tr:last-child td {
+              border-bottom: none; }
+            .demo .report table.main-table tr td table tr.trade:hover {
+              cursor: pointer;
+              background-color: #cccccc80; }
+            .demo .report table.main-table tr td table tr th {
+              padding: 10px 0px;
+              border-bottom: 1px solid black; }
+            .demo .report table.main-table tr td table tr td {
+              padding: 10px 0px;
+              border-bottom: 1px solid black;
+              border-right: 1px solid black; }
+              .demo .report table.main-table tr td table tr td:last-child {
+                border-right: none; }
+
 .editor {
   padding: 10px;
   position: relative;
@@ -1714,7 +2059,8 @@ input:checked + .slider:before {
     border: 1px solid black; }
     .monitoring .instruments-container .search {
       width: 100%;
-      height: 35px; }
+      height: 35px;
+      position: relative; }
       .monitoring .instruments-container .search input[type="text"] {
         width: 100%;
         height: 100%;
@@ -1724,6 +2070,17 @@ input:checked + .slider:before {
         border-left: none;
         padding: 0 8px;
         outline: none; }
+      .monitoring .instruments-container .search button.show-trading-form {
+        width: 33px;
+        height: 33px;
+        background-color: transparent;
+        border: none;
+        position: absolute;
+        right: 0;
+        cursor: pointer;
+        margin-top: 2px; }
+        .monitoring .instruments-container .search button.show-trading-form img {
+          width: 100%; }
     .monitoring .instruments-container .instruments-list {
       width: 100%; }
       .monitoring .instruments-container .instruments-list .headlines {

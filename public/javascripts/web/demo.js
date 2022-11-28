@@ -1,13 +1,18 @@
 /* global
-functions, makeRequest, getUnix, formatNumberToPretty,
-objects, moment, constants, wsClient, ChartCandles, IndicatorVolume, IndicatorMovingAverage, IndicatorCumulativeDeltaVolume
+functions, makeRequest, getUnix, getRandomNumber, formatNumberToPretty,
+objects, moment, constants,
+classes, ChartCandles, IndicatorVolume, IndicatorMovingAverage, Trading,
+*/
+
+/*
+   Баг +
+   Урезать свинги +
+   Добавить рисовалку уровней ?
 */
 
 /* Constants */
 
 const URL_GET_CANDLES = '/api/candles';
-const URL_ADD_NOTIFICATION = '/api/user-notifications';
-const URL_GET_NOTIFICATIONS = '/api/user-notifications';
 const URL_GET_ACTIVE_INSTRUMENTS = '/api/instruments/active';
 
 const AVAILABLE_PERIODS = new Map([
@@ -15,9 +20,14 @@ const AVAILABLE_PERIODS = new Map([
   ['1h', '1h'],
 ]);
 
-const DEFAULT_PERIOD = AVAILABLE_PERIODS.get('1h');
+const DEFAULT_PERIOD = AVAILABLE_PERIODS.get('5m');
 
 /* Variables */
+
+let linePoints = [];
+let choosedFigureShape = false;
+let isActiveLineDrawing = false;
+let isActiveLevelDrawing = false;
 
 let instrumentsDocs = [];
 
@@ -26,32 +36,21 @@ let choosenPeriod = DEFAULT_PERIOD;
 const windowHeight = window.innerHeight;
 
 const settings = {
+  // Swings
   numberCompressions: 3,
+  limitCandlesFor1h: 720 + 48, // 2 monts + 2 days
+  limitCandlesFor5m: 576 + 24, // 2 days + 2 hours
 
+  // MA
   periodForShortMA: 20,
   periodForMediumMA: 50,
-
   colorForShortMA: '#0800FF',
   colorForMediumMA: '#2196F3',
-
-  limitTimeFor1h: 14 * 24 * 60 * 60,
-  limitTimeFor5m: 2 * 24 * 60 * 60,
 };
 
+const trading = new Trading();
 const urlSearchParams = new URLSearchParams(window.location.search);
 const params = Object.fromEntries(urlSearchParams.entries());
-
-wsClient.onmessage = async data => {
-  const parsedData = JSON.parse(data.data);
-
-  if (parsedData.actionName) {
-    switch (parsedData.actionName) {
-      case 'futuresCandle5mData': updateLastCandle(parsedData.data, AVAILABLE_PERIODS.get('5m')); break;
-      case 'futuresCandle1hData': updateLastCandle(parsedData.data, AVAILABLE_PERIODS.get('1h')); break;
-      default: break;
-    }
-  }
-};
 
 /* JQuery */
 const $chartsContainer = $('.charts-container');
@@ -61,6 +60,8 @@ const $instrumentsList = $instrumentsContainer.find('.instruments-list .list');
 
 $(document).ready(async () => {
   // start settings
+
+  trading.init();
 
   $instrumentsContainer
     .css({ maxHeight: windowHeight });
@@ -118,11 +119,40 @@ $(document).ready(async () => {
 
       $instrument.addClass('is_active');
 
-      await loadCharts({ instrumentId });
-      await getAndDrawNotifications({ instrumentId });
+      const instrumentDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
 
+      if (!instrumentDoc.original_candles_data_5m
+        || !instrumentDoc.original_candles_data_5m.length) {
+        instrumentDoc.original_candles_data_5m = await getCandlesData({
+          period: AVAILABLE_PERIODS.get('5m'),
+          instrumentId: instrumentDoc._id,
+        });
+
+        instrumentDoc.candles_data_5m = JSON.parse(
+          JSON.stringify(instrumentDoc.original_candles_data_5m),
+        );
+      }
+
+      if (!instrumentDoc.original_candles_data_1h
+        || !instrumentDoc.original_candles_data_1h.length) {
+        instrumentDoc.original_candles_data_1h = await getCandlesData({
+          period: AVAILABLE_PERIODS.get('1h'),
+          instrumentId: instrumentDoc._id,
+        });
+
+        instrumentDoc.candles_data_1h = JSON.parse(
+          JSON.stringify(instrumentDoc.original_candles_data_1h),
+        );
+      }
+
+      loadCharts({ instrumentId });
       calculateSwings({ instrumentId });
-      calculateFigureLevels({ instrumentId });
+
+      const figureLevelsData = getFigureLevelsFromLocalStorage({ instrumentId });
+      drawFigureLevels({ instrumentId }, figureLevelsData);
+
+      const figureLinesData = getFigureLinesFromLocalStorage({ instrumentId });
+      drawFigureLines({ instrumentId }, figureLinesData);
 
       if (choosenPeriod === AVAILABLE_PERIODS.get('5m')) {
         splitDays({ instrumentId });
@@ -148,64 +178,47 @@ $(document).ready(async () => {
 
         const instrumentId = choosenInstrumentId;
 
-        await loadCharts({ instrumentId });
-        await getAndDrawNotifications({ instrumentId });
-
+        loadCharts({ instrumentId });
         calculateSwings({ instrumentId });
-        calculateFigureLevels({ instrumentId });
+
+        const figureLevelsData = getFigureLevelsFromLocalStorage({ instrumentId });
+        drawFigureLevels({ instrumentId }, figureLevelsData);
+
+        const figureLinesData = getFigureLinesFromLocalStorage({ instrumentId });
+        drawFigureLines({ instrumentId }, figureLinesData);
 
         if (choosenPeriod === AVAILABLE_PERIODS.get('5m')) {
           splitDays({ instrumentId });
         }
       }
     })
-    .on('click', '.add-notification', async () => {
+    .on('click', '.drawing div', function () {
       if (!choosenInstrumentId) {
         return true;
       }
 
-      const instrumentDoc = instrumentsDocs.find(
-        doc => doc._id === choosenInstrumentId,
-      );
+      const $this = $(this);
+      const type = $(this).data('type');
 
-      const chartCandles = instrumentDoc.chart_candles;
+      const isActive = $this.hasClass('is_active');
 
-      const lastPrice = parseFloat(chartCandles.lastPrice.toFixed(instrumentDoc.price_precision));
+      if (isActive) {
+        $this.removeClass('is_active');
+        isActiveLineDrawing = false;
+        isActiveLevelDrawing = false;
+      } else {
+        $this.parent().find('div').removeClass('is_active');
+        $this.addClass('is_active');
 
-      const resultAddNotification = await makeRequest({
-        method: 'POST',
-        url: URL_ADD_NOTIFICATION,
-
-        body: {
-          price: lastPrice,
-          instrumentId: instrumentDoc._id,
-          isLong: lastPrice > instrumentDoc.price,
-        },
-      });
-
-      if (!resultAddNotification || !resultAddNotification.status) {
-        alert(resultAddNotification.message || 'Cant makeRequest URL_ADD_NOTIFICATION');
-        return true;
+        if (type === 'level') {
+          isActiveLevelDrawing = true;
+          isActiveLineDrawing = false;
+        } else {
+          isActiveLevelDrawing = false;
+          isActiveLineDrawing = true;
+          linePoints = [];
+        }
       }
-
-      const newExtraSeries = chartCandles.addExtraSeries({
-        color: constants.YELLOW_COLOR,
-        lineStyle: 3,
-        lastValueVisible: false,
-      }, {
-        isNotification: true,
-      });
-
-      const startCandle = chartCandles.originalData[0];
-      const endCandle = chartCandles.originalData[chartCandles.originalData.length - 1];
-
-      chartCandles.drawSeries(newExtraSeries, [{
-        value: lastPrice,
-        time: startCandle.originalTimeUnix,
-      }, {
-        value: lastPrice,
-        time: endCandle.originalTimeUnix,
-      }]);
     });
 
   if (params.symbol) {
@@ -220,69 +233,233 @@ $(document).ready(async () => {
     }
   }
 
+  $('#show-trading-form')
+    .on('click', () => {
+      if (!choosenInstrumentId) return;
+
+      const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
+      trading.loadInstrumentData(instrumentDoc);
+      trading.$tradingForm.addClass('is_active');
+    });
+
   $(document)
-    .on('keyup', async e => {
+    .on('keypress', async e => {
       if (!choosenInstrumentId) {
         return true;
       }
 
-      // arrow right
-      if (e.keyCode === 37) {
-        const indexOfInstrumentDoc = instrumentsDocs.findIndex(
-          doc => doc._id === choosenInstrumentId,
-        );
+      if (e.keyCode === 93) {
+        // ]
+        nextTick();
+      }
+    })
+    .on('keydown', async e => {
+      if (e.keyCode === 72) {
+        // H
+        await setHistoryMoment(choosenInstrumentId);
+      } else if (e.keyCode === 27) {
+        // ESC
+        trading.$tradingForm.removeClass('is_active');
+      }
 
-        const prevIndex = indexOfInstrumentDoc - 1;
+      if (choosedFigureShape) {
+        if (e.keyCode === 8) {
+          // <-
+          const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
+          const chartCandles = instrumentDoc.chart_candles;
 
-        if (!instrumentsDocs[prevIndex]) {
-          return true;
+          if (choosedFigureShape.series.isFigureLevel) {
+            removeFigureLevelsFromLocalStorage({
+              instrumentId: instrumentDoc._id,
+              time: choosedFigureShape.levelStartCandleTime,
+            });
+          } else if (choosedFigureShape.series.isFigureLine) {
+            removeFigureLinesFromLocalStorage({
+              instrumentId: instrumentDoc._id,
+              time: choosedFigureShape.levelStartCandleTime,
+            });
+          }
+
+          chartCandles.removeSeries(choosedFigureShape.series, false);
+          choosedFigureShape = false;
         }
-
-        $instrumentsList
-          .find('.instrument').eq(prevIndex)
-          .click();
-      } else if (e.keyCode === 39) {
-        const indexOfInstrumentDoc = instrumentsDocs.findIndex(
-          doc => doc._id === choosenInstrumentId,
-        );
-
-        const nextIndex = indexOfInstrumentDoc + 1;
-
-        if (!instrumentsDocs[nextIndex]) {
-          return true;
-        }
-
-        $instrumentsList
-          .find('.instrument').eq(nextIndex)
-          .click();
       }
     });
 });
 
 /* Functions */
 
-const loadCharts = async ({
+const setHistoryMoment = async () => {
+  const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
+
+  /*
+  const number1hCandles = instrumentDoc.original_candles_data_1h.length;
+  const randNumber = getRandomNumber(480, number1hCandles - 480); // 480 = 20 * 24
+  const targetCandleTime = getUnix(instrumentDoc.original_candles_data_1h[randNumber].time);
+  */
+
+  const number5mCandles = instrumentDoc.original_candles_data_5m.length;
+  const first5mCandle = instrumentDoc.original_candles_data_5m[number5mCandles - 1];
+  const targetCandleTime = moment(first5mCandle.time).endOf('day').unix() + 1;
+
+  instrumentDoc.candles_data_5m = instrumentDoc.candles_data_5m.filter(
+    ({ time }) => getUnix(time) < targetCandleTime,
+  );
+
+  instrumentDoc.candles_data_1h = instrumentDoc.candles_data_1h.filter(
+    ({ time }) => getUnix(time) < targetCandleTime,
+  );
+
+  loadCharts({ instrumentId: choosenInstrumentId });
+  calculateSwings({ instrumentId: choosenInstrumentId });
+
+  if (choosenPeriod === AVAILABLE_PERIODS.get('5m')) {
+    splitDays({ instrumentId: choosenInstrumentId });
+  }
+};
+
+const nextTick = () => {
+  const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
+  let nextCandleInOriginalScope;
+
+  if (choosenPeriod === AVAILABLE_PERIODS.get('5m')) {
+    const currentCandleTimeUnix = getUnix(instrumentDoc.candles_data_5m[0].time);
+
+    const indexInOriginScope = instrumentDoc.original_candles_data_5m.findIndex(
+      ({ time }) => getUnix(time) === currentCandleTimeUnix,
+    );
+
+    nextCandleInOriginalScope = instrumentDoc.original_candles_data_5m[indexInOriginScope - 1];
+
+    if (!nextCandleInOriginalScope) return;
+
+    const startOfHourUnix = moment(nextCandleInOriginalScope.time).startOf('hour').unix();
+
+    const target1HCandleIndex = instrumentDoc.candles_data_1h.findIndex(
+      ({ time }) => getUnix(time) === startOfHourUnix,
+    );
+
+    if (!~target1HCandleIndex) {
+      instrumentDoc.candles_data_1h.unshift({
+        ...nextCandleInOriginalScope,
+        time: new Date(startOfHourUnix * 1000),
+        isNotFinished: true,
+      });
+    } else {
+      let [open, close, low, high] = instrumentDoc.candles_data_1h[target1HCandleIndex].data;
+
+      if (nextCandleInOriginalScope.data[2] < low) {
+        low = nextCandleInOriginalScope.data[2];
+      }
+
+      if (nextCandleInOriginalScope.data[3] > high) {
+        high = nextCandleInOriginalScope.data[3];
+      }
+
+      instrumentDoc.candles_data_1h[target1HCandleIndex] = {
+        ...nextCandleInOriginalScope,
+        data: [open, nextCandleInOriginalScope.data[1], low, high],
+        time: new Date(startOfHourUnix * 1000),
+        isNotFinished: true,
+      };
+    }
+
+    instrumentDoc.candles_data_5m.unshift(nextCandleInOriginalScope);
+  } else if (choosenPeriod === AVAILABLE_PERIODS.get('1h')) {
+    const currentCandleInHistoryScope = instrumentDoc.candles_data_1h[0];
+    const currentCandleTimeUnix = getUnix(currentCandleInHistoryScope.time);
+
+    const indexInOriginScope = instrumentDoc.original_candles_data_1h.findIndex(
+      ({ time }) => getUnix(time) === currentCandleTimeUnix,
+    );
+
+    nextCandleInOriginalScope = instrumentDoc.original_candles_data_1h[indexInOriginScope - 1];
+
+    if (!nextCandleInOriginalScope) return;
+
+    const nextCandleInOriginalScopeTime = getUnix(nextCandleInOriginalScope.time);
+
+    if (currentCandleInHistoryScope.isNotFinished) {
+      // BUUUUG!
+      // console.log('currentCandleInHistoryScope.isNotFinished');
+      instrumentDoc.candles_data_1h[0] = {
+        ...instrumentDoc.original_candles_data_1h[indexInOriginScope],
+      };
+    }
+
+    instrumentDoc.candles_data_5m = instrumentDoc.original_candles_data_5m.filter(
+      ({ time }) => getUnix(time) < nextCandleInOriginalScopeTime,
+    );
+
+    instrumentDoc.candles_data_1h.unshift(nextCandleInOriginalScope);
+  }
+
+  const chartCandles = instrumentDoc.chart_candles;
+  const indicatorVolume = instrumentDoc.indicator_volume;
+  const indicatorMovingAverageShort = instrumentDoc.indicator_moving_average_short;
+  const indicatorMovingAverageMedium = instrumentDoc.indicator_moving_average_medium;
+
+  const candlesData = chartCandles.originalData;
+  const lCandles = candlesData.length;
+
+  const [open, close, low, high] = nextCandleInOriginalScope.data;
+
+  const preparedData = chartCandles.prepareNewData([{
+    time: getUnix(nextCandleInOriginalScope.time) * 1000,
+    data: [open, close, low, high],
+    volume: nextCandleInOriginalScope.volume,
+  }], false)[0];
+
+  chartCandles.originalData.push(preparedData);
+
+  chartCandles.drawSeries(chartCandles.mainSeries, preparedData);
+
+  indicatorVolume.drawSeries(indicatorVolume.mainSeries, {
+    value: preparedData.volume,
+    time: preparedData.originalTimeUnix,
+  });
+
+  const figureLevelsExtraSeries = chartCandles.extraSeries.filter(s => s.isFigureLevel);
+  figureLevelsExtraSeries.forEach(s => {
+    chartCandles.drawSeries(s, {
+      value: s.value,
+      time: preparedData.originalTimeUnix,
+    });
+  });
+
+  calculateSwings({ instrumentId: choosenInstrumentId });
+
+  let resultCalculateMA;
+  const targetCandlesPeriod = candlesData.slice(
+    lCandles - (settings.periodForMediumMA * 2), lCandles,
+  );
+
+  resultCalculateMA = indicatorMovingAverageShort.calculateData(targetCandlesPeriod);
+
+  indicatorMovingAverageShort.drawSeries(
+    indicatorMovingAverageShort.mainSeries,
+    resultCalculateMA[resultCalculateMA.length - 1],
+  );
+
+  resultCalculateMA = indicatorMovingAverageMedium.calculateData(targetCandlesPeriod);
+
+  indicatorMovingAverageMedium.drawSeries(
+    indicatorMovingAverageMedium.mainSeries,
+    resultCalculateMA[resultCalculateMA.length - 1],
+  );
+
+  // calculateVolumeForLastSwing({ instrumentId: choosenInstrumentId });
+
+  $chartsContainer.find('.last-swing-data').css({
+    top: chartCandles.mainSeries.priceToCoordinate(close) - 15,
+  });
+};
+
+const loadCharts = ({
   instrumentId,
 }) => {
   $chartsContainer.empty();
-
   const instrumentDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
-
-  const startDate = choosenPeriod === AVAILABLE_PERIODS.get('5m')
-    // moment().utc().startOf('day') : moment().utc().startOf('month').add(-1, 'months');
-    ? moment().utc().startOf('day').add(-6, 'days') : moment().utc().add(-1, 'months');
-
-  // wsClient.send(JSON.stringify({
-  //   actionName: 'unsubscribeFromAll',
-  // }));
-
-  instrumentDoc.candles_data = await getCandlesData({
-    period: choosenPeriod,
-    instrumentId: instrumentDoc._id,
-
-    startDate: startDate.toISOString(),
-    // endDate: endDate.toISOString(),
-  });
 
   const chartKeys = ['futures'];
 
@@ -300,10 +477,20 @@ const loadCharts = async ({
             <div class="1h is_worked  ${choosenPeriod === AVAILABLE_PERIODS.get('1h') ? 'is_active' : ''}" data-period="1h"><span>1H</span></div>
           </div>
         </div>
+
+        <div class="row">
+          <div class="drawing">
+            <div class="figure-level" data-type="level">
+              <img src="/images/figure-level.png" alt="figure-level">
+            </div>
+            <div class="figure-line" data-type="line">
+              <img src="/images/figure-line.png" alt="figure-line">
+            </div>
+          </div>
+        </div>
       </div>
       <span class="ruler">0%</span>
-      <span class="last-swing-data">12M</span>
-      <div class="add-notification"><span>+</span></div>
+      <span class="last-swing-data">0</span>
       <div class="charts" style="height: ${windowHeight}px"></div>
     </div>`;
   });
@@ -330,9 +517,8 @@ const loadCharts = async ({
       default: break;
     }
 
-    const chartCandles = new ChartCandles($rootContainer, DEFAULT_PERIOD, chartKeyDoc);
+    const chartCandles = new ChartCandles($rootContainer, choosenPeriod, chartKeyDoc);
 
-    // /*
     const indicatorMovingAverageShort = new IndicatorMovingAverage(chartCandles.chart, {
       color: settings.colorForShortMA,
       period: settings.periodForShortMA,
@@ -342,9 +528,6 @@ const loadCharts = async ({
       color: settings.colorForMediumMA,
       period: settings.periodForMediumMA,
     });
-    // */
-
-    // const indicatorCumulativeDeltaVolume = new IndicatorCumulativeDeltaVolume($rootContainer);
 
     const indicatorVolume = new IndicatorVolume($rootContainer);
 
@@ -353,9 +536,8 @@ const loadCharts = async ({
     chartKeyDoc.indicator_volume = indicatorVolume;
     chartKeyDoc.indicator_moving_average_short = indicatorMovingAverageShort;
     chartKeyDoc.indicator_moving_average_medium = indicatorMovingAverageMedium;
-    // chartKeyDoc.indicator_cumulative_delta_volume = indicatorCumulativeDeltaVolume;
 
-    chartCandles.setOriginalData(chartKeyDoc.candles_data, false);
+    chartCandles.setOriginalData(chartKeyDoc[`candles_data_${chartCandles.period}`], false);
     chartCandles.drawSeries(chartCandles.mainSeries, chartCandles.originalData);
 
     indicatorVolume.drawSeries(indicatorVolume.mainSeries, chartCandles.originalData.map(e => ({
@@ -363,7 +545,6 @@ const loadCharts = async ({
       time: e.time,
     })));
 
-    // /*
     let calculatedData;
 
     calculatedData = indicatorMovingAverageShort.calculateAndDraw(chartCandles.originalData);
@@ -371,21 +552,8 @@ const loadCharts = async ({
 
     calculatedData = indicatorMovingAverageMedium.calculateAndDraw(chartCandles.originalData);
     indicatorMovingAverageMedium.calculatedData = calculatedData;
-    // */
-
-    // calculatedData = indicatorCumulativeDeltaVolume.calculateAndDraw(chartCandles.originalData);
-    // indicatorCumulativeDeltaVolume.calculatedData = calculatedData;
-
-    wsClient.send(JSON.stringify({
-      actionName: 'subscribe',
-      data: {
-        subscriptionName: `futuresCandle${choosenPeriod}Data`,
-        instrumentId: instrumentDoc._id,
-      },
-    }));
 
     const $ruler = $chartContainer.find('span.ruler');
-    const $addNotification = $chartsContainer.find('.add-notification');
 
     const $legend = $chartContainer.find('.legend');
     const $low = $legend.find('span.low');
@@ -402,15 +570,74 @@ const loadCharts = async ({
           );
 
           if (existedSeries) {
-            chartCandles.removeSeries(existedSeries, false);
+            choosedFigureShape = {
+              instrumentId,
+              series: existedSeries,
+              levelStartCandleTime: param.time,
+            };
           }
+        }
+
+        if (isActiveLineDrawing) {
+          const coordinateToPrice = chartCandles.mainSeries.coordinateToPrice(param.point.y);
+
+          linePoints.push({
+            value: coordinateToPrice,
+            time: param.time,
+          });
+
+          if (linePoints.length === 2) {
+            saveFigureLineToLocalStorage({
+              instrumentId,
+            }, linePoints);
+
+            const series = drawFigureLines({ instrumentId }, [{ linePoints }]);
+
+            choosedFigureShape = {
+              series: series[0],
+              instrumentId,
+
+              levelTimeframe: choosenPeriod,
+              levelStartCandleTime: param.time,
+            };
+
+            linePoints = [];
+            isActiveLineDrawing = false;
+            $chartsContainer.find('.drawing .figure-line').removeClass('is_active');
+          }
+        }
+
+        if (isActiveLevelDrawing) {
+          isActiveLevelDrawing = false;
+          $chartsContainer.find('.drawing .figure-level').removeClass('is_active');
+
+          const startOfHourUnix = moment.unix(param.time).startOf('hour').unix();
+          const coordinateToPrice = chartCandles.mainSeries.coordinateToPrice(param.point.y);
+
+          saveFigureLevelToLocalStorage({
+            instrumentId,
+            value: coordinateToPrice,
+            time: startOfHourUnix,
+          });
+
+          const series = drawFigureLevels({ instrumentId }, [{
+            value: coordinateToPrice,
+            time: param.time,
+          }]);
+
+          choosedFigureShape = {
+            series: series[0],
+            instrumentId,
+
+            levelTimeframe: choosenPeriod,
+            levelStartCandleTime: param.time,
+          };
         }
       });
     }
 
     chartCandles.chart.subscribeCrosshairMove((param) => {
       if (param.point) {
-        // console.log('y', param.point.y);
         const coordinateToPrice = chartCandles.mainSeries.coordinateToPrice(param.point.y);
         const differenceBetweenInstrumentAndCoordinatePrices = Math.abs(chartKeyDoc.price - coordinateToPrice);
         const percentPerPrice = 100 / (chartKeyDoc.price / differenceBetweenInstrumentAndCoordinatePrices);
@@ -423,10 +650,6 @@ const loadCharts = async ({
             top: param.point.y - 25,
             left: param.point.x + 15,
           });
-
-        $addNotification.css({
-          top: param.point.y - 8,
-        });
       }
 
       if (param.time) {
@@ -446,7 +669,6 @@ const loadCharts = async ({
     });
 
     listCharts.push(chartCandles, indicatorVolume);
-    // listCharts.push(chartCandles, indicatorVolume, indicatorCumulativeDeltaVolume);
   });
 
   let isCrossHairMoving = false;
@@ -484,256 +706,111 @@ const loadCharts = async ({
   });
 };
 
-const getAndDrawNotifications = async ({
-  instrumentId,
-}) => {
-  const instrumentDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
-
-  const resultGetNotification = await makeRequest({
-    method: 'GET',
-    url: URL_GET_NOTIFICATIONS,
-
-    query: {
-      instrumentId: instrumentDoc._id,
-    },
-  });
-
-  if (!resultGetNotification || !resultGetNotification.status) {
-    alert(resultGetNotification.message || 'Cant makeRequest URL_GET_NOTIFICATIONS');
-    return true;
-  }
-
-  if (!resultGetNotification.result || !resultGetNotification.result.length) {
-    return true;
-  }
-
-  const chartCandles = instrumentDoc.chart_candles;
-
-  const startCandle = chartCandles.originalData[0];
-  const endCandle = chartCandles.originalData[chartCandles.originalData.length - 1];
-
-  resultGetNotification.result.forEach(userNotification => {
-    const newExtraSeries = chartCandles.addExtraSeries({
-      color: constants.YELLOW_COLOR,
-      lineStyle: 3,
-      lastValueVisible: false,
-    }, {
-      isNotification: true,
-    });
-
-    chartCandles.drawSeries(newExtraSeries, [{
-      value: userNotification.price,
-      time: startCandle.originalTimeUnix,
-    }, {
-      value: userNotification.price,
-      time: endCandle.originalTimeUnix,
-    }]);
-  });
-};
-
-const updateLastCandle = (data, period) => {
-  if (period !== choosenPeriod
-    || data.instrumentId !== choosenInstrumentId) {
-    return true;
-  }
-
-  const instrumentDoc = instrumentsDocs.find(doc => doc._id === data.instrumentId);
-
-  const chartCandles = instrumentDoc.chart_candles;
-  const indicatorVolume = instrumentDoc.indicator_volume;
-  const indicatorMovingAverageShort = instrumentDoc.indicator_moving_average_short;
-  const indicatorMovingAverageMedium = instrumentDoc.indicator_moving_average_medium;
-  // const indicatorCumulativeDeltaVolume = instrumentDoc.indicator_cumulative_delta_volume;
-
-  const candlesData = chartCandles.originalData;
-  let lCandles = candlesData.length;
-
-  const {
-    startTime,
-    open,
-    close,
-    high,
-    low,
-    volume,
-    isClosed,
-  } = data;
-
-  const preparedData = chartCandles.prepareNewData([{
-    time: startTime,
-    data: [open, close, low, high],
-    volume,
-  }], false)[0];
-
-  if (!isClosed) {
-    candlesData[lCandles - 1] = preparedData;
-  } else {
-    candlesData.push(preparedData);
-    lCandles += 1;
-  }
-
-  chartCandles.drawSeries(chartCandles.mainSeries, preparedData);
-
-  indicatorVolume.drawSeries(indicatorVolume.mainSeries, {
-    value: preparedData.volume,
-    time: preparedData.originalTimeUnix,
-  });
-
-  if (isClosed) {
-    calculateSwings({ instrumentId: choosenInstrumentId });
-  }
-
-  /*
-  const lDeltaVolumeData = indicatorCumulativeDeltaVolume.calculatedData.length;
-
-  const resultCalculateDelta = indicatorCumulativeDeltaVolume.calculateData([
-    indicatorCumulativeDeltaVolume.calculatedData[lDeltaVolumeData - 2],
-    preparedData,
-  ], indicatorCumulativeDeltaVolume.calculatedData[lDeltaVolumeData - 2].sumDelta)[1];
-  */
-
-  if (!isClosed) {
-    // const lastValue = indicatorCumulativeDeltaVolume.calculatedData[lDeltaVolumeData - 1];
-
-    // if (lastValue.originalTimeUnix !== resultCalculateDelta.originalTimeUnix) {
-    //   indicatorCumulativeDeltaVolume.calculatedData.push(resultCalculateDelta);
-    // } else {
-    //   indicatorCumulativeDeltaVolume.calculatedData[lDeltaVolumeData - 1] = resultCalculateDelta;
-    // }
-  } else {
-    // indicatorCumulativeDeltaVolume.calculatedData.push(resultCalculateDelta);
-
-    // calculateSwings({ instrumentId: choosenInstrumentId });
-
-    // /*
-    let resultCalculateMA;
-    const targetCandlesPeriod = candlesData.slice(lCandles - (settings.periodForMediumMA * 2), lCandles);
-
-    resultCalculateMA = indicatorMovingAverageShort.calculateData(targetCandlesPeriod);
-
-    indicatorMovingAverageShort.drawSeries(
-      indicatorMovingAverageShort.mainSeries,
-      resultCalculateMA[resultCalculateMA.length - 1],
-    );
-
-    resultCalculateMA = indicatorMovingAverageMedium.calculateData(targetCandlesPeriod);
-
-    indicatorMovingAverageMedium.drawSeries(
-      indicatorMovingAverageMedium.mainSeries,
-      resultCalculateMA[resultCalculateMA.length - 1],
-    );
-  }
-  // */
-
-  /*
-  indicatorCumulativeDeltaVolume.drawSeries(
-    indicatorCumulativeDeltaVolume.mainSeries,
-    resultCalculateDelta,
-  );
-  */
-
-  calculateVolumeForLastSwing({ instrumentId: choosenInstrumentId });
-
-  $chartsContainer.find('.last-swing-data').css({
-    top: chartCandles.mainSeries.priceToCoordinate(close) - 15,
-  });
-};
-
-const calculateFigureLevels = ({ instrumentId }) => {
+const splitDays = ({ instrumentId }) => {
   const instrumentDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
 
   const chartCandles = instrumentDoc.chart_candles;
-  const candlesData = chartCandles.originalData;
-  const lCandles = candlesData.length;
+  let { originalData } = chartCandles;
 
-  if (!lCandles) {
-    return true;
+  if (!originalData || !originalData.length) {
+    return [];
   }
 
-  const levels = [];
+  const firstCandle = originalData[0];
 
-  const highLevels = getHighLevels({
-    candles: candlesData,
-    distanceFromLeftSide: 50,
-    distanceFromRightSide: 50,
-  });
+  // skip not full hour
+  const divider = firstCandle.originalTimeUnix % 86400;
 
-  // const lowLevels = [];
+  if (divider !== 0) {
+    const startOfNextDayUnix = (firstCandle.originalTimeUnix - divider) + 86400;
 
-  const lowLevels = getLowLevels({
-    candles: candlesData,
-    distanceFromLeftSide: 50,
-    distanceFromRightSide: 50,
-  });
+    let increment = 1;
+    let startIndex = false;
 
-  if ((!highLevels || !highLevels.length)
-    && (!lowLevels || !lowLevels.length)) {
-    return true;
+    while (1) {
+      const candle = originalData[increment];
+
+      if (!candle) {
+        break;
+      }
+
+      if (candle.originalTimeUnix === startOfNextDayUnix) {
+        startIndex = increment;
+        break;
+      }
+
+      increment += 1;
+    }
+
+    if (!startIndex) {
+      return [];
+    }
+
+    originalData = originalData.slice(startIndex, originalData.length);
   }
 
-  lowLevels.forEach(level => {
-    const doesExistLevelWithThisPrice = levels.some(l => l.levelPrice === level.levelPrice);
+  const intervals = [];
+  let newInterval = [originalData[0]];
+  const lOriginalData = originalData.length;
 
-    if (!doesExistLevelWithThisPrice) {
-      const candleIndex = candlesData.findIndex(
-        candle => candle.originalTimeUnix === level.startOfLevelUnix,
-      );
+  let day = new Date(originalData[0].originalTime).getUTCDate();
 
-      let endOfLevelUnix = candlesData[lCandles - 1].originalTimeUnix;
+  for (let i = 1; i < lOriginalData; i += 1) {
+    const dayOfCandle = new Date(originalData[i].originalTime).getUTCDate();
 
-      for (let j = candleIndex; j < lCandles; j += 1) {
-        if (candlesData[j].low < level.levelPrice) {
-          endOfLevelUnix = candlesData[j].originalTimeUnix;
-          break;
-        }
-      }
+    if (dayOfCandle !== day) {
+      day = dayOfCandle;
 
-      levels.push({
-        ...level,
-        isLong: false,
-        endOfLevelUnix,
+      intervals.push({
+        startOfPeriodUnix: newInterval[0].originalTimeUnix,
+        endOfPeriodUnix: newInterval[newInterval.length - 1].originalTimeUnix,
       });
+
+      newInterval = [originalData[i]];
+      continue;
     }
+
+    newInterval.push(originalData[i]);
+  }
+
+  intervals.push({
+    startOfPeriodUnix: newInterval[0].originalTimeUnix,
+    endOfPeriodUnix: newInterval[newInterval.length - 1].originalTimeUnix,
   });
 
-  highLevels.forEach(level => {
-    const doesExistLevelWithThisPrice = levels.some(l => l.levelPrice === level.levelPrice);
-
-    if (!doesExistLevelWithThisPrice) {
-      const candleIndex = candlesData.findIndex(
-        candle => candle.originalTimeUnix === level.startOfLevelUnix,
-      );
-
-      let endOfLevelUnix = candlesData[lCandles - 1].originalTimeUnix;
-
-      for (let j = candleIndex; j < lCandles; j += 1) {
-        if (candlesData[j].high > level.levelPrice) {
-          endOfLevelUnix = candlesData[j].originalTimeUnix;
-          break;
-        }
-      }
-
-      levels.push({
-        ...level,
-        isLong: true,
-        endOfLevelUnix,
-      });
-    }
-  });
-
-  levels.forEach(level => {
+  intervals.forEach(interval => {
     const newCandleExtraSeries = chartCandles.addExtraSeries({
-      // priceScaleId: 'level',
       lastValueVisible: false,
     });
 
     chartCandles.drawSeries(newCandleExtraSeries, [{
-      value: level.levelPrice,
-      time: level.startOfLevelUnix,
+      value: 0,
+      time: interval.startOfPeriodUnix,
     }, {
-      value: level.levelPrice,
-      time: level.endOfLevelUnix,
+      value: instrumentDoc.price * 5,
+      time: interval.startOfPeriodUnix,
     }]);
   });
+
+  return intervals;
+};
+
+const renderListInstruments = (instrumentsDocs) => {
+  let appendInstrumentsStr = '';
+
+  instrumentsDocs
+    .forEach(doc => {
+      appendInstrumentsStr += `<div
+        id="instrument-${doc._id}"
+        class="instrument"
+        data-instrumentid=${doc._id}>
+        <span class="instrument-name">${doc.name}</span>
+      </div>`;
+    });
+
+  $instrumentsList
+    .empty()
+    .append(appendInstrumentsStr);
 };
 
 const calculateVolumeForLastSwing = ({ instrumentId }) => {
@@ -803,7 +880,11 @@ const calculateSwings = ({ instrumentId }) => {
   const chartCandles = instrumentDoc.chart_candles;
   // const indicatorCumulativeDeltaVolume = instrumentDoc.indicator_cumulative_delta_volume;
 
-  const candlesData = chartCandles.originalData;
+  const limitCandles = chartCandles.period === AVAILABLE_PERIODS.get('5m')
+    ? settings.limitCandlesFor5m : settings.limitCandlesFor1h;
+
+  const lOriginalData = chartCandles.originalData.length;
+  const candlesData = chartCandles.originalData.slice(lOriginalData - limitCandles, lOriginalData);
   const lCandles = candlesData.length;
 
   const previousSwingSeries = chartCandles.extraSeries.filter(series => series.isSwing);
@@ -1111,245 +1192,194 @@ const calculateSwings = ({ instrumentId }) => {
   calculateVolumeForLastSwing({ instrumentId });
 };
 
-const splitDays = ({ instrumentId }) => {
+const drawFigureLines = ({ instrumentId }, figureLinesData = []) => {
+  if (!figureLinesData.length) return;
+
   const instrumentDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
 
   const chartCandles = instrumentDoc.chart_candles;
-  let { originalData } = chartCandles;
+  const candlesData = chartCandles.originalData;
+  const lCandles = candlesData.length;
 
-  if (!originalData || !originalData.length) {
-    return [];
-  }
+  if (!lCandles) return;
 
-  const firstCandle = originalData[0];
+  const lineStyle = 0;
+  const newExtraSeries = [];
 
-  // skip not full hour
-  const divider = firstCandle.originalTimeUnix % 86400;
-
-  if (divider !== 0) {
-    const startOfNextDayUnix = (firstCandle.originalTimeUnix - divider) + 86400;
-
-    let increment = 1;
-    let startIndex = false;
-
-    while (1) {
-      const candle = originalData[increment];
-
-      if (!candle) {
-        break;
-      }
-
-      if (candle.originalTimeUnix === startOfNextDayUnix) {
-        startIndex = increment;
-        break;
-      }
-
-      increment += 1;
-    }
-
-    if (!startIndex) {
-      return [];
-    }
-
-    originalData = originalData.slice(startIndex, originalData.length);
-  }
-
-  const intervals = [];
-  let newInterval = [originalData[0]];
-  const lOriginalData = originalData.length;
-
-  let day = new Date(originalData[0].originalTime).getUTCDate();
-
-  for (let i = 1; i < lOriginalData; i += 1) {
-    const dayOfCandle = new Date(originalData[i].originalTime).getUTCDate();
-
-    if (dayOfCandle !== day) {
-      day = dayOfCandle;
-
-      intervals.push({
-        startOfPeriodUnix: newInterval[0].originalTimeUnix,
-        endOfPeriodUnix: newInterval[newInterval.length - 1].originalTimeUnix,
+  if (choosenPeriod === AVAILABLE_PERIODS.get('1h')) {
+    figureLinesData.forEach(figureLine => {
+      figureLine.linePoints.forEach(e => {
+        e.time = moment.unix(e.time).startOf('hour').unix();
       });
-
-      newInterval = [originalData[i]];
-      continue;
-    }
-
-    newInterval.push(originalData[i]);
+    });
   }
 
-  intervals.push({
-    startOfPeriodUnix: newInterval[0].originalTimeUnix,
-    endOfPeriodUnix: newInterval[newInterval.length - 1].originalTimeUnix,
-  });
-
-  intervals.forEach(interval => {
-    const newCandleExtraSeries = chartCandles.addExtraSeries({
+  figureLinesData.forEach(figureLine => {
+    const newSeries = chartCandles.addExtraSeries({
+      color: constants.BLUE_COLOR,
+      lineStyle,
       lastValueVisible: false,
-    });
-
-    chartCandles.drawSeries(newCandleExtraSeries, [{
-      value: 0,
-      time: interval.startOfPeriodUnix,
     }, {
-      value: instrumentDoc.price * 5,
-      time: interval.startOfPeriodUnix,
-    }]);
-  });
-
-  return intervals;
-};
-
-const renderListInstruments = (instrumentsDocs) => {
-  let appendInstrumentsStr = '';
-
-  instrumentsDocs
-    .forEach(doc => {
-      appendInstrumentsStr += `<div
-        id="instrument-${doc._id}"
-        class="instrument"
-        data-instrumentid=${doc._id}>
-        <span class="instrument-name">${doc.name}</span>
-      </div>`;
+      isFigureLine: true,
+      id: figureLine.linePoints[0].time,
     });
 
-  $instrumentsList
-    .empty()
-    .append(appendInstrumentsStr);
+    chartCandles.drawSeries(
+      newSeries,
+      figureLine.linePoints,
+    );
+
+    newExtraSeries.push(newSeries);
+  });
+
+  return newExtraSeries;
 };
 
-const getHighLevels = ({
-  candles,
-  distanceFromLeftSide,
-  distanceFromRightSide,
-}) => {
-  if (!candles || !candles.length) {
+const drawFigureLevels = ({ instrumentId }, figureLevelsData = []) => {
+  if (!figureLevelsData.length) return;
+
+  const instrumentDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
+
+  const chartCandles = instrumentDoc.chart_candles;
+  const candlesData = chartCandles.originalData;
+  const lCandles = candlesData.length;
+
+  if (!lCandles) return;
+
+  const lineStyle = 0;
+  const newExtraSeries = [];
+
+  figureLevelsData.forEach(({ time, value }) => {
+    const newSeries = chartCandles.addExtraSeries({
+      color: constants.BLUE_COLOR,
+      lineStyle,
+      lastValueVisible: false,
+    }, {
+      id: time,
+      isFigureLevel: true,
+      value,
+      originalTimeUnix: time,
+    });
+
+    chartCandles.drawSeries(
+      newSeries,
+      [{
+        value,
+        time,
+      }, {
+        value,
+        time: candlesData[lCandles - 1].originalTimeUnix,
+      }],
+    );
+
+    newExtraSeries.push(newSeries);
+  });
+
+  return newExtraSeries;
+};
+
+const getFigureLevelsFromLocalStorage = ({ instrumentId }) => {
+  let figureLevels = localStorage.getItem('trading-helper:figure-levels');
+
+  if (!figureLevels) {
     return [];
   }
 
-  const levels = [];
-  const lCandles = candles.length;
+  figureLevels = JSON.parse(figureLevels);
 
-  candles.forEach((candle, index) => {
-    if ((lCandles - index) < distanceFromRightSide) {
-      return true;
-    }
+  if (instrumentId) {
+    return figureLevels.filter(e => e.instrumentId === instrumentId);
+  }
 
-    let isHighest = true;
-    let isHighCrossed = false;
-
-    for (let i = index; i < lCandles; i += 1) {
-      const tmpCandle = candles[i];
-
-      if (tmpCandle.high > candle.high) {
-        isHighCrossed = true;
-        break;
-      }
-    }
-
-    if (!isHighCrossed) {
-      for (let i = 1; i < distanceFromLeftSide + 1; i += 1) {
-        const tmpCandle = candles[index - i];
-
-        if (!tmpCandle) {
-          break;
-        }
-
-        if (tmpCandle.high > candle.high) {
-          isHighest = false;
-          break;
-        }
-      }
-    }
-
-    if (!isHighCrossed && isHighest) {
-      levels.push({
-        levelPrice: candle.high,
-        startOfLevelUnix: candle.originalTimeUnix,
-      });
-    }
-  });
-
-  return levels;
+  return figureLevels;
 };
 
-const getLowLevels = ({
-  candles,
-  distanceFromLeftSide,
-  distanceFromRightSide,
+const saveFigureLevelToLocalStorage = ({ instrumentId, value, time }) => {
+  const figureLevels = getFigureLevelsFromLocalStorage({});
+  figureLevels.push({ instrumentId, value, time });
+  localStorage.setItem('trading-helper:figure-levels', JSON.stringify(figureLevels));
+};
+
+const removeFigureLevelsFromLocalStorage = ({
+  instrumentId,
+  value,
+  time,
 }) => {
-  if (!candles || !candles.length) {
+  if (!instrumentId) {
+    localStorage.removeItem('trading-helper:figure-levels');
+    return;
+  }
+
+  let figureLevels = getFigureLevelsFromLocalStorage({});
+
+  if (!value && !time) {
+    figureLevels = figureLevels.filter(e => e.instrumentId !== instrumentId);
+    localStorage.setItem('trading-helper:figure-levels', JSON.stringify(figureLevels));
+    return;
+  }
+
+  if (time) {
+    figureLevels = figureLevels.filter(e => e.instrumentId === instrumentId && e.time !== time);
+  } else if (value) {
+    figureLevels = figureLevels.filter(e => e.instrumentId === instrumentId && e.value !== value);
+  }
+
+  localStorage.setItem('trading-helper:figure-levels', JSON.stringify(figureLevels));
+};
+
+const getFigureLinesFromLocalStorage = ({ instrumentId }) => {
+  let figureLines = localStorage.getItem('trading-helper:figure-lines');
+
+  if (!figureLines) {
     return [];
   }
 
-  const levels = [];
-  const lCandles = candles.length;
+  figureLines = JSON.parse(figureLines);
 
-  candles.forEach((candle, index) => {
-    if ((lCandles - index) < distanceFromRightSide) {
-      return true;
-    }
+  if (instrumentId) {
+    return figureLines.filter(e => e.instrumentId === instrumentId);
+  }
 
-    let isLowest = true;
-    let isLowCrossed = false;
+  return figureLines;
+};
 
-    for (let i = index; i < lCandles; i += 1) {
-      const tmpCandle = candles[i];
+const saveFigureLineToLocalStorage = ({ instrumentId }, linePoints) => {
+  const figureLines = getFigureLinesFromLocalStorage({});
+  figureLines.push({ instrumentId, linePoints });
+  localStorage.setItem('trading-helper:figure-lines', JSON.stringify(figureLines));
+};
 
-      if (tmpCandle.low < candle.low) {
-        isLowCrossed = true;
-        break;
-      }
-    }
+const removeFigureLinesFromLocalStorage = ({
+  instrumentId,
+  time,
+}) => {
+  if (!instrumentId) {
+    localStorage.removeItem('trading-helper:figure-lines');
+    return;
+  }
 
-    if (!isLowCrossed) {
-      for (let i = 1; i < distanceFromLeftSide + 1; i += 1) {
-        const tmpCandle = candles[index - i];
+  let figureLines = getFigureLinesFromLocalStorage({});
 
-        if (!tmpCandle) {
-          break;
-        }
+  if (!time) {
+    figureLines = figureLines.filter(e => e.instrumentId === instrumentId);
+  } else {
+    figureLines = figureLines.filter(
+      e => e.instrumentId === instrumentId && e.linePoints[0].time !== time,
+    );
+  }
 
-        if (tmpCandle.low < candle.low) {
-          isLowest = false;
-          break;
-        }
-      }
-    }
-
-    if (!isLowCrossed && isLowest) {
-      levels.push({
-        levelPrice: candle.low,
-        startOfLevelUnix: candle.originalTimeUnix,
-      });
-    }
-  });
-
-  return levels;
+  localStorage.setItem('trading-helper:figure-lines', JSON.stringify(figureLines));
 };
 
 const getCandlesData = async ({
   instrumentId,
   period,
-  startDate,
-  endDate,
 }) => {
   console.log('start loading');
 
-  if (!startDate) {
-    startDate = new Date().toISOString();
-  }
-
-  if (!endDate) {
-    endDate = moment().utc().toISOString();
-  }
-
   const query = {
     instrumentId,
-    startTime: startDate,
-    endTime: endDate,
     isFirstCall: false,
-    // isFirstCall: true,
   };
 
   const resultGetCandles = await makeRequest({
