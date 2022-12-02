@@ -6,8 +6,6 @@ classes, ChartCandles, IndicatorVolume, IndicatorMovingAverage, Trading,
 
 /*
    Баг +
-   Урезать свинги +
-   Добавить рисовалку уровней ?
 */
 
 /* Constants */
@@ -20,7 +18,7 @@ const AVAILABLE_PERIODS = new Map([
   ['1h', '1h'],
 ]);
 
-const DEFAULT_PERIOD = AVAILABLE_PERIODS.get('5m');
+const DEFAULT_PERIOD = AVAILABLE_PERIODS.get('1h');
 
 /* Variables */
 
@@ -28,6 +26,8 @@ let linePoints = [];
 let choosedFigureShape = false;
 let isActiveLineDrawing = false;
 let isActiveLevelDrawing = false;
+let temporaryLineSeriesId;
+let previousCrosshairMove;
 
 let instrumentsDocs = [];
 
@@ -38,7 +38,7 @@ const windowHeight = window.innerHeight;
 const settings = {
   // Swings
   numberCompressions: 3,
-  limitCandlesFor1h: 720 + 48, // 2 monts + 2 days
+  limitCandlesFor1h: 720 + 48, // 2 monthes + 2 days
   limitCandlesFor5m: 576 + 24, // 2 days + 2 hours
 
   // MA
@@ -145,6 +145,9 @@ $(document).ready(async () => {
         );
       }
 
+      removeFigureLinesFromLocalStorage({});
+      removeFigureLevelsFromLocalStorage({});
+
       loadCharts({ instrumentId });
       calculateSwings({ instrumentId });
 
@@ -238,8 +241,28 @@ $(document).ready(async () => {
       if (!choosenInstrumentId) return;
 
       const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
-      trading.loadInstrumentData(instrumentDoc);
+      const price = instrumentDoc.candles_data_5m[0].data[1];
+
+      trading.loadInstrumentData(instrumentDoc, { price });
       trading.$tradingForm.addClass('is_active');
+    });
+
+  trading.$tradingForm.find('button')
+    // .on('click', function () {
+    //   const typeAction = $(this).parent().attr('class');
+    //   trading.changeTypeAction(typeAction);
+    // })
+    .on('click', function () {
+      const typeAction = $(this).parent().attr('class');
+      trading.changeTypeAction(typeAction);
+
+      const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
+      const firstCandle = instrumentDoc.candles_data_5m[0];
+
+      trading.createTrade(instrumentDoc, {
+        price: firstCandle.data[1],
+        time: firstCandle.time,
+      });
     });
 
   $(document)
@@ -292,19 +315,21 @@ $(document).ready(async () => {
 const setHistoryMoment = async () => {
   const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
 
-  /*
+  // /*
   const number1hCandles = instrumentDoc.original_candles_data_1h.length;
   const randNumber = getRandomNumber(480, number1hCandles - 480); // 480 = 20 * 24
   const targetCandleTime = getUnix(instrumentDoc.original_candles_data_1h[randNumber].time);
-  */
+  // */
 
+  /*
   const number5mCandles = instrumentDoc.original_candles_data_5m.length;
   const first5mCandle = instrumentDoc.original_candles_data_5m[number5mCandles - 1];
   const targetCandleTime = moment(first5mCandle.time).endOf('day').unix() + 1;
+  // */
 
-  instrumentDoc.candles_data_5m = instrumentDoc.candles_data_5m.filter(
-    ({ time }) => getUnix(time) < targetCandleTime,
-  );
+  instrumentDoc.candles_data_5m = instrumentDoc.candles_data_5m
+    .filter(({ time }) => getUnix(time) < targetCandleTime)
+    .slice(0, 3000);
 
   instrumentDoc.candles_data_1h = instrumentDoc.candles_data_1h.filter(
     ({ time }) => getUnix(time) < targetCandleTime,
@@ -346,7 +371,8 @@ const nextTick = () => {
         isNotFinished: true,
       });
     } else {
-      let [open, close, low, high] = instrumentDoc.candles_data_1h[target1HCandleIndex].data;
+      const { volume, data } = instrumentDoc.candles_data_1h[target1HCandleIndex];
+      let [open, close, low, high] = data;
 
       if (nextCandleInOriginalScope.data[2] < low) {
         low = nextCandleInOriginalScope.data[2];
@@ -358,6 +384,7 @@ const nextTick = () => {
 
       instrumentDoc.candles_data_1h[target1HCandleIndex] = {
         ...nextCandleInOriginalScope,
+        volume: volume + nextCandleInOriginalScope.volume,
         data: [open, nextCandleInOriginalScope.data[1], low, high],
         time: new Date(startOfHourUnix * 1000),
         isNotFinished: true,
@@ -377,8 +404,6 @@ const nextTick = () => {
 
     if (!nextCandleInOriginalScope) return;
 
-    const nextCandleInOriginalScopeTime = getUnix(nextCandleInOriginalScope.time);
-
     if (currentCandleInHistoryScope.isNotFinished) {
       // BUUUUG!
       // console.log('currentCandleInHistoryScope.isNotFinished');
@@ -387,6 +412,7 @@ const nextTick = () => {
       };
     }
 
+    const nextCandleInOriginalScopeTime = getUnix(nextCandleInOriginalScope.time) + 3600;
     instrumentDoc.candles_data_5m = instrumentDoc.original_candles_data_5m.filter(
       ({ time }) => getUnix(time) < nextCandleInOriginalScopeTime,
     );
@@ -453,6 +479,9 @@ const nextTick = () => {
   $chartsContainer.find('.last-swing-data').css({
     top: chartCandles.mainSeries.priceToCoordinate(close) - 15,
   });
+
+  const trades = trading.calculateTradesProfit({ price: close }, true);
+  Trading.updateTradesInTradeList(trades);
 };
 
 const loadCharts = ({
@@ -587,6 +616,11 @@ const loadCharts = ({
           });
 
           if (linePoints.length === 2) {
+            if (temporaryLineSeriesId) {
+              const series = chartCandles.extraSeries.find(s => s.id === temporaryLineSeriesId);
+              series && chartCandles.removeSeries(series, false);
+            }
+
             saveFigureLineToLocalStorage({
               instrumentId,
             }, linePoints);
@@ -665,6 +699,22 @@ const loadCharts = ({
           $high.text(price.high);
           $percent.text(`${percentPerPrice.toFixed(1)}%`);
         }
+      }
+
+      if (isActiveLineDrawing && param.time && param.point
+        && linePoints.length === 1
+        && (!previousCrosshairMove || previousCrosshairMove !== param.time)) {
+        previousCrosshairMove = param.time;
+
+        if (temporaryLineSeriesId) {
+          const series = chartCandles.extraSeries.find(s => s.id === temporaryLineSeriesId);
+          series && chartCandles.removeSeries(series, false);
+        }
+
+        const time = param.time;
+        const value = chartCandles.mainSeries.coordinateToPrice(param.point.y);
+        drawFigureLines({ instrumentId }, [{ linePoints: [...linePoints, { value, time }] }]);
+        temporaryLineSeriesId = linePoints[0].time;
       }
     });
 

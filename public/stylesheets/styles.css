@@ -233,6 +233,60 @@ input:checked + .slider:before {
 .slider.round:before {
   border-radius: 50%; }
 
+.trades {
+  width: 100%; }
+  .trades .trading-statistics {
+    width: 100%; }
+    .trades .trading-statistics table {
+      width: 100%; }
+      .trades .trading-statistics table tr {
+        border-bottom: 1px solid black; }
+        .trades .trading-statistics table tr:last-child {
+          border-bottom: none; }
+        .trades .trading-statistics table tr th {
+          padding: 10px 0;
+          border-right: 1px solid black; }
+          .trades .trading-statistics table tr th:last-child {
+            border-right: none; }
+        .trades .trading-statistics table tr td {
+          padding: 10px;
+          text-align: center;
+          border-right: 1px solid black; }
+          .trades .trading-statistics table tr td:last-child {
+            border-right: none; }
+          .trades .trading-statistics table tr td.number-trades span {
+            margin: 0 5px; }
+            .trades .trading-statistics table tr td.number-trades span.win {
+              color: #00b706; }
+            .trades .trading-statistics table tr td.number-trades span.lose {
+              color: red; }
+  .trades .trading-list table {
+    width: 100%;
+    border-top: 1px solid black; }
+    .trades .trading-list table tr {
+      border-bottom: 1px solid black; }
+      .trades .trading-list table tr:last-child {
+        border-bottom: none; }
+      .trades .trading-list table tr th {
+        padding: 10px 0;
+        border-right: 1px solid black; }
+        .trades .trading-list table tr th:last-child {
+          border-right: none; }
+      .trades .trading-list table tr td {
+        padding: 10px;
+        text-align: center;
+        border-right: 1px solid black; }
+        .trades .trading-list table tr td:last-child {
+          border-right: none; }
+        .trades .trading-list table tr td.type {
+          color: red; }
+          .trades .trading-list table tr td.type.long {
+            color: #00b706; }
+        .trades .trading-list table tr td.status {
+          padding: 0; }
+          .trades .trading-list table tr td.status.is_active {
+            background-color: #00ff0a52; }
+
 button#show-trading-form {
   width: 33px;
   height: 33px;
@@ -312,7 +366,7 @@ button#show-trading-form {
           background-color: #fa101063; }
       .trading-form .risks-block div.sl input[type="text"] {
         border-left: 1px solid black; }
-  .trading-form .sum-block input[type="text"] {
+  .trading-form .quantity-block input[type="text"] {
     border: none;
     text-align: center;
     width: 100%;

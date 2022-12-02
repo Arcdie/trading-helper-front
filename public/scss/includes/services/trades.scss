@@ -1,0 +1,102 @@
+.trades {
+  width: 100%;
+
+  .trading-statistics {
+    width: 100%;
+
+    table {
+      width: 100%;
+
+      tr {
+        border-bottom: 1px solid black;
+
+        &:last-child {
+          border-bottom: none;
+        }
+
+        th {
+          padding: 10px 0;
+          border-right: 1px solid black;
+
+          &:last-child {
+            border-right: none;
+          }
+        }
+
+        td {
+          padding: 10px;
+          text-align: center;
+          border-right: 1px solid black;
+
+          &:last-child {
+            border-right: none;
+          }
+
+          &.number-trades {
+            span {
+              margin: 0 5px;
+
+              &.win {
+                color: #00b706;
+              }
+
+              &.lose {
+                color: red;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  .trading-list {
+    table {
+      width: 100%;
+      border-top: 1px solid black;
+
+      tr {
+        border-bottom: 1px solid black;
+
+        &:last-child {
+          border-bottom: none;
+        }
+
+        th {
+          padding: 10px 0;
+          border-right: 1px solid black;
+
+          &:last-child {
+            border-right: none;
+          }
+        }
+
+        td {
+          padding: 10px;
+          text-align: center;
+          border-right: 1px solid black;
+
+          &:last-child {
+            border-right: none;
+          }
+
+          &.type {
+            color: red;
+
+            &.long {
+              color: #00b706;
+            }
+          }
+
+          &.status {
+            padding: 0;
+
+            &.is_active {
+              background-color: #00ff0a52;
+            }
+          }
+        }
+      }
+    }
+  }
+}

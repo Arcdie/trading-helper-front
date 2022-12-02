@@ -1,5 +1,5 @@
 /* global
-functions, getUnix,
+functions, getUnix, getQueue,
 objects, moment, LightweightCharts */
 
 class ChartCandles {
