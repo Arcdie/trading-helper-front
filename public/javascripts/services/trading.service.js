@@ -1,12 +1,12 @@
 /* global
-functions,
-objects, moment,
+functions, getUnix,
+objects, moment, constants,
 classes,
 */
 
 const TRADING_CONSTANTS = {
   MIN_TAKEPROFIT_RELATION: 3,
-  MIN_STOPLOSS_PERCENT: 0.2,
+  MIN_STOPLOSS_PERCENT: 0.5,
   DEFAULT_QUANTITY: 3,
 };
 
@@ -80,7 +80,8 @@ class Trading {
 
         const newTrade = {
           id: new Date().getTime(),
-          index: activeTrade.index + 1,
+          parentId: activeTrade.id,
+          index: activeTrade.index,
           isActive: false,
           isLong: activeTrade.isLong,
           buyPrice,
@@ -96,6 +97,7 @@ class Trading {
         if (result <= 0) {
           this.trades = this.trades.filter(t => t.id !== activeTrade.id);
           Trading.removeTradesFromTradeList([activeTrade]);
+          Trading.removeTradeSeries(instrumentDoc, activeTrade);
 
           if (result < 0) {
             newTrade.quantity -= quantityToDecrease;
@@ -121,6 +123,7 @@ class Trading {
 
     const newTrade = {
       id: new Date().getTime(),
+      instrumentId: instrumentDoc._id,
       index: this.trades.length + 1,
       isActive: true,
       isLong: this.isLong,
@@ -141,20 +144,82 @@ class Trading {
     const tickSizePrecision = Trading.getPrecision(instrumentDoc.tick_size); // 0.001
 
     const stopLossPrice = newTrade.isLong
-      ? price + percentPerPrice
-      : price - percentPerPrice;
+      ? price - percentPerPrice
+      : price + percentPerPrice;
 
-    const takeProfitPrice = newTrade.isLong
-      ? price + (percentPerPrice * TRADING_CONSTANTS.MIN_TAKEPROFIT_RELATION)
-      : price - (percentPerPrice * TRADING_CONSTANTS.MIN_TAKEPROFIT_RELATION);
-
+    newTrade.takeProfitPrices = [];
     newTrade.quantity = parseFloat((this.quantity).toFixed(stepSizePrecision));
     newTrade.stopLossPrice = parseFloat((stopLossPrice).toFixed(tickSizePrecision));
-    newTrade.takeProfitPrice = parseFloat((takeProfitPrice).toFixed(tickSizePrecision));
     newTrade.sumTrade = price * newTrade.quantity;
+
+    for (let i = 0; i < newTrade.quantity; i += 1) {
+      let takeProfitPrice = newTrade.isLong
+        ? price + (percentPerPrice * (TRADING_CONSTANTS.MIN_TAKEPROFIT_RELATION + i))
+        : price - (percentPerPrice * (TRADING_CONSTANTS.MIN_TAKEPROFIT_RELATION + i));
+
+      takeProfitPrice = parseFloat((takeProfitPrice).toFixed(tickSizePrecision));
+      newTrade.takeProfitPrices.push(takeProfitPrice);
+    }
+
+    Trading.makeTradeSeries(instrumentDoc, newTrade);
 
     this.trades.push(newTrade);
     this.addTradesToTradeList([newTrade]);
+  }
+
+  static removeTradeSeries(instrumentDoc, trade) {
+    const chartCandles = instrumentDoc.chart_candles;
+    const targetSeries = chartCandles.extraSeries.filter(s => s.isTrade && s.id.includes(trade.id));
+    targetSeries.forEach(s => chartCandles.removeSeries(s, false));
+  }
+
+  static makeTradeSeries(instrumentDoc, trade) {
+    const timeUnix = getUnix(trade.startAt);
+    const price = trade.buyPrice || trade.sellPrice;
+    const chartCandles = instrumentDoc.chart_candles;
+
+    const tradeSeries = chartCandles.addExtraSeries({
+      color: constants.GRAY_COLOR,
+      lastValueVisible: false,
+    }, {
+      value: price,
+      isTrade: true,
+      id: `trade-${trade.id}`,
+    });
+
+    const stopLossSeries = chartCandles.addExtraSeries({
+      color: constants.RED_COLOR,
+      lastValueVisible: false,
+    }, {
+      value: trade.stopLossPrice,
+      isTrade: true,
+      id: `stoploss-${trade.id}`,
+    });
+
+    const series = [
+      tradeSeries,
+      stopLossSeries,
+    ];
+
+    trade.takeProfitPrices.forEach(takeProfitPrice => {
+      const takeProfitSeries = chartCandles.addExtraSeries({
+        color: constants.GREEN_COLOR,
+        lastValueVisible: false,
+      }, {
+        value: takeProfitPrice,
+        isTrade: true,
+        id: `takeprofit-${trade.id}`,
+      });
+
+      series.push(takeProfitSeries);
+    });
+
+    chartCandles.drawSeries(
+      tradeSeries,
+      [{ value: price, time: timeUnix }],
+    );
+
+    return series;
   }
 
   calculateTradesProfit({ price }, doManageOnlyActive = false) {

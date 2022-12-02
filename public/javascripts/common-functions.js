@@ -20,6 +20,7 @@ const constants = {
   GREEN_COLOR: '#4CAF50',
   YELLOW_COLOR: '#FFE002',
   BLUE_COLOR: '#2196F3',
+  GRAY_COLOR: '#A7A7A7',
 };
 
 /* Functions */

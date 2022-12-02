@@ -180,6 +180,7 @@ $(document).ready(async () => {
         choosenPeriod = period;
 
         const instrumentId = choosenInstrumentId;
+        const instrumentDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
 
         loadCharts({ instrumentId });
         calculateSwings({ instrumentId });
@@ -189,6 +190,9 @@ $(document).ready(async () => {
 
         const figureLinesData = getFigureLinesFromLocalStorage({ instrumentId });
         drawFigureLines({ instrumentId }, figureLinesData);
+
+        const activeTrade = trading.trades.find(t => t.isActive);
+        activeTrade && drawTrades({ instrumentId }, activeTrade);
 
         if (choosenPeriod === AVAILABLE_PERIODS.get('5m')) {
           splitDays({ instrumentId });
@@ -257,7 +261,8 @@ $(document).ready(async () => {
       trading.changeTypeAction(typeAction);
 
       const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
-      const firstCandle = instrumentDoc.candles_data_5m[0];
+      const firstCandle = choosenPeriod === AVAILABLE_PERIODS.get('5m')
+        ? instrumentDoc.candles_data_5m[0] : instrumentDoc.candles_data_1h[0];
 
       trading.createTrade(instrumentDoc, {
         price: firstCandle.data[1],
@@ -450,6 +455,17 @@ const nextTick = () => {
     chartCandles.drawSeries(s, {
       value: s.value,
       time: preparedData.originalTimeUnix,
+    });
+  });
+
+  trading.trades.filter(t => t.isActive).forEach(trade => {
+    const targetSeries = chartCandles.extraSeries.filter(s => s.isTrade && s.id.includes(trade.id));
+
+    targetSeries.forEach(s => {
+      chartCandles.drawSeries(s, {
+        value: s.value,
+        time: preparedData.originalTimeUnix,
+      });
     });
   });
 
@@ -1326,6 +1342,32 @@ const drawFigureLevels = ({ instrumentId }, figureLevelsData = []) => {
   });
 
   return newExtraSeries;
+};
+
+const drawTrades = ({ instrumentId }, trade) => {
+  const instrumentDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
+  const series = Trading.makeTradeSeries(instrumentDoc, trade);
+
+  if (!series.length) return;
+
+  const chartCandles = instrumentDoc.chart_candles;
+  const candlesData = chartCandles.originalData;
+  const lCandles = candlesData.length;
+
+  if (!lCandles) return;
+
+  series.forEach(s => {
+    chartCandles.drawSeries(
+      s,
+      [{
+        value: s.value,
+        time: getUnix(trade.startAt),
+      }, {
+        value: s.value,
+        time: candlesData[lCandles - 1].originalTimeUnix,
+      }],
+    );
+  });
 };
 
 const getFigureLevelsFromLocalStorage = ({ instrumentId }) => {
