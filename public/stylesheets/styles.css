@@ -1537,11 +1537,13 @@ button#show-trading-form {
       .demo .charts-container .chart-container.spot .actions-menu, .demo .charts-container .chart-container.futures .actions-menu {
         display: block; }
     .demo .charts-container .charts-nav {
+      height: 20px;
       position: absolute;
       z-index: 999;
       top: 15px;
       left: 15px; }
       .demo .charts-container .charts-nav .row {
+        width: 90px;
         display: flex;
         align-items: center;
         border-top: none; }

@@ -1,7 +1,7 @@
 /* global
 functions, getUnix,
 objects, moment, constants,
-classes,
+classes, LightweightCharts,
 */
 
 const TRADING_CONSTANTS = {
@@ -21,6 +21,8 @@ class Trading {
     this.isLong = false;
     this.quantity = TRADING_CONSTANTS.DEFAULT_QUANTITY;
     this.stopLossPercent = TRADING_CONSTANTS.MIN_STOPLOSS_PERCENT;
+
+    this.isActiveStopLossChoice = false;
 
     /*
     {
@@ -50,6 +52,27 @@ class Trading {
 
   changeTypeAction(typeAction) { // buy, sell
     this.isLong = typeAction === 'buy';
+  }
+
+  changeStopLossPercent(newPercent) {
+    if (!newPercent) return;
+
+    const $sl = this.$tradingForm.find('.risks-block .sl input[type="text"]');
+
+    if (Number.isNaN(newPercent) || newPercent < TRADING_CONSTANTS.MIN_STOPLOSS_PERCENT) {
+      this.stopLossPercent = TRADING_CONSTANTS.MIN_STOPLOSS_PERCENT;
+      $sl.val(TRADING_CONSTANTS.MIN_STOPLOSS_PERCENT);
+      return;
+    }
+
+    this.stopLossPercent = parseFloat(newPercent.toFixed(1));
+    $sl.val(this.stopLossPercent);
+  }
+
+  calculateStopLossPercent({ instrumentPrice, stopLossPrice }) {
+    const difference = Math.abs(instrumentPrice - stopLossPrice);
+    const percentPerPrice = 100 / (instrumentPrice / difference);
+    this.changeStopLossPercent(parseFloat(percentPerPrice.toFixed(2)));
   }
 
   createTrade(instrumentDoc, { price, time }) {
@@ -97,7 +120,7 @@ class Trading {
         if (result <= 0) {
           this.trades = this.trades.filter(t => t.id !== activeTrade.id);
           Trading.removeTradesFromTradeList([activeTrade]);
-          Trading.removeTradeSeries(instrumentDoc, activeTrade);
+          Trading.changeSeriesLineStyle(instrumentDoc, activeTrade);
 
           if (result < 0) {
             newTrade.quantity -= quantityToDecrease;
@@ -165,6 +188,98 @@ class Trading {
 
     this.trades.push(newTrade);
     this.addTradesToTradeList([newTrade]);
+  }
+
+  nextTick(instrumentDoc, candleData) {
+    const originalData = {
+      isLong: this.isLong,
+      quantity: this.quantity,
+    };
+
+    this.trades.filter(t => t.isActive).forEach(trade => {
+      if (trade.isLong) {
+        if (candleData.low <= trade.stopLossPrice) {
+          this.isLong = false;
+          this.quantity = trade.quantity;
+          this.createTrade(instrumentDoc, {
+            price: trade.stopLossPrice, time: candleData.originalTime,
+          });
+
+          return;
+        }
+
+        const targetTakeProfitPrices = trade.takeProfitPrices.filter(
+          price => price <= candleData.high,
+        );
+
+        if (targetTakeProfitPrices.length) {
+          targetTakeProfitPrices.forEach(price => {
+            this.quantity = 1;
+            this.isLong = false;
+
+            this.createTrade(instrumentDoc, {
+              price, time: candleData.originalTime,
+            });
+
+            trade.takeProfitPrices = trade.takeProfitPrices.filter(p => p !== price);
+          });
+
+          Trading.changeSeriesLineStyle(instrumentDoc, trade, targetTakeProfitPrices);
+        }
+      } else {
+        if (candleData.high >= trade.stopLossPrice) {
+          this.isLong = true;
+          this.quantity = trade.quantity;
+          this.createTrade(instrumentDoc, {
+            price: trade.stopLossPrice, time: candleData.originalTime,
+          });
+
+          return;
+        }
+
+        const targetTakeProfitPrices = trade.takeProfitPrices.filter(
+          price => price >= candleData.low,
+        );
+
+        if (targetTakeProfitPrices.length) {
+          targetTakeProfitPrices.forEach(price => {
+            this.quantity = 1;
+            this.isLong = true;
+
+            this.createTrade(instrumentDoc, {
+              price, time: candleData.originalTime,
+            });
+
+            trade.takeProfitPrices = trade.takeProfitPrices.filter(p => p !== price);
+          });
+
+          Trading.changeSeriesLineStyle(instrumentDoc, trade, targetTakeProfitPrices);
+        }
+      }
+    });
+
+    this.isLong = originalData.isLong;
+    this.quantity = originalData.quantity;
+  }
+
+  static changeSeriesLineStyle(instrumentDoc, trade, values = []) {
+    const chartCandles = instrumentDoc.chart_candles;
+    let targetSeries = [];
+
+    if (!values || !values.length) {
+      targetSeries = chartCandles.extraSeries.filter(s => s.isTrade && s.id.includes(trade.id));
+    } else {
+      targetSeries = chartCandles.extraSeries.filter(
+        s => s.isTrade && s.id.includes(trade.id) && values.includes(s.value),
+      );
+    }
+
+    targetSeries.forEach(s => {
+      s.applyOptions({
+        lineType: LightweightCharts.LineType.Simple,
+        lineStyle: LightweightCharts.LineStyle.LargeDashed,
+      });
+    });
   }
 
   static removeTradeSeries(instrumentDoc, trade) {
@@ -322,14 +437,13 @@ class Trading {
     this.$tradingForm.find('.risks-block .sl input[type="text"]')
       .on('change', function () {
         const value = parseFloat($(this).val());
+        _this.changeStopLossPercent(value);
+      });
 
-        if (Number.isNaN(value) || value < TRADING_CONSTANTS.MIN_STOPLOSS_PERCENT) {
-          _this.stopLossPercent = TRADING_CONSTANTS.MIN_STOPLOSS_PERCENT;
-          $(this).val(TRADING_CONSTANTS.MIN_STOPLOSS_PERCENT);
-          return;
-        }
-
-        _this.stopLossPercent = value;
+    this.$tradingForm.find('.risks-block .sl button')
+      .on('click', () => {
+        // $(this).toggleClass('is_active');
+        _this.isActiveStopLossChoice = !_this.isActiveStopLossChoice;
       });
   }
 

@@ -41,6 +41,14 @@ const settings = {
   limitCandlesFor1h: 720 + 48, // 2 monthes + 2 days
   limitCandlesFor5m: 576 + 24, // 2 days + 2 hours
 
+  // Levels
+  colorFor5mLevels: '#0800FF',
+  colorFor1hLevels: '#2196F3',
+
+  // Lines
+  colorFor5mLines: '#0800FF',
+  colorFor1hLines: '#2196F3',
+
   // MA
   periodForShortMA: 20,
   periodForMediumMA: 50,
@@ -180,7 +188,6 @@ $(document).ready(async () => {
         choosenPeriod = period;
 
         const instrumentId = choosenInstrumentId;
-        const instrumentDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
 
         loadCharts({ instrumentId });
         calculateSwings({ instrumentId });
@@ -251,7 +258,7 @@ $(document).ready(async () => {
       trading.$tradingForm.addClass('is_active');
     });
 
-  trading.$tradingForm.find('button')
+  trading.$tradingForm.find('.action-block button')
     // .on('click', function () {
     //   const typeAction = $(this).parent().attr('class');
     //   trading.changeTypeAction(typeAction);
@@ -316,6 +323,13 @@ $(document).ready(async () => {
 });
 
 /* Functions */
+
+const getInstrumentPrice = (instrumentDoc) => {
+  const firstCandle = choosenPeriod === AVAILABLE_PERIODS.get('5m')
+    ? instrumentDoc.candles_data_5m[0] : instrumentDoc.candles_data_1h[0];
+
+  return firstCandle.data[1];
+};
 
 const setHistoryMoment = async () => {
   const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
@@ -458,7 +472,7 @@ const nextTick = () => {
     });
   });
 
-  trading.trades.filter(t => t.isActive).forEach(trade => {
+  trading.trades.forEach(trade => {
     const targetSeries = chartCandles.extraSeries.filter(s => s.isTrade && s.id.includes(trade.id));
 
     targetSeries.forEach(s => {
@@ -495,6 +509,8 @@ const nextTick = () => {
   $chartsContainer.find('.last-swing-data').css({
     top: chartCandles.mainSeries.priceToCoordinate(close) - 15,
   });
+
+  trading.nextTick(instrumentDoc, preparedData);
 
   const trades = trading.calculateTradesProfit({ price: close }, true);
   Trading.updateTradesInTradeList(trades);
@@ -623,9 +639,9 @@ const loadCharts = ({
           }
         }
 
-        if (isActiveLineDrawing) {
-          const coordinateToPrice = chartCandles.mainSeries.coordinateToPrice(param.point.y);
+        const coordinateToPrice = chartCandles.mainSeries.coordinateToPrice(param.point.y);
 
+        if (isActiveLineDrawing) {
           linePoints.push({
             value: coordinateToPrice,
             time: param.time,
@@ -639,9 +655,15 @@ const loadCharts = ({
 
             saveFigureLineToLocalStorage({
               instrumentId,
-            }, linePoints);
+            }, choosenPeriod, linePoints);
 
-            const series = drawFigureLines({ instrumentId }, [{ linePoints }]);
+            const series = drawFigureLines(
+              { instrumentId },
+              [{
+                linePoints,
+                timeframe: choosenPeriod,
+              }],
+            );
 
             choosedFigureShape = {
               series: series[0],
@@ -662,10 +684,10 @@ const loadCharts = ({
           $chartsContainer.find('.drawing .figure-level').removeClass('is_active');
 
           const startOfHourUnix = moment.unix(param.time).startOf('hour').unix();
-          const coordinateToPrice = chartCandles.mainSeries.coordinateToPrice(param.point.y);
 
           saveFigureLevelToLocalStorage({
             instrumentId,
+            timeframe: choosenPeriod,
             value: coordinateToPrice,
             time: startOfHourUnix,
           });
@@ -673,6 +695,7 @@ const loadCharts = ({
           const series = drawFigureLevels({ instrumentId }, [{
             value: coordinateToPrice,
             time: param.time,
+            timeframe: choosenPeriod,
           }]);
 
           choosedFigureShape = {
@@ -683,14 +706,24 @@ const loadCharts = ({
             levelStartCandleTime: param.time,
           };
         }
+
+        if (trading.isActiveStopLossChoice) {
+          trading.calculateStopLossPercent({
+            stopLossPrice: coordinateToPrice,
+            instrumentPrice: getInstrumentPrice(instrumentDoc),
+          });
+
+          trading.isActiveStopLossChoice = false;
+        }
       });
     }
 
     chartCandles.chart.subscribeCrosshairMove((param) => {
       if (param.point) {
+        const instrumentPrice = getInstrumentPrice(instrumentDoc);
         const coordinateToPrice = chartCandles.mainSeries.coordinateToPrice(param.point.y);
-        const differenceBetweenInstrumentAndCoordinatePrices = Math.abs(chartKeyDoc.price - coordinateToPrice);
-        const percentPerPrice = 100 / (chartKeyDoc.price / differenceBetweenInstrumentAndCoordinatePrices);
+        const differenceBetweenInstrumentAndCoordinatePrices = Math.abs(instrumentPrice - coordinateToPrice);
+        const percentPerPrice = 100 / (instrumentPrice / differenceBetweenInstrumentAndCoordinatePrices);
 
         chartCandles.lastPrice = coordinateToPrice;
 
@@ -729,7 +762,15 @@ const loadCharts = ({
 
         const time = param.time;
         const value = chartCandles.mainSeries.coordinateToPrice(param.point.y);
-        drawFigureLines({ instrumentId }, [{ linePoints: [...linePoints, { value, time }] }]);
+
+        drawFigureLines(
+          { instrumentId },
+          [{
+            timeframe: choosenPeriod,
+            linePoints: [...linePoints, { value, time }],
+          }],
+        );
+
         temporaryLineSeriesId = linePoints[0].time;
       }
     });
@@ -1281,8 +1322,11 @@ const drawFigureLines = ({ instrumentId }, figureLinesData = []) => {
   }
 
   figureLinesData.forEach(figureLine => {
+    const color = figureLine.timeframe === AVAILABLE_PERIODS.get('5m')
+      ? settings.colorFor5mLevels : settings.colorFor1hLevels;
+
     const newSeries = chartCandles.addExtraSeries({
-      color: constants.BLUE_COLOR,
+      color,
       lineStyle,
       lastValueVisible: false,
     }, {
@@ -1312,12 +1356,25 @@ const drawFigureLevels = ({ instrumentId }, figureLevelsData = []) => {
 
   if (!lCandles) return;
 
+  if (choosenPeriod === AVAILABLE_PERIODS.get('5m')) {
+    const last5mCandle = candlesData[0];
+
+    figureLevelsData.forEach(figureLevel => {
+      if (figureLevel.time < last5mCandle.originalTimeUnix) {
+        figureLevel.time = last5mCandle.originalTimeUnix;
+      }
+    });
+  }
+
   const lineStyle = 0;
   const newExtraSeries = [];
 
-  figureLevelsData.forEach(({ time, value }) => {
+  figureLevelsData.forEach(({ time, value, timeframe }) => {
+    const color = timeframe === AVAILABLE_PERIODS.get('5m')
+      ? settings.colorFor5mLevels : settings.colorFor1hLevels;
+
     const newSeries = chartCandles.addExtraSeries({
-      color: constants.BLUE_COLOR,
+      color,
       lineStyle,
       lastValueVisible: false,
     }, {
@@ -1386,9 +1443,9 @@ const getFigureLevelsFromLocalStorage = ({ instrumentId }) => {
   return figureLevels;
 };
 
-const saveFigureLevelToLocalStorage = ({ instrumentId, value, time }) => {
+const saveFigureLevelToLocalStorage = (figureLevelData) => {
   const figureLevels = getFigureLevelsFromLocalStorage({});
-  figureLevels.push({ instrumentId, value, time });
+  figureLevels.push(figureLevelData);
   localStorage.setItem('trading-helper:figure-levels', JSON.stringify(figureLevels));
 };
 
@@ -1435,9 +1492,9 @@ const getFigureLinesFromLocalStorage = ({ instrumentId }) => {
   return figureLines;
 };
 
-const saveFigureLineToLocalStorage = ({ instrumentId }, linePoints) => {
+const saveFigureLineToLocalStorage = ({ instrumentId }, timeframe, linePoints) => {
   const figureLines = getFigureLinesFromLocalStorage({});
-  figureLines.push({ instrumentId, linePoints });
+  figureLines.push({ instrumentId, timeframe, linePoints });
   localStorage.setItem('trading-helper:figure-lines', JSON.stringify(figureLines));
 };
 
