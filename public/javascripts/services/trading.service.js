@@ -6,8 +6,9 @@ classes, LightweightCharts,
 
 const TRADING_CONSTANTS = {
   MIN_TAKEPROFIT_RELATION: 3,
-  MIN_STOPLOSS_PERCENT: 0.5,
-  DEFAULT_QUANTITY: 3,
+  MIN_STOPLOSS_PERCENT: 0.2,
+  MIN_WORK_AMOUNT: 10,
+  DEFAULT_NUMBER_TRADES: 7,
 };
 
 class Trading {
@@ -17,56 +18,77 @@ class Trading {
     this.$tradingStatistics = $('.trading-statistics');
 
     this.trades = [];
-
     this.isLong = false;
-    this.quantity = TRADING_CONSTANTS.DEFAULT_QUANTITY;
-    this.stopLossPercent = TRADING_CONSTANTS.MIN_STOPLOSS_PERCENT;
-
     this.isActiveStopLossChoice = false;
 
-    /*
-    {
-      instrument_id,
-      type_trade, // MARKET, LIMIT
-      buy_price,
-      sell_price,
-
-      trigger_price,
-
-      stoploss_price,
-
-      takeprofit_price,
-      stoploss_percent,
-      takeprofit_percent,
-
-      sum_commission,
-
-      quantity,
-      is_long,
-      is_active,
-      trade_started_at,
-      trade_ended_at,
-    };
-    */
+    this.workAmount = TRADING_CONSTANTS.MIN_WORK_AMOUNT;
+    this.numberTrades = TRADING_CONSTANTS.DEFAULT_NUMBER_TRADES;
+    this.stopLossPercent = TRADING_CONSTANTS.MIN_STOPLOSS_PERCENT;
   }
 
   changeTypeAction(typeAction) { // buy, sell
     this.isLong = typeAction === 'buy';
   }
 
-  changeStopLossPercent(newPercent) {
-    if (!newPercent) return;
+  changeWorkAmount(newValue) {
+    if (!newValue) return;
 
-    const $sl = this.$tradingForm.find('.risks-block .sl input[type="text"]');
+    const $workAmount = this.$tradingForm.find('.work-amount-block input[type="text"]');
 
-    if (Number.isNaN(newPercent) || newPercent < TRADING_CONSTANTS.MIN_STOPLOSS_PERCENT) {
-      this.stopLossPercent = TRADING_CONSTANTS.MIN_STOPLOSS_PERCENT;
-      $sl.val(TRADING_CONSTANTS.MIN_STOPLOSS_PERCENT);
+    if (Number.isNaN(newValue) || newValue < TRADING_CONSTANTS.MIN_WORK_AMOUNT) {
+      this.workAmount = TRADING_CONSTANTS.MIN_WORK_AMOUNT;
+      $workAmount.val(this.workAmount);
       return;
     }
 
-    this.stopLossPercent = parseFloat(newPercent.toFixed(1));
+    this.workAmount = parseInt(newValue, 10);
+    $workAmount.val(this.workAmount);
+  }
+
+  changeNumberTrades(newValue) {
+    if (!newValue) return;
+
+    const $numberTrades = this.$tradingForm.find('.number-trades-block input[type="text"]');
+
+    if (Number.isNaN(newValue) || newValue <= 0) {
+      this.numberTrades = TRADING_CONSTANTS.DEFAULT_NUMBER_TRADES;
+      $numberTrades.val(this.numberTrades);
+      return;
+    }
+
+    this.numberTrades = parseInt(newValue, 10);
+    $numberTrades.val(this.numberTrades);
+  }
+
+  changeStopLossPercent(newValue) {
+    if (!newValue) return;
+
+    const $sl = this.$tradingForm.find('.risks-block .sl input[type="text"]');
+
+    if (Number.isNaN(newValue) || newValue < TRADING_CONSTANTS.MIN_STOPLOSS_PERCENT) {
+      this.stopLossPercent = TRADING_CONSTANTS.MIN_STOPLOSS_PERCENT;
+      this.changeNumberTrades(TRADING_CONSTANTS.DEFAULT_NUMBER_TRADES);
+
+      $sl.val(this.stopLossPercent);
+
+      return;
+    }
+
+    this.stopLossPercent = parseFloat(newValue.toFixed(1));
     $sl.val(this.stopLossPercent);
+
+    let newNumberTrades = TRADING_CONSTANTS.DEFAULT_NUMBER_TRADES;
+
+    if (this.stopLossPercent <= TRADING_CONSTANTS.MIN_STOPLOSS_PERCENT) {
+      newNumberTrades = 7;
+    } else if (this.stopLossPercent <= 0.5
+      && this.stopLossPercent > TRADING_CONSTANTS.MIN_STOPLOSS_PERCENT) {
+      newNumberTrades = 5;
+    } else {
+      newNumberTrades = 3;
+    }
+
+    this.changeNumberTrades(newNumberTrades);
   }
 
   calculateStopLossPercent({ instrumentPrice, stopLossPrice }) {
@@ -77,7 +99,8 @@ class Trading {
 
   createTrade(instrumentDoc, { price, time }) {
     const activeTrade = this.trades.find(t => t.isActive);
-    const stepSizePrecision = Trading.getPrecision(instrumentDoc.step_size); // 0.1
+    const stepSize = instrumentDoc.step_size;
+    const stepSizePrecision = Trading.getPrecision(stepSize);
 
     if (activeTrade) {
       if ((activeTrade.isLong && this.isLong)
@@ -85,8 +108,6 @@ class Trading {
         // sumTrade +=
         return;
       } else {
-        const quantity = parseFloat((this.quantity).toFixed(stepSizePrecision));
-
         let buyPrice, sellPrice;
 
         if (activeTrade.isLong && !this.isLong) {
@@ -97,22 +118,31 @@ class Trading {
           sellPrice = activeTrade.sellPrice;
         }
 
-        const result = activeTrade.quantity - quantity;
-        const quantityToDecrease = result < 0 ? activeTrade.quantity : quantity;
+        const quantityPerOneTrade = activeTrade.quantity / activeTrade.numberTrades;
+        const result = activeTrade.numberTrades - this.numberTrades;
+        const tradesToDecrease = result < 0 ? activeTrade.numberTrades : this.numberTrades;
+        const quantityToDecrease = tradesToDecrease * quantityPerOneTrade;
+
         activeTrade.quantity -= quantityToDecrease;
+        activeTrade.numberTrades -= tradesToDecrease;
 
         const newTrade = {
+          index: activeTrade.index,
           id: new Date().getTime(),
           parentId: activeTrade.id,
-          index: activeTrade.index,
+
           isActive: false,
           isLong: activeTrade.isLong,
+
           buyPrice,
           sellPrice,
-          sumTrade: quantity * price,
+
           startAt: activeTrade.startAt,
           endAt: time,
-          quantity,
+
+          quantity: quantityToDecrease,
+          numberTrades: tradesToDecrease,
+
           profit: 0,
           profitPercent: 0,
         };
@@ -122,9 +152,9 @@ class Trading {
           Trading.removeTradesFromTradeList([activeTrade]);
           Trading.changeSeriesLineStyle(instrumentDoc, activeTrade);
 
-          if (result < 0) {
-            newTrade.quantity -= quantityToDecrease;
-          }
+          // if (result < 0) { ???
+          //   newTrade.quantity -= quantityToDecrease;
+          // }
         } else {
           this.calculateTradesProfit({ price });
           Trading.updateTradesInTradeList([activeTrade]);
@@ -136,7 +166,7 @@ class Trading {
         this.updateCommonStatistics();
 
         if (result < 0) {
-          this.quantity = Math.abs(result);
+          this.numberTrades = Math.abs(result);
           this.createTrade(instrumentDoc, { price, time });
         }
       }
@@ -145,14 +175,19 @@ class Trading {
     }
 
     const newTrade = {
+      index: this.trades.length + 1,
       id: new Date().getTime(),
       instrumentId: instrumentDoc._id,
-      index: this.trades.length + 1,
+
       isActive: true,
       isLong: this.isLong,
+
       stopLossPercent: this.stopLossPercent,
       takeProfitPercent: this.stopLossPercent * TRADING_CONSTANTS.MIN_TAKEPROFIT_RELATION,
+
       startAt: time,
+      numberTrades: this.numberTrades,
+
       profit: 0,
       profitPercent: 0,
     };
@@ -163,6 +198,24 @@ class Trading {
       newTrade.sellPrice = price;
     }
 
+    let quantity = this.workAmount / price;
+    if (quantity < stepSize) {
+      alert('quantity < stepSize');
+      return;
+    }
+
+    const remainder = quantity % stepSize;
+    if (remainder !== 0) {
+      quantity -= remainder;
+
+      if (quantity < stepSize) {
+        alert('quantity < stepSize');
+        return;
+      }
+    }
+
+    quantity *= this.numberTrades;
+
     const percentPerPrice = price * (newTrade.stopLossPercent / 100);
     const tickSizePrecision = Trading.getPrecision(instrumentDoc.tick_size); // 0.001
 
@@ -171,11 +224,10 @@ class Trading {
       : price + percentPerPrice;
 
     newTrade.takeProfitPrices = [];
-    newTrade.quantity = parseFloat((this.quantity).toFixed(stepSizePrecision));
+    newTrade.quantity = parseFloat((quantity).toFixed(stepSizePrecision));
     newTrade.stopLossPrice = parseFloat((stopLossPrice).toFixed(tickSizePrecision));
-    newTrade.sumTrade = price * newTrade.quantity;
 
-    for (let i = 0; i < newTrade.quantity; i += 1) {
+    for (let i = 0; i < newTrade.numberTrades; i += 1) {
       let takeProfitPrice = newTrade.isLong
         ? price + (percentPerPrice * (TRADING_CONSTANTS.MIN_TAKEPROFIT_RELATION + i))
         : price - (percentPerPrice * (TRADING_CONSTANTS.MIN_TAKEPROFIT_RELATION + i));
@@ -193,14 +245,15 @@ class Trading {
   nextTick(instrumentDoc, candleData) {
     const originalData = {
       isLong: this.isLong,
-      quantity: this.quantity,
+      numberTrades: this.numberTrades,
     };
 
     this.trades.filter(t => t.isActive).forEach(trade => {
       if (trade.isLong) {
         if (candleData.low <= trade.stopLossPrice) {
           this.isLong = false;
-          this.quantity = trade.quantity;
+          this.numberTrades = trade.numberTrades;
+
           this.createTrade(instrumentDoc, {
             price: trade.stopLossPrice, time: candleData.originalTime,
           });
@@ -214,8 +267,8 @@ class Trading {
 
         if (targetTakeProfitPrices.length) {
           targetTakeProfitPrices.forEach(price => {
-            this.quantity = 1;
             this.isLong = false;
+            this.numberTrades = 1;
 
             this.createTrade(instrumentDoc, {
               price, time: candleData.originalTime,
@@ -229,7 +282,7 @@ class Trading {
       } else {
         if (candleData.high >= trade.stopLossPrice) {
           this.isLong = true;
-          this.quantity = trade.quantity;
+          this.numberTrades = trade.numberTrades;
           this.createTrade(instrumentDoc, {
             price: trade.stopLossPrice, time: candleData.originalTime,
           });
@@ -243,8 +296,8 @@ class Trading {
 
         if (targetTakeProfitPrices.length) {
           targetTakeProfitPrices.forEach(price => {
-            this.quantity = 1;
             this.isLong = true;
+            this.numberTrades = 1;
 
             this.createTrade(instrumentDoc, {
               price, time: candleData.originalTime,
@@ -259,7 +312,7 @@ class Trading {
     });
 
     this.isLong = originalData.isLong;
-    this.quantity = originalData.quantity;
+    this.numberTrades = originalData.numberTrades;
   }
 
   static changeSeriesLineStyle(instrumentDoc, trade, values = []) {
@@ -371,12 +424,23 @@ class Trading {
     let commonProfit = 0;
     const numberTrades = [0, 0]; // [win, lose]
 
+    const majorTrades = {};
     this.trades.forEach(trade => {
       if (trade.isActive) return;
 
       commonProfit += trade.profit;
 
-      if (trade.profit > 0) {
+      if (!majorTrades[`id${trade.parentId}`]) {
+        majorTrades[`id${trade.parentId}`] = 0;
+      }
+
+      majorTrades[`id${trade.parentId}`] += trade.profit;
+    });
+
+    Object.keys(majorTrades).forEach(key => {
+      if (majorTrades[key] === 0) return;
+
+      if (majorTrades[key] > 0) {
         numberTrades[0] += 1;
       } else {
         numberTrades[1] += 1;
@@ -404,34 +468,29 @@ class Trading {
   }
 
   loadInstrumentData(instrumentDoc, { price }) {
-    if (!instrumentDoc) {
-      return;
-    }
-
-    // const stepSizePrecision = Trading.getPrecision(instrumentDoc.step_size); // 0.1
-    // this.quantity = stepSizePrecision;
+    if (!instrumentDoc) return;
 
     this.$tradingForm.find('.action-block .buy input').val(price);
     this.$tradingForm.find('.action-block .sell input').val(price);
 
-    this.$tradingForm.find('.quantity-block input').val(this.quantity);
+    this.$tradingForm.find('.work-amount-block input').val(this.workAmount);
+    this.$tradingForm.find('.number-trades-block input').val(this.numberTrades);
     this.$tradingForm.find('.risks-block .sl input').val(TRADING_CONSTANTS.MIN_STOPLOSS_PERCENT);
   }
 
   loadEventHandlers() {
     const _this = this;
 
-    this.$tradingForm.find('.quantity-block input[type="text"]')
+    this.$tradingForm.find('.work-amount-block input[type="text"]')
       .on('change', function () {
         const value = parseFloat($(this).val());
+        _this.changeWorkAmount(value);
+      });
 
-        if (Number.isNaN(value) || value <= 0) {
-          _this.quantity = TRADING_CONSTANTS.DEFAULT_QUANTITY;
-          $(this).val(TRADING_CONSTANTS.DEFAULT_QUANTITY);
-          return;
-        }
-
-        _this.quantity = value;
+    this.$tradingForm.find('.number-trades-block input[type="text"]')
+      .on('change', function () {
+        const value = parseFloat($(this).val());
+        _this.changeNumberTrades(value);
       });
 
     this.$tradingForm.find('.risks-block .sl input[type="text"]')
@@ -453,7 +512,7 @@ class Trading {
     trades.forEach(trade => {
       appendStr += `<tr id="trade-${trade.id}">
         <td>${trade.index}</td>
-        <td class="quantity"><span>${trade.quantity}</span></td>
+        <td class="number-trades"><span>${trade.numberTrades}</span></td>
         <td class="profit"><span>${trade.profit.toFixed(2)}</span>$</td>
         <td class="profit-percent"><span>${trade.profitPercent.toFixed(2)}</span>%</td>
         <td class="type ${trade.isLong ? 'long' : ''}">${trade.isLong ? 'long' : 'short'}</td>
@@ -484,8 +543,7 @@ class Trading {
     trades.forEach(trade => {
       const $trade = $(`#trade-${trade.id}`);
 
-      $trade.find('.quantity span').text(trade.quantity);
-      // $trade.find('.sum span').text(trade.sumTrade);
+      $trade.find('.number-trades span').text(trade.numberTrades);
       $trade.find('.profit span').text(trade.profit.toFixed(2));
       $trade.find('.profit-percent span').text(trade.profitPercent.toFixed(2));
 

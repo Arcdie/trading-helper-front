@@ -366,12 +366,26 @@ button#show-trading-form {
           background-color: #fa101063; }
       .trading-form .risks-block div.sl input[type="text"] {
         border-left: 1px solid black; }
-  .trading-form .quantity-block input[type="text"] {
-    border: none;
-    text-align: center;
-    width: 100%;
-    display: block;
-    padding: 10px 0; }
+  .trading-form .work-amount-block {
+    box-sizing: border-box;
+    border-bottom: 1px solid black; }
+    .trading-form .work-amount-block input[type="text"] {
+      border: none;
+      text-align: center;
+      width: 100%;
+      display: block;
+      padding: 10px 0;
+      outline: none; }
+  .trading-form .number-trades-block {
+    box-sizing: border-box;
+    border-bottom: 1px solid black; }
+    .trading-form .number-trades-block input[type="text"] {
+      border: none;
+      text-align: center;
+      width: 100%;
+      display: block;
+      padding: 10px 0;
+      outline: none; }
 
 .instruments-container {
   width: 11%;

@@ -36,24 +36,33 @@ let choosenPeriod = DEFAULT_PERIOD;
 const windowHeight = window.innerHeight;
 
 const settings = {
-  // Swings
-  numberCompressions: 3,
-  limitCandlesFor1h: 720 + 48, // 2 monthes + 2 days
-  limitCandlesFor5m: 576 + 24, // 2 days + 2 hours
+  chart: {
+    limit5mCandlesPerChart: 2000,
+    numberCandlesForHistoryBorders: 480, // 480 = 20 * 24
+  },
 
-  // Levels
-  colorFor5mLevels: '#0800FF',
-  colorFor1hLevels: '#2196F3',
+  swings: {
+    numberCompressions: 3,
+    limitCandlesFor1h: 720 + 48, // 2 monthes + 2 days
+    limitCandlesFor5m: 576 + 24, // 2 days + 2 hours
+  },
 
-  // Lines
-  colorFor5mLines: '#0800FF',
-  colorFor1hLines: '#2196F3',
+  figureLevels: {
+    colorFor5mLevels: '#0800FF',
+    colorFor1hLevels: '#2196F3',
+  },
 
-  // MA
-  periodForShortMA: 20,
-  periodForMediumMA: 50,
-  colorForShortMA: '#0800FF',
-  colorForMediumMA: '#2196F3',
+  figureLines: {
+    colorFor5mLines: '#0800FF',
+    colorFor1hLines: '#2196F3',
+  },
+
+  movingAverage: {
+    periodForShortMA: 20,
+    periodForMediumMA: 50,
+    colorForShortMA: '#0800FF',
+    colorForMediumMA: '#2196F3',
+  },
 };
 
 const trading = new Trading();
@@ -336,7 +345,10 @@ const setHistoryMoment = async () => {
 
   // /*
   const number1hCandles = instrumentDoc.original_candles_data_1h.length;
-  const randNumber = getRandomNumber(480, number1hCandles - 480); // 480 = 20 * 24
+  const randNumber = getRandomNumber(
+    settings.chart.numberCandlesForHistoryBorders,
+    number1hCandles - settings.chart.numberCandlesForHistoryBorders,
+  );
   const targetCandleTime = getUnix(instrumentDoc.original_candles_data_1h[randNumber].time);
   // */
 
@@ -348,7 +360,7 @@ const setHistoryMoment = async () => {
 
   instrumentDoc.candles_data_5m = instrumentDoc.candles_data_5m
     .filter(({ time }) => getUnix(time) < targetCandleTime)
-    .slice(0, 3000);
+    .slice(0, settings.chart.limit5mCandlesPerChart);
 
   instrumentDoc.candles_data_1h = instrumentDoc.candles_data_1h.filter(
     ({ time }) => getUnix(time) < targetCandleTime,
@@ -410,6 +422,7 @@ const nextTick = () => {
       };
     }
 
+    instrumentDoc.candles_data_5m.pop();
     instrumentDoc.candles_data_5m.unshift(nextCandleInOriginalScope);
   } else if (choosenPeriod === AVAILABLE_PERIODS.get('1h')) {
     const currentCandleInHistoryScope = instrumentDoc.candles_data_1h[0];
@@ -432,9 +445,9 @@ const nextTick = () => {
     }
 
     const nextCandleInOriginalScopeTime = getUnix(nextCandleInOriginalScope.time) + 3600;
-    instrumentDoc.candles_data_5m = instrumentDoc.original_candles_data_5m.filter(
-      ({ time }) => getUnix(time) < nextCandleInOriginalScopeTime,
-    );
+    instrumentDoc.candles_data_5m = instrumentDoc.original_candles_data_5m
+      .filter(({ time }) => getUnix(time) < nextCandleInOriginalScopeTime)
+      .slice(0, settings.chart.limit5mCandlesPerChart);
 
     instrumentDoc.candles_data_1h.unshift(nextCandleInOriginalScope);
   }
@@ -443,9 +456,6 @@ const nextTick = () => {
   const indicatorVolume = instrumentDoc.indicator_volume;
   const indicatorMovingAverageShort = instrumentDoc.indicator_moving_average_short;
   const indicatorMovingAverageMedium = instrumentDoc.indicator_moving_average_medium;
-
-  const candlesData = chartCandles.originalData;
-  const lCandles = candlesData.length;
 
   const [open, close, low, high] = nextCandleInOriginalScope.data;
 
@@ -484,6 +494,9 @@ const nextTick = () => {
   });
 
   calculateSwings({ instrumentId: choosenInstrumentId });
+
+  const candlesData = chartCandles.originalData;
+  const lCandles = candlesData.length;
 
   let resultCalculateMA;
   const targetCandlesPeriod = candlesData.slice(
@@ -581,13 +594,13 @@ const loadCharts = ({
     const chartCandles = new ChartCandles($rootContainer, choosenPeriod, chartKeyDoc);
 
     const indicatorMovingAverageShort = new IndicatorMovingAverage(chartCandles.chart, {
-      color: settings.colorForShortMA,
-      period: settings.periodForShortMA,
+      color: settings.movingAverage.colorForShortMA,
+      period: settings.movingAverage.periodForShortMA,
     });
 
     const indicatorMovingAverageMedium = new IndicatorMovingAverage(chartCandles.chart, {
-      color: settings.colorForMediumMA,
-      period: settings.periodForMediumMA,
+      color: settings.movingAverage.colorForMediumMA,
+      period: settings.movingAverage.periodForMediumMA,
     });
 
     const indicatorVolume = new IndicatorVolume($rootContainer);
@@ -988,7 +1001,7 @@ const calculateSwings = ({ instrumentId }) => {
   // const indicatorCumulativeDeltaVolume = instrumentDoc.indicator_cumulative_delta_volume;
 
   const limitCandles = chartCandles.period === AVAILABLE_PERIODS.get('5m')
-    ? settings.limitCandlesFor5m : settings.limitCandlesFor1h;
+    ? settings.swings.limitCandlesFor5m : settings.swings.limitCandlesFor1h;
 
   const lOriginalData = chartCandles.originalData.length;
   const candlesData = chartCandles.originalData.slice(lOriginalData - limitCandles, lOriginalData);
@@ -1089,7 +1102,7 @@ const calculateSwings = ({ instrumentId }) => {
 
   let swings = basicSwings;
 
-  for (let iteration = 0; iteration < settings.numberCompressions; iteration += 1) {
+  for (let iteration = 0; iteration < settings.swings.numberCompressions; iteration += 1) {
     const nextStepSwings = [];
 
     for (let i = 0; i < swings.length; i += 1) {
@@ -1323,7 +1336,7 @@ const drawFigureLines = ({ instrumentId }, figureLinesData = []) => {
 
   figureLinesData.forEach(figureLine => {
     const color = figureLine.timeframe === AVAILABLE_PERIODS.get('5m')
-      ? settings.colorFor5mLevels : settings.colorFor1hLevels;
+      ? settings.figureLines.colorFor5mLines : settings.figureLines.colorFor1hLines;
 
     const newSeries = chartCandles.addExtraSeries({
       color,
@@ -1371,7 +1384,7 @@ const drawFigureLevels = ({ instrumentId }, figureLevelsData = []) => {
 
   figureLevelsData.forEach(({ time, value, timeframe }) => {
     const color = timeframe === AVAILABLE_PERIODS.get('5m')
-      ? settings.colorFor5mLevels : settings.colorFor1hLevels;
+      ? settings.figureLevels.colorFor5mLevels : settings.figureLevels.colorFor1hLevels;
 
     const newSeries = chartCandles.addExtraSeries({
       color,

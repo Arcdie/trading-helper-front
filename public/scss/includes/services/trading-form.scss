@@ -127,13 +127,31 @@ button#show-trading-form {
     }
   }
 
-  .quantity-block {
+  .work-amount-block {
+    box-sizing: border-box;
+    border-bottom: 1px solid black;
+
     input[type="text"] {
       border: none;
       text-align: center;
       width: 100%;
       display: block;
       padding: 10px 0;
+      outline: none;
+    }
+  }
+
+  .number-trades-block {
+    box-sizing: border-box;
+    border-bottom: 1px solid black;
+
+    input[type="text"] {
+      border: none;
+      text-align: center;
+      width: 100%;
+      display: block;
+      padding: 10px 0;
+      outline: none;
     }
   }
 }
