@@ -94,6 +94,7 @@ class Trading {
   calculateStopLossPercent({ instrumentPrice, stopLossPrice }) {
     const difference = Math.abs(instrumentPrice - stopLossPrice);
     const percentPerPrice = 100 / (instrumentPrice / difference);
+
     this.changeStopLossPercent(parseFloat(percentPerPrice.toFixed(2)));
   }
 

@@ -278,6 +278,14 @@ class ChartCandles {
     return validData;
   }
 
+  getInstrumentPrice() {
+    return this.originalData[this.originalData.length - 1].close;
+  }
+
+  static getNewSeriesId() {
+    return new Date().getTime();
+  }
+
   static getPrecision(instrumentPrice) {
     const dividedPrice = instrumentPrice.toString().split('.');
 
