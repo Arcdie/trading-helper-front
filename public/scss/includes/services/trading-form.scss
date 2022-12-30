@@ -1,4 +1,4 @@
-button#show-trading-form {
+button#settings {
   width: 33px;
   height: 33px;
   outline: none;
@@ -15,14 +15,12 @@ button#show-trading-form {
 }
 
 .trading-form {
+  width: 180px;
   display: none;
-  height: 152px;
+  height: 187px;
   box-sizing: border-box;
   border: 1px solid black;
-  position: absolute;
-  right: 0;
   background-color: white;
-  z-index: 2;
 
   &.is_active {
     display: block;

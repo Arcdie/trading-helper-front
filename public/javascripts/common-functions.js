@@ -20,6 +20,7 @@ const constants = {
   GREEN_COLOR: '#4CAF50',
   YELLOW_COLOR: '#FFE002',
   BLUE_COLOR: '#2196F3',
+  DARK_BLUE_COLOR: '#0800FF',
   GRAY_COLOR: '#A7A7A7',
 };
 
@@ -91,6 +92,20 @@ const formatNumberToPretty = n => {
   return n;
 };
 
+const toHex = (c) => {
+  const hex = c.toString(16);
+  return hex.length === 1 ? `0${hex}` : hex;
+};
+
+const toRGB = (hex) => {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+
+  return result ? {
+    r: parseInt(result[1], 16),
+    g: parseInt(result[2], 16),
+    b: parseInt(result[3], 16),
+  } : null;
+};
 
 const initPopWindow = (str) => {
   $modalWindow

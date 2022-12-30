@@ -1,14 +1,15 @@
 /* global
 functions, getUnix,
-objects, moment, constants,
+objects, moment, constants, AVAILABLE_PERIODS
 classes, LightweightCharts,
 */
 
 const TRADING_CONSTANTS = {
   MIN_TAKEPROFIT_RELATION: 3,
   MIN_STOPLOSS_PERCENT: 0.2,
+  DEFAULT_STOPLOSS_PERCENT: 0.5,
   MIN_WORK_AMOUNT: 10,
-  DEFAULT_NUMBER_TRADES: 7,
+  DEFAULT_NUMBER_TRADES: 3,
 };
 
 class Trading {
@@ -23,7 +24,7 @@ class Trading {
 
     this.workAmount = TRADING_CONSTANTS.MIN_WORK_AMOUNT;
     this.numberTrades = TRADING_CONSTANTS.DEFAULT_NUMBER_TRADES;
-    this.stopLossPercent = TRADING_CONSTANTS.MIN_STOPLOSS_PERCENT;
+    this.stopLossPercent = TRADING_CONSTANTS.DEFAULT_STOPLOSS_PERCENT;
   }
 
   changeTypeAction(typeAction) { // buy, sell
@@ -77,8 +78,9 @@ class Trading {
     this.stopLossPercent = parseFloat(newValue.toFixed(1));
     $sl.val(this.stopLossPercent);
 
-    let newNumberTrades = TRADING_CONSTANTS.DEFAULT_NUMBER_TRADES;
+    const newNumberTrades = TRADING_CONSTANTS.DEFAULT_NUMBER_TRADES;
 
+    /*
     if (this.stopLossPercent <= TRADING_CONSTANTS.MIN_STOPLOSS_PERCENT) {
       newNumberTrades = 7;
     } else if (this.stopLossPercent <= 0.5
@@ -87,6 +89,7 @@ class Trading {
     } else {
       newNumberTrades = 3;
     }
+    */
 
     this.changeNumberTrades(newNumberTrades);
   }
@@ -98,7 +101,7 @@ class Trading {
     this.changeStopLossPercent(parseFloat(percentPerPrice.toFixed(2)));
   }
 
-  createTrade(instrumentDoc, { price, time }) {
+  createTrade(instrumentDoc, { price, time }, periods) {
     const activeTrade = this.trades.find(t => t.isActive);
     const stepSize = instrumentDoc.step_size;
     const stepSizePrecision = Trading.getPrecision(stepSize);
@@ -151,7 +154,7 @@ class Trading {
         if (result <= 0) {
           this.trades = this.trades.filter(t => t.id !== activeTrade.id);
           Trading.removeTradesFromTradeList([activeTrade]);
-          Trading.changeSeriesLineStyle(instrumentDoc, activeTrade);
+          Trading.changeSeriesLineStyle(instrumentDoc, activeTrade, [], periods);
 
           // if (result < 0) { ???
           //   newTrade.quantity -= quantityToDecrease;
@@ -168,7 +171,7 @@ class Trading {
 
         if (result < 0) {
           this.numberTrades = Math.abs(result);
-          this.createTrade(instrumentDoc, { price, time });
+          this.createTrade(instrumentDoc, { price, time }, periods);
         }
       }
 
@@ -180,6 +183,7 @@ class Trading {
       id: new Date().getTime(),
       instrumentId: instrumentDoc._id,
 
+      isNew: true,
       isActive: true,
       isLong: this.isLong,
 
@@ -237,13 +241,13 @@ class Trading {
       newTrade.takeProfitPrices.push(takeProfitPrice);
     }
 
-    Trading.makeTradeSeries(instrumentDoc, newTrade);
-
     this.trades.push(newTrade);
     this.addTradesToTradeList([newTrade]);
+
+    return newTrade;
   }
 
-  nextTick(instrumentDoc, candleData) {
+  nextTick(instrumentDoc, candleData, periods = []) {
     const originalData = {
       isLong: this.isLong,
       numberTrades: this.numberTrades,
@@ -257,8 +261,9 @@ class Trading {
 
           this.createTrade(instrumentDoc, {
             price: trade.stopLossPrice, time: candleData.originalTime,
-          });
+          }, periods);
 
+          Trading.changeSeriesLineStyle(instrumentDoc, trade, [], periods);
           return;
         }
 
@@ -273,12 +278,12 @@ class Trading {
 
             this.createTrade(instrumentDoc, {
               price, time: candleData.originalTime,
-            });
+            }, periods);
 
             trade.takeProfitPrices = trade.takeProfitPrices.filter(p => p !== price);
           });
 
-          Trading.changeSeriesLineStyle(instrumentDoc, trade, targetTakeProfitPrices);
+          Trading.changeSeriesLineStyle(instrumentDoc, trade, targetTakeProfitPrices, periods);
         }
       } else {
         if (candleData.high >= trade.stopLossPrice) {
@@ -286,8 +291,9 @@ class Trading {
           this.numberTrades = trade.numberTrades;
           this.createTrade(instrumentDoc, {
             price: trade.stopLossPrice, time: candleData.originalTime,
-          });
+          }, periods);
 
+          Trading.changeSeriesLineStyle(instrumentDoc, trade, [], periods);
           return;
         }
 
@@ -302,12 +308,12 @@ class Trading {
 
             this.createTrade(instrumentDoc, {
               price, time: candleData.originalTime,
-            });
+            }, periods);
 
             trade.takeProfitPrices = trade.takeProfitPrices.filter(p => p !== price);
           });
 
-          Trading.changeSeriesLineStyle(instrumentDoc, trade, targetTakeProfitPrices);
+          Trading.changeSeriesLineStyle(instrumentDoc, trade, targetTakeProfitPrices, periods);
         }
       }
     });
@@ -316,36 +322,38 @@ class Trading {
     this.numberTrades = originalData.numberTrades;
   }
 
-  static changeSeriesLineStyle(instrumentDoc, trade, values = []) {
-    const chartCandles = instrumentDoc.chart_candles;
-    let targetSeries = [];
+  static changeSeriesLineStyle(instrumentDoc, trade, values = [], periods = []) {
+    periods.forEach(period => {
+      let targetSeries = [];
+      const chartCandles = instrumentDoc[`chart_candles_${period}`];
 
-    if (!values || !values.length) {
-      targetSeries = chartCandles.extraSeries.filter(s => s.isTrade && s.id.includes(trade.id));
-    } else {
-      targetSeries = chartCandles.extraSeries.filter(
-        s => s.isTrade && s.id.includes(trade.id) && values.includes(s.value),
-      );
-    }
+      if (!values || !values.length) {
+        targetSeries = chartCandles.extraSeries.filter(s => s.isTrade && s.id.includes(trade.id));
+      } else {
+        targetSeries = chartCandles.extraSeries.filter(
+          s => s.isTrade && s.id.includes(trade.id) && values.includes(s.value),
+        );
+      }
 
-    targetSeries.forEach(s => {
-      s.applyOptions({
-        lineType: LightweightCharts.LineType.Simple,
-        lineStyle: LightweightCharts.LineStyle.LargeDashed,
+      targetSeries.forEach(s => {
+        s.applyOptions({
+          lineType: LightweightCharts.LineType.Simple,
+          lineStyle: LightweightCharts.LineStyle.LargeDashed,
+        });
       });
     });
   }
 
-  static removeTradeSeries(instrumentDoc, trade) {
-    const chartCandles = instrumentDoc.chart_candles;
+  static removeTradeSeries(instrumentDoc, trade, period) {
+    const chartCandles = instrumentDoc[`chart_candles_${period}`];
     const targetSeries = chartCandles.extraSeries.filter(s => s.isTrade && s.id.includes(trade.id));
     targetSeries.forEach(s => chartCandles.removeSeries(s, false));
   }
 
-  static makeTradeSeries(instrumentDoc, trade) {
-    const timeUnix = getUnix(trade.startAt);
+  static makeTradeSeries(instrumentDoc, trade, period) {
+    const timeUnix = trade.startAt;
     const price = trade.buyPrice || trade.sellPrice;
-    const chartCandles = instrumentDoc.chart_candles;
+    const chartCandles = instrumentDoc[`chart_candles_${period}`];
 
     const tradeSeries = chartCandles.addExtraSeries({
       color: constants.GRAY_COLOR,
@@ -383,9 +391,17 @@ class Trading {
       series.push(takeProfitSeries);
     });
 
+    let validTime = timeUnix;
+
+    if (period === AVAILABLE_PERIODS.get('1h')) {
+      validTime -= validTime % 3600;
+    } else if (period === AVAILABLE_PERIODS.get('1d')) {
+      validTime -= validTime % 86400;
+    }
+
     chartCandles.drawSeries(
       tradeSeries,
-      [{ value: price, time: timeUnix }],
+      [{ value: price, time: validTime }],
     );
 
     return series;
@@ -455,16 +471,6 @@ class Trading {
   }
 
   init() {
-    const $searchBlock = $('.instruments-container .search');
-
-    if (!$searchBlock.length) {
-      alert(`No block for appending button (${Trading.name})`);
-      return;
-    }
-
-    $searchBlock.append(Trading.getShowTradingFormButton());
-    this.$tradingForm.width($searchBlock.width());
-
     this.loadEventHandlers();
   }
 
@@ -476,7 +482,7 @@ class Trading {
 
     this.$tradingForm.find('.work-amount-block input').val(this.workAmount);
     this.$tradingForm.find('.number-trades-block input').val(this.numberTrades);
-    this.$tradingForm.find('.risks-block .sl input').val(TRADING_CONSTANTS.MIN_STOPLOSS_PERCENT);
+    this.$tradingForm.find('.risks-block .sl input').val(TRADING_CONSTANTS.DEFAULT_STOPLOSS_PERCENT);
   }
 
   loadEventHandlers() {
@@ -583,9 +589,5 @@ class Trading {
     }
 
     return dividedPrice[1].length;
-  }
-
-  static getShowTradingFormButton() {
-    return '<button id="show-trading-form"><img src="/images/settings.png" alt="settings" /></button>';
   }
 }

@@ -287,7 +287,7 @@ input:checked + .slider:before {
           .trades .trading-list table tr td.status.is_active {
             background-color: #00ff0a52; }
 
-button#show-trading-form {
+button#settings {
   width: 33px;
   height: 33px;
   outline: none;
@@ -297,18 +297,16 @@ button#show-trading-form {
   right: 0;
   cursor: pointer;
   margin-top: 2px; }
-  button#show-trading-form img {
+  button#settings img {
     width: 100%; }
 
 .trading-form {
+  width: 180px;
   display: none;
-  height: 152px;
+  height: 187px;
   box-sizing: border-box;
   border: 1px solid black;
-  position: absolute;
-  right: 0;
-  background-color: white;
-  z-index: 2; }
+  background-color: white; }
   .trading-form.is_active {
     display: block; }
   .trading-form .action-block {
@@ -407,7 +405,8 @@ button#show-trading-form {
       padding: 0 8px;
       outline: none; }
   .instruments-container .instruments-list {
-    width: 100%; }
+    width: 100%;
+    background-color: white; }
     .instruments-container .instruments-list .headlines {
       text-align: left;
       padding: 5px 10px;
@@ -1528,6 +1527,54 @@ button#show-trading-form {
         padding: 10px;
         text-align: center; }
 
+#star-five {
+  margin: 50px 0;
+  position: relative;
+  display: block;
+  color: red;
+  width: 0px;
+  height: 0px;
+  border-right: 100px solid transparent;
+  border-bottom: 70px  solid red;
+  border-left: 100px solid transparent;
+  -moz-transform: rotate(35deg);
+  -webkit-transform: rotate(35deg);
+  -ms-transform: rotate(35deg);
+  -o-transform: rotate(35deg); }
+
+#star-five:before {
+  border-bottom: 80px solid red;
+  border-left: 30px solid transparent;
+  border-right: 30px solid transparent;
+  position: absolute;
+  height: 0;
+  width: 0;
+  top: -45px;
+  left: -65px;
+  display: block;
+  content: '';
+  -webkit-transform: rotate(-35deg);
+  -moz-transform: rotate(-35deg);
+  -ms-transform: rotate(-35deg);
+  -o-transform: rotate(-35deg); }
+
+#star-five:after {
+  position: absolute;
+  display: block;
+  color: red;
+  top: 3px;
+  left: -105px;
+  width: 0px;
+  height: 0px;
+  border-right: 100px solid transparent;
+  border-bottom: 70px solid red;
+  border-left: 100px solid transparent;
+  -webkit-transform: rotate(-70deg);
+  -moz-transform: rotate(-70deg);
+  -ms-transform: rotate(-70deg);
+  -o-transform: rotate(-70deg);
+  content: ''; }
+
 .demo {
   padding: 10px;
   position: relative;
@@ -1645,7 +1692,8 @@ button#show-trading-form {
         .demo .charts-container .chart-periods div span {
           margin: 8px auto;
           text-align: center;
-          display: block; }
+          display: block;
+          user-select: none; }
     .demo .charts-container .drawing {
       display: flex; }
       .demo .charts-container .drawing div {
@@ -1674,9 +1722,73 @@ button#show-trading-form {
       border: 1px solid black;
       border-right: none;
       box-sizing: border-box; }
-  .demo .instruments-container {
+  .demo aside {
     position: absolute;
-    right: -99999px; }
+    right: 0;
+    z-index: 99999;
+    display: flex;
+    flex-direction: row-reverse; }
+    .demo aside .instruments-container {
+      width: 100%;
+      display: none; }
+      .demo aside .instruments-container.is_active {
+        display: block; }
+      .demo aside .instruments-container .instruments-list .headlines span.instrument-name {
+        width: 78%; }
+      .demo aside .instruments-container .instruments-list .headlines span.figure-level-percent {
+        width: 20%;
+        text-align: center; }
+      .demo aside .instruments-container .instruments-list .list .instrument {
+        position: relative; }
+        .demo aside .instruments-container .instruments-list .list .instrument.is_long {
+          /*
+              &:after {
+                content: '';
+                width: 40px;
+                height: 2px;
+                background-color: #00b706;
+                position: absolute;
+                right: 13px;
+                top: 0;
+              }
+              */ }
+          .demo aside .instruments-container .instruments-list .list .instrument.is_long span.figure-level-percent {
+            color: #00b706; }
+        .demo aside .instruments-container .instruments-list .list .instrument.is_short {
+          /*
+              &:after {
+                content: '';
+                width: 40px;
+                height: 2px;
+                background-color: red;
+                position: absolute;
+                right: 13px;
+                bottom: 0;
+              }
+              */ }
+          .demo aside .instruments-container .instruments-list .list .instrument.is_short span.figure-level-percent {
+            color: red; }
+        .demo aside .instruments-container .instruments-list .list .instrument span.instrument-name {
+          width: 78%; }
+        .demo aside .instruments-container .instruments-list .list .instrument span.figure-level-percent {
+          width: 20%;
+          text-align: center; }
+  .demo .settings {
+    padding-top: 15px;
+    display: flex;
+    flex-direction: row;
+    align-items: center; }
+    .demo .settings div {
+      display: inline-block; }
+      .demo .settings div.single-date-counter {
+        margin-right: 8px; }
+        .demo .settings div.single-date-counter input[type="checkbox"] {
+          width: 21px;
+          height: 21px; }
+      .demo .settings div.finish-date-point p {
+        margin-bottom: 3px; }
+      .demo .settings div.finish-date-point span {
+        margin-left: 10px; }
 
 .editor {
   padding: 10px;

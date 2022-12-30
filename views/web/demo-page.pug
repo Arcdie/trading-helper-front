@@ -8,10 +8,20 @@ block content
 	.page.demo
 		.row
 			.charts-container
-
-			include ../includes/services/list-instruments-form
-			//- include ../includes/services/trading-form
 			
+			aside
+				include ../includes/services/list-instruments-form
+				include ../includes/services/trading-form
+				
+		.row
+			.settings
+				.single-date-counter
+					input(type="checkbox")
+				
+				.finish-date-point
+					input(type="text")
+					span
+
 		include ../includes/services/trades
 
 block scripts

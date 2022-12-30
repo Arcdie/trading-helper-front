@@ -1,6 +1,6 @@
 /* global
-functions, makeRequest, getUnix, getRandomNumber, getPrecision, formatNumberToPretty, toRGB,
-objects, user, moment, constants,
+functions, makeRequest, getUnix, getRandomNumber, formatNumberToPretty,
+objects, moment, constants,
 classes, ChartCandles, IndicatorVolume, IndicatorMovingAverage, Trading,
 */
 
@@ -8,9 +8,6 @@ classes, ChartCandles, IndicatorVolume, IndicatorMovingAverage, Trading,
 
 const URL_GET_CANDLES = '/api/candles';
 const URL_GET_ACTIVE_INSTRUMENTS = '/api/instruments/active';
-const URL_GET_USER_FIGURE_LEVEL_BOUNDS = '/api/user-figure-level-bounds';
-const URL_REMOVE_USER_FIGURE_LEVEL_BOUNDS = '/api/user-figure-level-bounds/remove';
-const URL_CALCULATE_USER_FIGURE_LEVEL_BOUNDS = '/api/user-figure-level-bounds/cron/calculate';
 
 const AVAILABLE_PERIODS = new Map([
   ['5m', '5m'],
@@ -22,24 +19,19 @@ const AVAILABLE_PERIODS = new Map([
 
 let linePoints = [];
 let isLoading = false;
-let isSinglePeriod = false;
-let isSingleDateCounter = false;
 let choosedFigureShape = false;
 let isActiveLineDrawing = false;
 let isActiveLevelDrawing = false;
 let isActiveCrosshairMoving = false;
-let isActiveSearching = false;
 let temporaryLineSeriesId;
 let previousCrosshairMove;
 let choosenInstrumentId;
 
 let instrumentsDocs = [];
-const lastViewedInstruments = [];
 let choosenPeriods = [AVAILABLE_PERIODS.get('5m'), AVAILABLE_PERIODS.get('1h')];
+// let choosenPeriods = [AVAILABLE_PERIODS.get('1h'), AVAILABLE_PERIODS.get('1d')];
 let activePeriod = choosenPeriods[choosenPeriods.length - 1];
 let finishDatePointUnix = moment().startOf('hour').unix();
-let originalFinishDatePointUnix = finishDatePointUnix;
-
 const windowHeight = window.innerHeight;
 
 const settings = {
@@ -55,14 +47,13 @@ const settings = {
   },
 
   figureLevels: {
-    colorFor5mLevels: constants.DARK_BLUE_COLOR,
+    colorFor5mLevels: '#0800FF',
     colorFor1hLevels: constants.BLUE_COLOR,
     colorFor1dLevels: constants.GREEN_COLOR,
-    timeRenew: 86400,
   },
 
   figureLines: {
-    colorFor5mLines: constants.DARK_BLUE_COLOR,
+    colorFor5mLines: '#0800FF',
     colorFor1hLines: constants.BLUE_COLOR,
     colorFor1dLines: constants.GREEN_COLOR,
   },
@@ -71,7 +62,7 @@ const settings = {
     periodForShortMA: 20,
     periodForMediumMA: 50,
     periodForLongMA: 200,
-    colorForShortMA: constants.DARK_BLUE_COLOR,
+    colorForShortMA: '#0800FF',
     colorForMediumMA: constants.BLUE_COLOR,
     colorForLongMA: constants.GREEN_COLOR,
   },
@@ -82,10 +73,8 @@ const urlSearchParams = new URLSearchParams(window.location.search);
 const params = Object.fromEntries(urlSearchParams.entries());
 
 /* JQuery */
-const $settings = $('.settings');
-const $finishDatePoint = $settings.find('.finish-date-point input[type="text"]');
-
 const $chartsContainer = $('.charts-container');
+
 const $instrumentsContainer = $('.instruments-container');
 const $instrumentsList = $instrumentsContainer.find('.instruments-list .list');
 
@@ -93,21 +82,18 @@ $(document).ready(async () => {
   // start settings
 
   trading.init();
-  setStartSettings();
-
-  // saveSettingsToLocalStorage({ finishDatePointUnix: false });
+  // clearFinishDatePointInLocalStorage();
 
   setHistoryMoment();
 
-  // removeFigureLinesFromLocalStorage({});
-  // removeFigureLevelsFromLocalStorage({});
+  removeFigureLinesFromLocalStorage({});
+  removeFigureLevelsFromLocalStorage({});
 
   $instrumentsContainer
     .css({ maxHeight: windowHeight });
 
   if (params.interval && AVAILABLE_PERIODS.get(params.interval)) {
     choosenPeriods = [params.interval];
-    saveSettingsToLocalStorage({ choosenPeriods });
   }
 
   // loading data
@@ -123,15 +109,12 @@ $(document).ready(async () => {
   }
 
   instrumentsDocs = resultGetInstruments.result;
-  // await getAndSaveUserFigureLevels();
 
   // main logic
   renderListInstruments(instrumentsDocs);
-  await calculateFigureLevelsPercents(); // don't touch!
 
   $('.search input')
     .on('keyup', function () {
-      isActiveSearching = true;
       const value = $(this).val().toLowerCase();
 
       let targetDocs = instrumentsDocs;
@@ -148,7 +131,6 @@ $(document).ready(async () => {
 
   $instrumentsList
     .on('click', '.instrument', async function (elem) {
-      isActiveSearching = false;
       const $instrument = elem.type ? $(this) : $(elem);
       const instrumentId = $instrument.data('instrumentid');
 
@@ -157,12 +139,7 @@ $(document).ready(async () => {
       }
 
       if (choosenInstrumentId) {
-        fillLastViewedInstruments(choosenInstrumentId);
-        clearInstrumentData({ instrumentId: choosenInstrumentId });
-      }
-
-      if (isSingleDateCounter) {
-        finishDatePointUnix = originalFinishDatePointUnix;
+        clearInstrumentData({ instrumentId });
       }
 
       $instrumentsList
@@ -189,11 +166,6 @@ $(document).ready(async () => {
       choosenInstrumentId = instrumentId;
     });
 
-  $('#settings')
-    .on('click', async () => {
-      await renewFigureLevels();
-    });
-
   $chartsContainer
     .on('click', '.chart-periods div', async function () {
       if (isLoading) {
@@ -206,15 +178,7 @@ $(document).ready(async () => {
 
       const period = $(this).data('period');
 
-      if (isSinglePeriod) {
-        if (choosenPeriods.length === 1 && choosenPeriods.includes(period)) {
-          return true;
-        }
-
-        choosenPeriods = [period];
-        $chartsContainer.find('.chart-periods div').removeClass('is_active');
-        $(this).addClass('is_active');
-      } else if (!choosenPeriods.includes(period)) {
+      if (!choosenPeriods.includes(period)) {
         choosenPeriods.push(period);
         $(this).addClass('is_active');
 
@@ -231,9 +195,6 @@ $(document).ready(async () => {
         choosenPeriods = choosenPeriods.filter(p => p !== period);
         $(this).removeClass('is_active');
       }
-
-      activePeriod = period;
-      saveSettingsToLocalStorage({ choosenPeriods, activePeriod });
 
       const instrumentId = choosenInstrumentId;
       await loadCandles({ instrumentId }, choosenPeriods);
@@ -284,18 +245,6 @@ $(document).ready(async () => {
       }
     });
 
-  $settings.find('.single-date-counter input[type="checkbox"]')
-    .change(function () {
-      isSingleDateCounter = this.checked;
-      saveSettingsToLocalStorage({ isSingleDateCounter });
-    });
-
-  $finishDatePoint
-    .on('change', function () {
-      const value = $(this).val();
-      changeFinishDatePoint(value);
-    });
-
   if (params.symbol) {
     const instrumentDoc = instrumentsDocs.find(doc => doc.name === params.symbol);
 
@@ -306,8 +255,6 @@ $(document).ready(async () => {
         .get(0), 'events').click[0]
         .handler(`#instrument-${instrumentDoc._id}`);
     }
-  } else {
-    $instrumentsContainer.addClass('is_active');
   }
 
   trading.$tradingForm.find('.action-block button')
@@ -340,27 +287,19 @@ $(document).ready(async () => {
       if (e.keyCode === 93) {
         // ]
         nextTick();
+      }
+    })
+    .on('keydown', async e => {
+      if (e.keyCode === 72) {
+        // H
+        await setHistoryMoment(choosenInstrumentId);
       } else if (e.keyCode === 27) {
         // ESC
         trading.$tradingForm.removeClass('is_active');
         $instrumentsContainer.removeClass('is_active');
-      }
-    })
-    .on('keydown', async e => {
-      if (isActiveSearching) {
-        return true;
-      }
-
-      if (e.keyCode === 72) {
-        // H
-        await setHistoryMoment(choosenInstrumentId);
       } else if (e.keyCode === 76) {
         // l
         $instrumentsContainer.toggleClass('is_active');
-      } else if (e.keyCode === 83) {
-        // s
-        isSinglePeriod = !isSinglePeriod;
-        saveSettingsToLocalStorage({ isSinglePeriod });
       } else if (e.keyCode === 84) {
         // t
         if (!choosenInstrumentId) return;
@@ -420,7 +359,6 @@ const clearInstrumentData = ({ instrumentId }) => {
     instrumentDoc[`indicator_volume_${period}`] = null;
     instrumentDoc[`indicator_moving_average_short_${period}`] = null;
     instrumentDoc[`indicator_moving_average_medium_${period}`] = null;
-    instrumentDoc[`indicator_moving_average_long_${period}`] = null;
   });
 
   linePoints = [];
@@ -447,15 +385,15 @@ const sortPeriods = (periods = []) => {
 
   if (is5m) {
     return [
-      periods.filter(p => p !== AVAILABLE_PERIODS.get('5m')),
       AVAILABLE_PERIODS.get('5m'),
+      periods.filter(p => p !== AVAILABLE_PERIODS.get('5m')),
     ];
   }
 
   if (is1h) {
     return [
-      periods.filter(p => p !== AVAILABLE_PERIODS.get('1h')),
       AVAILABLE_PERIODS.get('1h'),
+      periods.filter(p => p !== AVAILABLE_PERIODS.get('1h')),
     ];
   }
 };
@@ -483,13 +421,7 @@ const loadCandles = async ({
       const value = (finishDatePointUnix % 3600);
 
       if (value) {
-        getCandlesOptions.endTime.add(-value, 'seconds');
-      }
-    } else if (period === AVAILABLE_PERIODS.get('1d')) {
-      const value = (finishDatePointUnix % 86400);
-
-      if (value) {
-        getCandlesOptions.endTime.add(-value, 'seconds');
+        getCandlesOptions.endTime.add(-value + 3600, 'seconds');
       }
     }
 
@@ -516,10 +448,10 @@ const setHistoryMoment = async () => {
 
   // 1 August 2021
 
-  const settings = getSettingsFromLocalStorage();
+  const resultGetDatePoint = getFinishDatePointFromLocalStorage();
 
-  if (settings.finishDatePointUnix) {
-    changeFinishDatePoint(settings.finishDatePointUnix);
+  if (resultGetDatePoint) {
+    finishDatePointUnix = getUnix(new Date(resultGetDatePoint));
 
     if (activePeriod !== AVAILABLE_PERIODS.get('5m')) {
       const divider = activePeriod === AVAILABLE_PERIODS.get('1h') ? 3600 : 86400;
@@ -530,8 +462,7 @@ const setHistoryMoment = async () => {
       }
     }
   } else {
-    const dateUnix = moment({ day: 1, month: 2, year: 2022 }).unix();
-    changeFinishDatePoint(dateUnix);
+    finishDatePointUnix = moment({ day: 4, month: 2, year: 2022 }).unix();
   }
 
   if (choosenInstrumentId) {
@@ -554,7 +485,6 @@ const updateCandlesForNextTick = async (instrumentDoc, period, newCandles = []) 
   const indicatorVolume = instrumentDoc[`indicator_volume_${period}`];
   const indicatorMovingAverageShort = instrumentDoc[`indicator_moving_average_short_${period}`];
   const indicatorMovingAverageMedium = instrumentDoc[`indicator_moving_average_medium_${period}`];
-  const indicatorMovingAverageLong = instrumentDoc[`indicator_moving_average_long_${period}`];
 
   let preparedData = [];
   let figureLinesExtraSeries = [];
@@ -648,7 +578,7 @@ const updateCandlesForNextTick = async (instrumentDoc, period, newCandles = []) 
 
     let resultCalculateMA;
     const targetCandlesPeriod = candlesData.slice(
-      lCandles - (settings.periodForLongMA * 2), lCandles,
+      lCandles - (settings.periodForMediumMA * 2), lCandles,
     );
 
     resultCalculateMA = indicatorMovingAverageShort.calculateData(targetCandlesPeriod);
@@ -662,13 +592,6 @@ const updateCandlesForNextTick = async (instrumentDoc, period, newCandles = []) 
 
     indicatorMovingAverageMedium.drawSeries(
       indicatorMovingAverageMedium.mainSeries,
-      resultCalculateMA[resultCalculateMA.length - 1],
-    );
-
-    resultCalculateMA = indicatorMovingAverageLong.calculateData(targetCandlesPeriod);
-
-    indicatorMovingAverageLong.drawSeries(
-      indicatorMovingAverageLong.mainSeries,
       resultCalculateMA[resultCalculateMA.length - 1],
     );
 
@@ -749,10 +672,7 @@ const nextTick = async () => {
   }
 
   finishDatePointUnix += incrementValue;
-
-  if (!isSingleDateCounter) {
-    changeFinishDatePoint(finishDatePointUnix);
-  }
+  saveFinishDatePointToLocalStorage(new Date(finishDatePointUnix * 1000));
 
   const newCandles = await updateCandlesForNextTick(instrumentDoc, activePeriod);
 
@@ -814,13 +734,10 @@ const nextTick = async () => {
 
   isLoading = false;
   const lastCandle = newCandles[newCandles.length - 1];
-  instrumentDoc.price = lastCandle.close;
 
   trading.nextTick(instrumentDoc, lastCandle, choosenPeriods);
   const trades = trading.calculateTradesProfit({ price: lastCandle.close }, true);
   Trading.updateTradesInTradeList(trades);
-
-  await calculateFigureLevelsPercents();
 };
 
 const loadCharts = ({
@@ -832,7 +749,7 @@ const loadCharts = ({
   let appendStr = '';
 
   sortPeriods(choosenPeriods).forEach((period, index) => {
-    appendStr += `<div class="chart-container period_${period}" style="width: ${choosenPeriods.length === 2 ? '50' : '100'}%">
+    appendStr += `<div class="chart-container period_${period}">
       <div class="charts-nav">
         <div class="legend">
           <p class="values">ОТКР<span class="open">0</span>МАКС<span class="high">0</span>МИН<span class="low">0</span>ЗАКР<span class="close">0</span><span class="percent">0%</span></p>
@@ -840,7 +757,7 @@ const loadCharts = ({
 
         <div class="row">
           <div class="chart-periods">
-            ${!index ? `
+            ${index ? `
             <div class="5m is_worked  ${choosenPeriods.includes(AVAILABLE_PERIODS.get('5m')) ? 'is_active' : ''}" data-period="5m"><span>5M</span></div>
             <div class="1h is_worked  ${choosenPeriods.includes(AVAILABLE_PERIODS.get('1h')) ? 'is_active' : ''}" data-period="1h"><span>1H</span></div>
             <div class="1d is_worked  ${choosenPeriods.includes(AVAILABLE_PERIODS.get('1d')) ? 'is_active' : ''}" data-period="1d"><span>1D</span></div>` : `<div class="${period} is_worked is_active" data-period="${period}"><span>${period.toUpperCase()}</span></div>`}
@@ -861,7 +778,7 @@ const loadCharts = ({
       </div>
       <span class="ruler">0%</span>
       <span class="last-swing-data">0</span>
-      <div class="charts" style="height: ${windowHeight}px"></div>
+      <div class="charts" style="height: ${windowHeight / 2}px"></div>
     </div>`;
   });
 
@@ -883,11 +800,6 @@ const loadCharts = ({
       period: settings.movingAverage.periodForMediumMA,
     });
 
-    const indicatorMovingAverageLong = new IndicatorMovingAverage(chartCandles.chart, {
-      color: settings.movingAverage.colorForLongMA,
-      period: settings.movingAverage.periodForLongMA,
-    });
-
     const indicatorVolume = new IndicatorVolume($rootContainer);
 
     chartCandles.key = 'futures';
@@ -895,7 +807,6 @@ const loadCharts = ({
     instrumentDoc[`indicator_volume_${period}`] = indicatorVolume;
     instrumentDoc[`indicator_moving_average_short_${period}`] = indicatorMovingAverageShort;
     instrumentDoc[`indicator_moving_average_medium_${period}`] = indicatorMovingAverageMedium;
-    instrumentDoc[`indicator_moving_average_long_${period}`] = indicatorMovingAverageLong;
 
     chartCandles.setOriginalData(instrumentDoc[`candles_data_${period}`], false);
     chartCandles.drawSeries(chartCandles.mainSeries, chartCandles.originalData);
@@ -913,9 +824,6 @@ const loadCharts = ({
     calculatedData = indicatorMovingAverageMedium.calculateAndDraw(chartCandles.originalData);
     indicatorMovingAverageMedium.calculatedData = calculatedData;
 
-    calculatedData = indicatorMovingAverageLong.calculateAndDraw(chartCandles.originalData);
-    indicatorMovingAverageLong.calculatedData = calculatedData;
-
     chartCandles.chart.subscribeClick(param => {
       activePeriod = chartCandles.period;
       const coordinateToPrice = chartCandles.mainSeries.coordinateToPrice(param.point.y);
@@ -926,18 +834,9 @@ const loadCharts = ({
       }
 
       if (param.time && chartCandles.extraSeries.length) {
-        let existedSeries = chartCandles.extraSeries.find(
+        const existedSeries = chartCandles.extraSeries.find(
           series => series.time === paramTime,
         );
-
-        if (!existedSeries) {
-          const priceMarkup = ((coordinateToPrice / 100) * 3);
-
-          existedSeries = chartCandles.extraSeries.find(series => {
-            return (coordinateToPrice < series.value + priceMarkup)
-              && (coordinateToPrice > series.value - priceMarkup);
-          });
-        }
 
         if (existedSeries) {
           choosedFigureShape = {
@@ -967,14 +866,14 @@ const loadCharts = ({
           const isLong = linePoints[1].value > linePoints[0].value;
           const isActive = linePoints[1].time === lastCandle.originalTimeUnix;
 
-          saveFigureLineToLocalStorage({
+          saveFigureLinesToLocalStorage([{
             seriesId,
             instrumentId,
             linePoints,
             isLong,
             isActive,
             timeframe: chartCandles.period,
-          });
+          }]);
 
           drawFigureLines(
             { instrumentId },
@@ -1006,14 +905,13 @@ const loadCharts = ({
 
         const seriesId = ChartCandles.getNewSeriesId();
 
-        saveFigureLevelsToLocalStorage([{
+        saveFigureLevelToLocalStorage({
           seriesId,
           instrumentId,
           time: paramTime,
           timeframe: chartCandles.period,
           value: coordinateToPrice,
-          isLong: coordinateToPrice > chartCandles.getInstrumentPrice(),
-        }]);
+        });
 
         drawFigureLevels({ instrumentId }, [{
           seriesId,
@@ -1245,22 +1143,6 @@ const loadCharts = ({
   });
 };
 
-const fillLastViewedInstruments = (instrumentId) => {
-  lastViewedInstruments.unshift(instrumentId);
-
-  if (lastViewedInstruments.length === 10) {
-    lastViewedInstruments.pop();
-  }
-
-  const rgb = toRGB(constants.GREEN_COLOR);
-  const rgbColor = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, .1)`;
-
-  lastViewedInstruments.forEach(instrumentId => {
-    const $instrument = $(`#instrument-${instrumentId}`);
-    $instrument.css('background-color', rgbColor);
-  });
-};
-
 const splitDays = ({ instrumentId }) => {
   const instrumentDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
 
@@ -1353,23 +1235,13 @@ const splitDays = ({ instrumentId }) => {
 const renderListInstruments = (instrumentsDocs) => {
   let appendInstrumentsStr = '';
 
-  const sortedInstruments = instrumentsDocs
-    .sort((a, b) => { return a.minimumFigureLevelPercent < b.minimumFigureLevelPercent ? -1 : 1; });
-
-  sortedInstruments
-    .forEach((doc, index) => {
-      if (!doc.minimumFigureLevelPercent) {
-        doc.minimumFigureLevelPercent = 100;
-      }
-
+  instrumentsDocs
+    .forEach(doc => {
       appendInstrumentsStr += `<div
         id="instrument-${doc._id}"
         class="instrument"
-        data-instrumentid=${doc._id}
-        style="order: ${index};"
-      >
+        data-instrumentid=${doc._id}>
         <span class="instrument-name">${doc.name}</span>
-        <span class="figure-level-percent">${doc.minimumFigureLevelPercent.toFixed(1)}%</span>
       </div>`;
     });
 
@@ -1437,29 +1309,6 @@ const calculateVolumeForLastSwing = ({ instrumentId }, period) => {
 
   $chartsContainer.find(`.period_${period} .last-swing-data`)
     .text(`${sumVolumeText} (${Math.abs(percentPerPrice).toFixed(1)}%)`);
-};
-
-const changeFinishDatePoint = (newValue) => {
-  let newDate;
-
-  if (Number.isInteger(parseInt(newValue, 10))) {
-    newDate = moment.unix(newValue);
-  } else {
-    newDate = moment(newValue);
-  }
-
-  if (!newDate.isValid()) {
-    alert('Invalid date');
-    return true;
-  }
-
-  newDate.utc();
-
-  finishDatePointUnix = newDate.unix();
-  originalFinishDatePointUnix = finishDatePointUnix;
-  saveSettingsToLocalStorage({ finishDatePointUnix });
-  $finishDatePoint.val(finishDatePointUnix);
-  $finishDatePoint.parent().find('span').text(newDate.format('DD.MM.YYYY HH:mm'));
 };
 
 const calculateSwings = ({ instrumentId }, periods = []) => {
@@ -1984,9 +1833,9 @@ const getFigureLevelsFromLocalStorage = ({ instrumentId }) => {
   return figureLevels;
 };
 
-const saveFigureLevelsToLocalStorage = (figureLevelsData = []) => {
+const saveFigureLevelToLocalStorage = (figureLevelData) => {
   const figureLevels = getFigureLevelsFromLocalStorage({});
-  figureLevels.push(...figureLevelsData);
+  figureLevels.push(figureLevelData);
   localStorage.setItem('trading-helper:figure-levels', JSON.stringify(figureLevels));
 };
 
@@ -2009,15 +1858,11 @@ const removeFigureLevelsFromLocalStorage = ({
   }
 
   if (seriesId) {
-    figureLevels = figureLevels.filter(e => {
-      if (e.instrumentId !== instrumentId) return true;
-      return e.seriesId !== seriesId;
-    });
+    figureLevels = figureLevels.filter(
+      e => e.instrumentId === instrumentId && e.seriesId !== seriesId,
+    );
   } else if (value) {
-    figureLevels = figureLevels.filter(e => {
-      if (e.instrumentId !== instrumentId) return true;
-      return e.value !== value;
-    });
+    figureLevels = figureLevels.filter(e => e.instrumentId === instrumentId && e.value !== value);
   }
 
   localStorage.setItem('trading-helper:figure-levels', JSON.stringify(figureLevels));
@@ -2039,9 +1884,9 @@ const getFigureLinesFromLocalStorage = ({ instrumentId }) => {
   return figureLines;
 };
 
-const saveFigureLineToLocalStorage = (figureLineData) => {
+const saveFigureLinesToLocalStorage = (figureLinesData = []) => {
   const figureLines = getFigureLinesFromLocalStorage({});
-  figureLines.push(figureLineData);
+  figureLines.push(...figureLinesData);
   localStorage.setItem('trading-helper:figure-lines', JSON.stringify(figureLines));
 };
 
@@ -2067,202 +1912,16 @@ const removeFigureLinesFromLocalStorage = ({
   localStorage.setItem('trading-helper:figure-lines', JSON.stringify(figureLines));
 };
 
-const getSettingsFromLocalStorage = () => {
-  const settings = localStorage.getItem('trading-helper:settings');
-  return settings ? JSON.parse(settings) : {};
+const getFinishDatePointFromLocalStorage = () => {
+  return localStorage.getItem('trading-helper:finish-date-point');
 };
 
-const saveSettingsToLocalStorage = (changes = {}) => {
-  const currentSettings = getSettingsFromLocalStorage();
-
-  const newSettings = {
-    ...currentSettings,
-    ...changes,
-  };
-
-  localStorage.setItem('trading-helper:settings', JSON.stringify(newSettings));
+const saveFinishDatePointToLocalStorage = (newDatePoint) => {
+  localStorage.setItem('trading-helper:finish-date-point', newDatePoint.toString());
 };
 
-const setStartSettings = () => {
-  const settings = getSettingsFromLocalStorage();
-
-  if (settings.choosenPeriods && settings.choosenPeriods.length) {
-    choosenPeriods = settings.choosenPeriods;
-  }
-
-  if (settings.activePeriod) {
-    activePeriod = settings.activePeriod;
-  }
-
-  if (settings.finishDatePointUnix) {
-    changeFinishDatePoint(settings.finishDatePointUnix);
-  }
-
-  if (settings.isSinglePeriod !== undefined) {
-    isSinglePeriod = settings.isSinglePeriod;
-  }
-
-  if (settings.isSingleDateCounter !== undefined) {
-    isSingleDateCounter = settings.isSingleDateCounter;
-    $settings.find('.single-date-counter input[type="checkbox"]').attr('checked', isSingleDateCounter);
-  }
-};
-
-const getAndSaveUserFigureLevels = async () => {
-  const query = {
-    isActive: true,
-    userId: user._id,
-  };
-
-  const resultGetFigureBounds = await makeRequest({
-    method: 'GET',
-    url: URL_GET_USER_FIGURE_LEVEL_BOUNDS,
-    query,
-  });
-
-  if (!resultGetFigureBounds || !resultGetFigureBounds.status) {
-    alert(resultGetFigureBounds.message || 'Cant makeRequest URL_GET_USER_FIGURE_LEVEL_BOUNDS');
-    return false;
-  }
-
-  let startTimeUnix = finishDatePointUnix;
-
-  switch (activePeriod) {
-    case AVAILABLE_PERIODS.get('5m'): startTimeUnix -= 300; break;
-    case AVAILABLE_PERIODS.get('1h'): startTimeUnix -= 3600; break;
-    case AVAILABLE_PERIODS.get('1d'): startTimeUnix -= 86400; break;
-    default: break;
-  }
-
-  const getCandlesOptions = {
-    period: activePeriod,
-    startTime: moment.unix(startTimeUnix - 1),
-    endTime: moment.unix(finishDatePointUnix),
-  };
-
-  const lastCandles = await getCandlesData(getCandlesOptions);
-
-  instrumentsDocs.forEach(doc => {
-    const candle = lastCandles.find(c => c.instrument_id === doc._id);
-
-    if (candle) {
-      doc.price = candle.data[1];
-    }
-  });
-
-  const figureLevelsData = resultGetFigureBounds.result.map(r => {
-    const { price } = instrumentsDocs.find(d => d._id === r.instrument_id);
-    const isLong = r.level_price > price;
-
-    return {
-      seriesId: new Date(r.level_start_candle_time).getTime(),
-      instrumentId: r.instrument_id,
-      time: getUnix(r.level_start_candle_time),
-      timeframe: r.level_timeframe,
-      value: r.level_price,
-      isLong,
-    };
-  });
-
-  if (figureLevelsData.length) {
-    saveFigureLevelsToLocalStorage(figureLevelsData);
-  }
-
-  // console.log('finished');
-};
-
-const calculateFigureLevelsPercents = async () => {
-  const figureLevels = getFigureLevelsFromLocalStorage({});
-
-  if (!figureLevels.length) {
-    return;
-  }
-
-  let startTimeUnix = finishDatePointUnix;
-
-  switch (activePeriod) {
-    case AVAILABLE_PERIODS.get('5m'): startTimeUnix -= 300; break;
-    case AVAILABLE_PERIODS.get('1h'): startTimeUnix -= 3600; break;
-    case AVAILABLE_PERIODS.get('1d'): startTimeUnix -= 86400; break;
-    default: break;
-  }
-
-  const getCandlesOptions = {
-    period: activePeriod,
-    startTime: moment.unix(startTimeUnix - 1),
-    endTime: moment.unix(finishDatePointUnix),
-  };
-
-  let targetInstrumentsDocs = instrumentsDocs;
-
-  if (isSingleDateCounter && choosenInstrumentId) {
-    getCandlesOptions.instrumentId = choosenInstrumentId;
-    targetInstrumentsDocs = [instrumentsDocs.find(d => d._id === choosenInstrumentId)];
-  }
-
-  const lastCandles = await getCandlesData(getCandlesOptions);
-
-  targetInstrumentsDocs.forEach(instrumentDoc => {
-    const instrumentCandle = lastCandles.find(c => c.instrument_id === instrumentDoc._id);
-
-    if (!instrumentCandle) {
-      instrumentDoc.minimumFigureLevelPercent = 100;
-      return true;
-    }
-
-    instrumentDoc.price = instrumentCandle.data[1];
-    delete instrumentDoc.minimumFigureLevelPercent;
-    const instrumentFigureLevels = figureLevels.filter(l => l.instrumentId === instrumentDoc._id);
-
-    if (!instrumentFigureLevels.length) {
-      instrumentDoc.minimumFigureLevelPercent = 100;
-      return true;
-    }
-
-    instrumentFigureLevels.forEach(figureLevel => {
-      const difference = Math.abs(instrumentDoc.price - figureLevel.value);
-      const percentPerPrice = 100 / (instrumentDoc.price / difference);
-      const isCrossed = ((figureLevel.isLong && instrumentDoc.price > figureLevel.value)
-        || (!figureLevel.isLong && instrumentDoc.price < figureLevel.value));
-
-      if (instrumentDoc.minimumFigureLevelPercent === undefined
-        || percentPerPrice < instrumentDoc.minimumFigureLevelPercent.percent) {
-        instrumentDoc.minimumFigureLevelPercent = {
-          percent: percentPerPrice,
-          isCrossed,
-          isLong: figureLevel.isLong,
-        };
-      }
-    });
-
-    if (instrumentDoc.minimumFigureLevelPercent.isCrossed) {
-      const percent = instrumentDoc.minimumFigureLevelPercent.percent;
-      instrumentDoc.minimumFigureLevelPercent.percent = -percent;
-    }
-  });
-
-  const sortedInstruments = targetInstrumentsDocs
-    .sort((a, b) => {
-      return a.minimumFigureLevelPercent.percent < b.minimumFigureLevelPercent.percent ? -1 : 1;
-    });
-
-  sortedInstruments.forEach((instrumentDoc, index) => {
-    const $instrument = $(`#instrument-${instrumentDoc._id}`);
-    $instrument.css('order', index);
-
-    if (instrumentDoc.minimumFigureLevelPercent
-      && instrumentDoc.minimumFigureLevelPercent.percent !== undefined) {
-      const { isLong, percent } = instrumentDoc.minimumFigureLevelPercent;
-      $instrument
-        .addClass(isLong ? 'is_long' : 'is_short')
-        .find('.figure-level-percent')
-        .text(`${percent.toFixed(1)}%`);
-
-      instrumentDoc.minimumFigureLevelPercent = percent;
-    } else {
-      $instrument.removeClass(['is_long', 'is_short']);
-    }
-  });
+const clearFinishDatePointInLocalStorage = () => {
+  localStorage.removeItem('trading-helper:finish-date-point');
 };
 
 const calculateReduceValue = (linePoints, period) => {
@@ -2294,43 +1953,6 @@ const calculateReduceValue = (linePoints, period) => {
   return differenceBetweenValues / numberCandles;
 };
 
-const renewFigureLevels = async () => {
-  console.log('Started renewing process');
-
-  const resultRemoveFigureLevels = await makeRequest({
-    method: 'POST',
-    url: URL_REMOVE_USER_FIGURE_LEVEL_BOUNDS,
-  });
-
-  if (!resultRemoveFigureLevels || !resultRemoveFigureLevels.status) {
-    alert(resultRemoveFigureLevels.message || `Cant makeRequest ${URL_REMOVE_USER_FIGURE_LEVEL_BOUNDS}`);
-    return false;
-  }
-
-  console.log('Old figure levels removed');
-
-  const resultCalculate = await makeRequest({
-    method: 'GET',
-    url: URL_CALCULATE_USER_FIGURE_LEVEL_BOUNDS,
-    query: {
-      endTime: moment.unix(finishDatePointUnix).toISOString(),
-    },
-  });
-
-  if (!resultCalculate || !resultCalculate.status) {
-    alert(resultCalculate.message || `Cant makeRequest ${URL_CALCULATE_USER_FIGURE_LEVEL_BOUNDS}`);
-    return false;
-  }
-
-  console.log('New figure levels calculated and saved');
-
-  removeFigureLevelsFromLocalStorage({});
-  await getAndSaveUserFigureLevels();
-
-  console.log('Renewing process is finished');
-  return true;
-};
-
 const getCandlesData = async ({
   instrumentId,
   period,
@@ -2341,12 +1963,9 @@ const getCandlesData = async ({
   // console.log('start loading');
 
   const query = {
+    instrumentId,
     isFirstCall: false,
   };
-
-  if (instrumentId) {
-    query.instrumentId = instrumentId;
-  }
 
   if (startTime) {
     query.startTime = moment(startTime).toISOString();
