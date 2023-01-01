@@ -354,9 +354,9 @@ button#settings {
         text-align: center;
         box-sizing: border-box;
         border-bottom: 1px solid black; }
-      .trading-form .risks-block div.tp button {
+      .trading-form .risks-block div.stop-limit button {
         background-color: #3dff2bc2; }
-        .trading-form .risks-block div.tp button:hover {
+        .trading-form .risks-block div.stop-limit button:hover {
           background-color: #3dff2b61; }
       .trading-form .risks-block div.sl button {
         background-color: #fa1010c2; }

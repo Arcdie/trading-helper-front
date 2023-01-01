@@ -19,8 +19,11 @@ class Trading {
     this.$tradingStatistics = $('.trading-statistics');
 
     this.trades = [];
+    this.limitOrders = [];
+
     this.isLong = false;
     this.isActiveStopLossChoice = false;
+    this.isActiveLimitOrderChoice = false;
 
     this.workAmount = TRADING_CONSTANTS.MIN_WORK_AMOUNT;
     this.numberTrades = TRADING_CONSTANTS.DEFAULT_NUMBER_TRADES;
@@ -61,6 +64,19 @@ class Trading {
     $numberTrades.val(this.numberTrades);
   }
 
+  changeLimitPrice(newValue) {
+    if (!newValue) return;
+
+    const $stopLimit = this.$tradingForm.find('.risks-block .stop-limit input[type="text"]');
+
+    if (Number.isNaN(newValue)) {
+      $stopLimit.val(0);
+      return;
+    }
+
+    $stopLimit.val(newValue);
+  }
+
   changeStopLossPercent(newValue) {
     if (!newValue) return;
 
@@ -99,6 +115,64 @@ class Trading {
     const percentPerPrice = 100 / (instrumentPrice / difference);
 
     this.changeStopLossPercent(parseFloat(percentPerPrice.toFixed(2)));
+  }
+
+  addLimitOrder(instrumentDoc, { startTime, instrumentPrice, limitPrice }) {
+    const isLong = limitPrice > instrumentPrice;
+
+    limitPrice = parseFloat(limitPrice.toFixed(instrumentDoc.price_precision));
+    this.changeLimitPrice(limitPrice);
+
+    const newLimitOrder = {
+      id: `limit-order-${new Date().getTime()}`,
+      isLong,
+      limitPrice,
+      startAt: startTime,
+      workAmount: this.workAmount,
+      numberTrades: this.numberTrades,
+      stopLossPercent: this.stopLossPercent,
+    };
+
+    this.limitOrders.push(newLimitOrder);
+    return newLimitOrder;
+  }
+
+  checkLimitOrders(instrumentDoc, candleData, periods = []) {
+    const workAmount = this.workAmount;
+    const numberTrades = this.numberTrades;
+    const stopLossPercent = this.stopLossPercent;
+
+    let wasTrade = false;
+
+    this.limitOrders.forEach(o => {
+      if ((o.isLong && candleData.high >= o.limitPrice)
+        || (!o.isLong && candleData.low <= o.limitPrice)) {
+        this.isLong = o.isLong;
+        this.workAmount = o.workAmount;
+        this.numberTrades = o.numberTrades;
+        this.stopLossPrice = o.stopLossPrice;
+
+        const trade = this.createTrade(instrumentDoc, {
+          price: o.limitPrice,
+          time: candleData.originalTimeUnix,
+        }, periods);
+
+        if (trade && trade.isNew) {
+          periods.forEach(period => {
+            Trading.makeTradeSeries(instrumentDoc, trade, period);
+          });
+        }
+
+        this.removeLimitOrder(instrumentDoc, o, periods);
+        wasTrade = true;
+      }
+    });
+
+    this.workAmount = workAmount;
+    this.numberTrades = numberTrades;
+    this.stopLossPercent = stopLossPercent;
+
+    return wasTrade;
   }
 
   createTrade(instrumentDoc, { price, time }, periods) {
@@ -156,12 +230,18 @@ class Trading {
           Trading.removeTradesFromTradeList([activeTrade]);
           Trading.changeSeriesLineStyle(instrumentDoc, activeTrade, [], periods);
 
+          if (result === 0) {
+            this.changeNumberTrades(TRADING_CONSTANTS.DEFAULT_NUMBER_TRADES);
+          }
+
           // if (result < 0) { ???
           //   newTrade.quantity -= quantityToDecrease;
           // }
         } else {
           this.calculateTradesProfit({ price });
           Trading.updateTradesInTradeList([activeTrade]);
+
+          this.changeNumberTrades(activeTrade.numberTrades);
         }
 
         this.trades.push(newTrade);
@@ -172,6 +252,8 @@ class Trading {
         if (result < 0) {
           this.numberTrades = Math.abs(result);
           this.createTrade(instrumentDoc, { price, time }, periods);
+
+          this.changeNumberTrades(this.numberTrades);
         }
       }
 
@@ -247,7 +329,7 @@ class Trading {
     return newTrade;
   }
 
-  nextTick(instrumentDoc, candleData, periods = []) {
+  nextTick(instrumentDoc, candleData, periods = [], isActivatedLimitOrder = false) {
     const originalData = {
       isLong: this.isLong,
       numberTrades: this.numberTrades,
@@ -255,18 +337,6 @@ class Trading {
 
     this.trades.filter(t => t.isActive).forEach(trade => {
       if (trade.isLong) {
-        if (candleData.low <= trade.stopLossPrice) {
-          this.isLong = false;
-          this.numberTrades = trade.numberTrades;
-
-          this.createTrade(instrumentDoc, {
-            price: trade.stopLossPrice, time: candleData.originalTime,
-          }, periods);
-
-          Trading.changeSeriesLineStyle(instrumentDoc, trade, [], periods);
-          return;
-        }
-
         const targetTakeProfitPrices = trade.takeProfitPrices.filter(
           price => price <= candleData.high,
         );
@@ -285,18 +355,21 @@ class Trading {
 
           Trading.changeSeriesLineStyle(instrumentDoc, trade, targetTakeProfitPrices, periods);
         }
-      } else {
-        if (candleData.high >= trade.stopLossPrice) {
-          this.isLong = true;
-          this.numberTrades = trade.numberTrades;
-          this.createTrade(instrumentDoc, {
-            price: trade.stopLossPrice, time: candleData.originalTime,
-          }, periods);
 
-          Trading.changeSeriesLineStyle(instrumentDoc, trade, [], periods);
-          return;
+        if (trade.takeProfitPrices.length) {
+          if ((isActivatedLimitOrder && candleData.close <= trade.stopLossPrice)
+            || (!isActivatedLimitOrder && candleData.low <= trade.stopLossPrice)) {
+            this.isLong = false;
+            this.numberTrades = trade.takeProfitPrices.length;
+
+            this.createTrade(instrumentDoc, {
+              price: trade.stopLossPrice, time: candleData.originalTime,
+            }, periods);
+
+            Trading.changeSeriesLineStyle(instrumentDoc, trade, [], periods);
+          }
         }
-
+      } else {
         const targetTakeProfitPrices = trade.takeProfitPrices.filter(
           price => price >= candleData.low,
         );
@@ -315,11 +388,24 @@ class Trading {
 
           Trading.changeSeriesLineStyle(instrumentDoc, trade, targetTakeProfitPrices, periods);
         }
+
+        if (trade.takeProfitPrices.length) {
+          if ((isActivatedLimitOrder && candleData.close >= trade.stopLossPrice)
+            || (!isActivatedLimitOrder && candleData.high >= trade.stopLossPrice)) {
+            this.isLong = true;
+            this.numberTrades = trade.takeProfitPrices.length;
+            this.createTrade(instrumentDoc, {
+              price: trade.stopLossPrice, time: candleData.originalTime,
+            }, periods);
+
+            Trading.changeSeriesLineStyle(instrumentDoc, trade, [], periods);
+          }
+        }
       }
     });
 
     this.isLong = originalData.isLong;
-    this.numberTrades = originalData.numberTrades;
+    // this.numberTrades = originalData.numberTrades;
   }
 
   static changeSeriesLineStyle(instrumentDoc, trade, values = [], periods = []) {
@@ -348,6 +434,60 @@ class Trading {
     const chartCandles = instrumentDoc[`chart_candles_${period}`];
     const targetSeries = chartCandles.extraSeries.filter(s => s.isTrade && s.id.includes(trade.id));
     targetSeries.forEach(s => chartCandles.removeSeries(s, false));
+  }
+
+  removeLimitOrder(instrumentDoc, limitOrder, periods = []) {
+    this.limitOrders = this.limitOrders.filter(o => o.id !== limitOrder.id);
+
+    periods.forEach(period => {
+      const chartCandles = instrumentDoc[`chart_candles_${period}`];
+      const targetSeries = chartCandles.extraSeries.find(
+        s => s.isLimitOrder && s.id.includes(limitOrder.id),
+      );
+
+      if (targetSeries) {
+        chartCandles.removeSeries(targetSeries, false);
+      }
+    });
+  }
+
+  removeTrades(trades = []) {
+    trades.forEach(trade => {
+      this.trades = this.trades.filter(t => t.id !== trade.id);
+    });
+
+    Trading.removeTradesFromTradeList(trades);
+    this.calculateTradesProfit({});
+    this.updateCommonStatistics();
+  }
+
+  static makeLimitOrderSeries(instrumentDoc, limitOrder, period) {
+    const chartCandles = instrumentDoc[`chart_candles_${period}`];
+
+    const limitOrderSeries = chartCandles.addExtraSeries({
+      color: constants.RED_COLOR,
+      lastValueVisible: false,
+    }, {
+      time: limitOrder.startAt,
+      isLimitOrder: true,
+      value: limitOrder.limitPrice,
+      id: limitOrder.id,
+    });
+
+    let validTime = limitOrder.startAt;
+
+    if (period === AVAILABLE_PERIODS.get('1h')) {
+      validTime -= validTime % 3600;
+    } else if (period === AVAILABLE_PERIODS.get('1d')) {
+      validTime -= validTime % 86400;
+    }
+
+    chartCandles.drawSeries(
+      limitOrderSeries,
+      [{ value: limitOrder.limitPrice, time: validTime }],
+    );
+
+    return limitOrderSeries;
   }
 
   static makeTradeSeries(instrumentDoc, trade, period) {
@@ -508,8 +648,26 @@ class Trading {
 
     this.$tradingForm.find('.risks-block .sl button')
       .on('click', () => {
-        // $(this).toggleClass('is_active');
         _this.isActiveStopLossChoice = !_this.isActiveStopLossChoice;
+      });
+
+    this.$tradingForm.find('.risks-block .stop-limit input[type="text"]')
+      .on('change', function () {
+        const value = parseFloat($(this).val());
+        _this.changeLimitPrice(value);
+      });
+
+    this.$tradingForm.find('.risks-block .stop-limit button')
+      .on('click', () => {
+        _this.isActiveLimitOrderChoice = !_this.isActiveLimitOrderChoice;
+      });
+
+    this.$tradingList
+      .on('click', '.trade .index', function () {
+        const index = parseInt($(this).text(), 10);
+        const trades = _this.trades.filter(t => t.index === index);
+
+        _this.removeTrades(trades);
       });
   }
 
@@ -517,8 +675,8 @@ class Trading {
     let appendStr = '';
 
     trades.forEach(trade => {
-      appendStr += `<tr id="trade-${trade.id}">
-        <td>${trade.index}</td>
+      appendStr += `<tr id="trade-${trade.id}" class="trade">
+        <td class="index">${trade.index}</td>
         <td class="number-trades"><span>${trade.numberTrades}</span></td>
         <td class="profit"><span>${trade.profit.toFixed(2)}</span>$</td>
         <td class="profit-percent"><span>${trade.profitPercent.toFixed(2)}</span>%</td>
@@ -526,7 +684,7 @@ class Trading {
         <td class="status ${trade.isActive ? 'is_active' : ''}"></td>
         <td class="buy-price">${trade.buyPrice ? `${trade.buyPrice}$` : ''}</td>
         <td class="sell-price">${trade.sellPrice ? `${trade.sellPrice}$` : ''}</td>
-        <td>${moment(trade.startAt).format('DD.MM.YY HH:mm')}</td>
+        <td>${moment.unix(trade.startAt).format('DD.MM.YY HH:mm')}</td>
         <td class="end-at">${trade.endAt ? moment(trade.endAt).format('DD.MM.YY HH:mm') : ''}</td>
       </tr>`;
     });

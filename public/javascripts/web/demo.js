@@ -250,6 +250,12 @@ $(document).ready(async () => {
       const activeTrade = trading.trades.find(t => t.isActive);
       activeTrade && drawTrades({ instrumentId }, activeTrade);
 
+      if (trading.limitOrders.length) {
+        trading.limitOrders.forEach(order => {
+          drawLimitOrders({ instrumentId }, order);
+        });
+      }
+
       // todo: n
       // if (choosenPeriod === AVAILABLE_PERIODS.get('5m')) {
       //   splitDays({ instrumentId });
@@ -351,18 +357,24 @@ $(document).ready(async () => {
         return true;
       }
 
-      if (e.keyCode === 72) {
+      if (e.keyCode === 80) {
+        // P
+        trading.$tradingForm.find('.action-block .buy button').click();
+      } else if (e.keyCode === 219) {
+        // [
+        trading.$tradingForm.find('.action-block .sell button').click();
+      } else if (e.keyCode === 72) {
         // H
         await setHistoryMoment(choosenInstrumentId);
       } else if (e.keyCode === 76) {
-        // l
+        // L
         $instrumentsContainer.toggleClass('is_active');
       } else if (e.keyCode === 83) {
-        // s
+        // S
         isSinglePeriod = !isSinglePeriod;
         saveSettingsToLocalStorage({ isSinglePeriod });
       } else if (e.keyCode === 84) {
-        // t
+        // T
         if (!choosenInstrumentId) return;
 
         if (!trading.$tradingForm.hasClass('is_active')) {
@@ -390,6 +402,9 @@ $(document).ready(async () => {
               instrumentId: instrumentDoc._id,
               seriesId: choosedFigureShape.seriesId,
             });
+          } else if (choosedFigureShape.isLimitOrder) {
+            const limitOrder = trading.limitOrders.find(o => o.id === choosedFigureShape.seriesId);
+            trading.removeLimitOrder(instrumentDoc, limitOrder, choosenPeriods);
           }
 
           choosenPeriods.forEach(period => {
@@ -430,6 +445,9 @@ const clearInstrumentData = ({ instrumentId }) => {
   temporaryLineSeriesId = false;
 
   trading.$tradingForm.removeClass('is_active');
+
+  // trading.trades = [];
+  trading.limitOrders = [];
   // todo: finish active trades
 };
 
@@ -727,6 +745,27 @@ const updateCandlesForNextTick = async (instrumentDoc, period, newCandles = []) 
         });
       });
     });
+
+    trading.limitOrders.forEach(order => {
+      const targetSeries = chartCandles.extraSeries.filter(
+        s => s.isLimitOrder && s.id.includes(order.id),
+      );
+
+      let validTime = originalTimeUnix;
+
+      if (period === AVAILABLE_PERIODS.get('1h')) {
+        validTime -= validTime % 3600;
+      } else if (period === AVAILABLE_PERIODS.get('1d')) {
+        validTime -= validTime % 86400;
+      }
+
+      targetSeries.forEach(s => {
+        chartCandles.drawSeries(s, {
+          value: s.value,
+          time: validTime,
+        });
+      });
+    });
   }
 
   return preparedData;
@@ -816,7 +855,9 @@ const nextTick = async () => {
   const lastCandle = newCandles[newCandles.length - 1];
   instrumentDoc.price = lastCandle.close;
 
-  trading.nextTick(instrumentDoc, lastCandle, choosenPeriods);
+  const wasTrade = trading.checkLimitOrders(instrumentDoc, lastCandle, choosenPeriods);
+  trading.nextTick(instrumentDoc, lastCandle, choosenPeriods, wasTrade);
+
   const trades = trading.calculateTradesProfit({ price: lastCandle.close }, true);
   Trading.updateTradesInTradeList(trades);
 
@@ -945,6 +986,7 @@ const loadCharts = ({
             seriesId: existedSeries.id,
             isFigureLine: existedSeries.isFigureLine,
             isFigureLevel: existedSeries.isFigureLevel,
+            isLimitOrder: existedSeries.isLimitOrder,
             time: paramTime,
           };
         }
@@ -1037,6 +1079,27 @@ const loadCharts = ({
         });
 
         trading.isActiveStopLossChoice = false;
+      }
+
+      if (trading.isActiveLimitOrderChoice) {
+        const limitOrder = trading.addLimitOrder(instrumentDoc, {
+          startTime: paramTime,
+          limitPrice: coordinateToPrice,
+          instrumentPrice: chartCandles.getInstrumentPrice(),
+        });
+
+        choosenPeriods.forEach(period => {
+          Trading.makeLimitOrderSeries(instrumentDoc, limitOrder, period);
+        });
+
+        choosedFigureShape = {
+          instrumentId,
+          isLimitOrder: true,
+          seriesId: limitOrder.id,
+          time: limitOrder.startAt,
+        };
+
+        trading.isActiveLimitOrderChoice = false;
       }
     });
 
@@ -1236,6 +1299,18 @@ const loadCharts = ({
               indicatorVolume.mainSeries,
               chartCandles.originalData.map(e => ({ value: e.volume, time: e.time })),
             );
+
+            chartCandles.extraSeries.forEach(s => {
+              if (s.isFigureLine || s.isFigureLevel) {
+                chartCandles.removeSeries(s, false);
+              }
+            });
+
+            const figureLevelsData = getFigureLevelsFromLocalStorage({ instrumentId });
+            drawFigureLevels({ instrumentId }, figureLevelsData);
+
+            const figureLinesData = getFigureLinesFromLocalStorage({ instrumentId });
+            drawFigureLines({ instrumentId }, figureLinesData);
 
             isLoading = false;
             isStartedLoad = false;
@@ -1811,8 +1886,14 @@ const drawFigureLines = ({ instrumentId }, figureLinesData = [], periods = choos
       });
     }
 
+    const firstCandleTime = candlesData[0].originalTimeUnix;
+
     figureLinesData.forEach(figureLine => {
       let color = settings.figureLines.colorFor5mLines;
+
+      if (figureLine.linePoints[0].time < firstCandleTime) {
+        figureLine.linePoints[0].time = firstCandleTime;
+      }
 
       switch (figureLine.timeframe) {
         case AVAILABLE_PERIODS.get('5m'): break;
@@ -1875,6 +1956,8 @@ const drawFigureLevels = ({ instrumentId }, figureLevelsData = []) => {
     }
     */
 
+    const firstCandleTime = candlesData[0].originalTimeUnix;
+
     figureLevelsData.forEach(({
       seriesId, time, value, timeframe,
     }) => {
@@ -1900,6 +1983,10 @@ const drawFigureLevels = ({ instrumentId }, figureLevelsData = []) => {
 
         case AVAILABLE_PERIODS.get('1d'): color = settings.figureLevels.colorFor1dLevels; break;
         default: alert(`Unknown timeframe - ${timeframe}`); break;
+      }
+
+      if (time < firstCandleTime) {
+        time = firstCandleTime;
       }
 
       const newSeries = chartCandles.addExtraSeries({
@@ -1946,6 +2033,47 @@ const drawTrades = ({ instrumentId }, trade, periods = []) => {
     if (!lCandles) return;
 
     let startAt = trade.startAt;
+
+    if (period === AVAILABLE_PERIODS.get('1h')) {
+      startAt -= startAt % 3600;
+    } else if (period === AVAILABLE_PERIODS.get('1d')) {
+      startAt -= startAt % 86400;
+    }
+
+    series.forEach(s => {
+      chartCandles.drawSeries(
+        s,
+        [{
+          value: s.value,
+          time: startAt,
+        }, {
+          value: s.value,
+          time: candlesData[lCandles - 1].originalTimeUnix,
+        }],
+      );
+    });
+  });
+};
+
+const drawLimitOrders = ({ instrumentId }, limitOrder, periods = []) => {
+  if (!periods.length) {
+    periods = choosenPeriods;
+  }
+
+  const instrumentDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
+
+  periods.forEach(period => {
+    const series = Trading.makeLimitOrderSeries(instrumentDoc, limitOrder, period);
+
+    if (!series.length) return;
+
+    const chartCandles = instrumentDoc[`chart_candles_${period}`];
+    const candlesData = chartCandles.originalData;
+    const lCandles = candlesData.length;
+
+    if (!lCandles) return;
+
+    let startAt = limitOrder.startAt;
 
     if (period === AVAILABLE_PERIODS.get('1h')) {
       startAt -= startAt % 3600;
