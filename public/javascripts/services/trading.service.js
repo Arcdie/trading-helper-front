@@ -10,6 +10,9 @@ const TRADING_CONSTANTS = {
   DEFAULT_STOPLOSS_PERCENT: 0.5,
   MIN_WORK_AMOUNT: 10,
   DEFAULT_NUMBER_TRADES: 3,
+
+  MAKER_COMMISSION_PERCENT: 0.02 / 100,
+  TAKER_COMMISSION_PERCENT: 0.04 / 100,
 };
 
 class Trading {
@@ -24,6 +27,11 @@ class Trading {
     this.isLong = false;
     this.isActiveStopLossChoice = false;
     this.isActiveLimitOrderChoice = false;
+
+    this.minProfit = 0;
+    this.maxProfit = 0;
+    this.totalCommissions = 0;
+    this.tradesRelationPercent = 0;
 
     this.workAmount = TRADING_CONSTANTS.MIN_WORK_AMOUNT;
     this.numberTrades = TRADING_CONSTANTS.DEFAULT_NUMBER_TRADES;
@@ -187,6 +195,10 @@ class Trading {
         return;
       } else {
         let buyPrice, sellPrice;
+        const quantityPerOneTrade = activeTrade.quantity / activeTrade.numberTrades;
+        const result = activeTrade.numberTrades - this.numberTrades;
+        const tradesToDecrease = result < 0 ? activeTrade.numberTrades : this.numberTrades;
+        const quantityToDecrease = tradesToDecrease * quantityPerOneTrade;
 
         if (activeTrade.isLong && !this.isLong) {
           buyPrice = activeTrade.buyPrice;
@@ -195,11 +207,6 @@ class Trading {
           buyPrice = price;
           sellPrice = activeTrade.sellPrice;
         }
-
-        const quantityPerOneTrade = activeTrade.quantity / activeTrade.numberTrades;
-        const result = activeTrade.numberTrades - this.numberTrades;
-        const tradesToDecrease = result < 0 ? activeTrade.numberTrades : this.numberTrades;
-        const quantityToDecrease = tradesToDecrease * quantityPerOneTrade;
 
         activeTrade.quantity -= quantityToDecrease;
         activeTrade.numberTrades -= tradesToDecrease;
@@ -225,8 +232,14 @@ class Trading {
           profitPercent: 0,
         };
 
+        const sumTrade = newTrade.quantity * price;
+        newTrade.sumCommissions = sumTrade * TRADING_CONSTANTS.TAKER_COMMISSION_PERCENT;
+        this.totalCommissions += newTrade.sumCommissions;
+
         if (result <= 0) {
-          this.trades = this.trades.filter(t => t.id !== activeTrade.id);
+          const trade = this.trades.find(t => t.id === activeTrade.id);
+          trade.isActive = false;
+
           Trading.removeTradesFromTradeList([activeTrade]);
           Trading.changeSeriesLineStyle(instrumentDoc, activeTrade, [], periods);
 
@@ -279,12 +292,6 @@ class Trading {
       profitPercent: 0,
     };
 
-    if (newTrade.isLong) {
-      newTrade.buyPrice = price;
-    } else {
-      newTrade.sellPrice = price;
-    }
-
     let quantity = this.workAmount / price;
     if (quantity < stepSize) {
       alert('quantity < stepSize');
@@ -313,6 +320,20 @@ class Trading {
     newTrade.takeProfitPrices = [];
     newTrade.quantity = parseFloat((quantity).toFixed(stepSizePrecision));
     newTrade.stopLossPrice = parseFloat((stopLossPrice).toFixed(tickSizePrecision));
+
+    if (newTrade.isLong) {
+      newTrade.buyPrice = price;
+
+      const sumTrade = newTrade.quantity * newTrade.buyPrice;
+      newTrade.sumCommissions = sumTrade * TRADING_CONSTANTS.TAKER_COMMISSION_PERCENT;
+    } else {
+      newTrade.sellPrice = price;
+
+      const sumTrade = newTrade.quantity * newTrade.sellPrice;
+      newTrade.sumCommissions = sumTrade * TRADING_CONSTANTS.TAKER_COMMISSION_PERCENT;
+    }
+
+    this.totalCommissions += newTrade.sumCommissions;
 
     for (let i = 0; i < newTrade.numberTrades; i += 1) {
       let takeProfitPrice = newTrade.isLong
@@ -454,6 +475,7 @@ class Trading {
   removeTrades(trades = []) {
     trades.forEach(trade => {
       this.trades = this.trades.filter(t => t.id !== trade.id);
+      this.totalCommissions -= trade.sumCommissions;
     });
 
     Trading.removeTradesFromTradeList(trades);
@@ -583,7 +605,7 @@ class Trading {
 
     const majorTrades = {};
     this.trades.forEach(trade => {
-      if (trade.isActive) return;
+      if (trade.isActive || !trade.parentId) return;
 
       commonProfit += trade.profit;
 
@@ -603,6 +625,16 @@ class Trading {
         numberTrades[1] += 1;
       }
     });
+
+    if (commonProfit < this.minProfit) {
+      this.minProfit = commonProfit;
+    }
+
+    if (commonProfit > this.maxProfit) {
+      this.maxProfit = commonProfit;
+    }
+
+    this.tradesRelationPercent = numberTrades[0] === 0 ? 0 : numberTrades[1] / numberTrades[0];
 
     return {
       commonProfit,
@@ -682,6 +714,7 @@ class Trading {
         <td class="profit-percent"><span>${trade.profitPercent.toFixed(2)}</span>%</td>
         <td class="type ${trade.isLong ? 'long' : ''}">${trade.isLong ? 'long' : 'short'}</td>
         <td class="status ${trade.isActive ? 'is_active' : ''}"></td>
+        <td class="commission">${trade.sumCommissions.toFixed(4)}</td>
         <td class="buy-price">${trade.buyPrice ? `${trade.buyPrice}$` : ''}</td>
         <td class="sell-price">${trade.sellPrice ? `${trade.sellPrice}$` : ''}</td>
         <td>${moment.unix(trade.startAt).format('DD.MM.YY HH:mm')}</td>
@@ -693,15 +726,34 @@ class Trading {
   }
 
   updateCommonStatistics() {
-    const {
+    let {
       commonProfit,
       numberTrades,
     } = this.calculateCommonProfit();
 
-    this.$tradingStatistics.find('.profit span').text(commonProfit.toFixed(2));
+    commonProfit = Number.isInteger(commonProfit)
+      ? parseInt(commonProfit, 10) : commonProfit.toFixed(2);
+
+    const minProfit = Number.isInteger(this.minProfit)
+      ? parseInt(this.minProfit, 10) : this.minProfit.toFixed(2);
+
+    const maxProfit = Number.isInteger(this.maxProfit)
+      ? parseInt(this.maxProfit, 10) : this.maxProfit.toFixed(2);
+
+    const totalCommissions = Number.isInteger(this.totalCommissions)
+      ? parseInt(this.totalCommissions, 10) : this.totalCommissions.toFixed(4);
+
+    const tradesRelationPercent = Number.isInteger(this.tradesRelationPercent)
+      ? parseInt(this.tradesRelationPercent, 10) : this.tradesRelationPercent.toFixed(2);
+
+    this.$tradingStatistics.find('.profit span').text(commonProfit);
+    this.$tradingStatistics.find('.min-profit span').text(minProfit);
+    this.$tradingStatistics.find('.max-profit span').text(maxProfit);
+    this.$tradingStatistics.find('.sum-commissions span').text(totalCommissions);
 
     this.$tradingStatistics.find('.number-trades span.win').text(numberTrades[0]);
     this.$tradingStatistics.find('.number-trades span.lose').text(numberTrades[1]);
+    this.$tradingStatistics.find('.number-trades span.relation').text(tradesRelationPercent);
   }
 
   static updateTradesInTradeList(trades = []) {

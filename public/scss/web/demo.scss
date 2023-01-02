@@ -1,53 +1,3 @@
-#star-five {
-   margin: 50px 0;
-   position: relative;
-   display: block;
-   color: red;
-   width: 0px;
-   height: 0px;
-   border-right:  100px solid transparent;
-   border-bottom: 70px  solid red;
-   border-left:   100px solid transparent;
-   -moz-transform:    rotate(35deg);
-   -webkit-transform: rotate(35deg);
-   -ms-transform:     rotate(35deg);
-   -o-transform:      rotate(35deg);
-}
-#star-five:before {
-   border-bottom: 80px solid red;
-   border-left: 30px solid transparent;
-   border-right: 30px solid transparent;
-   position: absolute;
-   height: 0;
-   width: 0;
-   top: -45px;
-   left: -65px;
-   display: block;
-   content: '';
-   -webkit-transform: rotate(-35deg);
-   -moz-transform:    rotate(-35deg);
-   -ms-transform:     rotate(-35deg);
-   -o-transform:      rotate(-35deg);
-
-}
-#star-five:after {
-   position: absolute;
-   display: block;
-   color: red;
-   top: 3px;
-   left: -105px;
-   width: 0px;
-   height: 0px;
-   border-right: 100px solid transparent;
-   border-bottom: 70px solid red;
-   border-left: 100px solid transparent;
-   -webkit-transform: rotate(-70deg);
-   -moz-transform:    rotate(-70deg);
-   -ms-transform:     rotate(-70deg);
-   -o-transform:      rotate(-70deg);
-   content: '';
-}
-
 .demo {
   padding: 10px;
   position: relative;
@@ -281,14 +231,15 @@
 
       .instruments-list {
         .headlines {
-          span {
-            &.instrument-name {
-              width: 78%;
-            }
+          user-select: none;
 
-            &.figure-level-percent {
-              width: 20%;
-              text-align: center;
+          span {
+            width: 45px;
+            text-align: center;
+
+            &.name {
+              width: 187px;
+              text-align: left;
             }
           }
         }
@@ -296,51 +247,63 @@
         .list {
           .instrument {
             position: relative;
+            display: flex;
+            align-items: center;
 
-            &.is_long {
-              span.figure-level-percent {
-                color: #00b706;
+            &.is_favorite {
+              span.name {
+                b:before, b:after {
+                  background-color: #ffb632;
+                }
               }
-
-              /*
-              &:after {
-                content: '';
-                width: 40px;
-                height: 2px;
-                background-color: #00b706;
-                position: absolute;
-                right: 13px;
-                top: 0;
-              }
-              */
-            }
-
-            &.is_short {
-              span.figure-level-percent {
-                color: red;
-              }
-
-              /*
-              &:after {
-                content: '';
-                width: 40px;
-                height: 2px;
-                background-color: red;
-                position: absolute;
-                right: 13px;
-                bottom: 0;
-              }
-              */
             }
 
             span {
-              &.instrument-name {
-                width: 78%;
+              width: 45px;
+              text-align: center;
+
+              &.is_long {
+                color: #00b706;
               }
 
-              &.figure-level-percent {
-                width: 20%;
-                text-align: center;
+              &.is_short {
+                color: red;
+              }
+
+              &.name {
+                width: 190px;
+                text-align: left;
+                display: flex;
+                align-items: center;
+
+                b {
+                  position: relative;
+                  width: 28px;
+                  height: 26px;
+                  display: inline-block;
+                  top: 3px;
+                  left: -3px;
+                }
+
+                b:before,
+                b:after {
+                  position: absolute;
+                  content: "";
+                  left: 13px;
+                  top: 0;
+                  width: 12px;
+                  height: 20px;
+                  background-color: #e7e7e7;
+                  border-radius: 50px 50px 0 0;
+                  transform: rotate(-45deg);
+                  transform-origin: 0 100%;
+                }
+
+                b:after {
+                  left: 0;
+                  transform: rotate(45deg);
+                  transform-origin :100% 100%;
+                }
               }
             }
           }

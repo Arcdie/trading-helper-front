@@ -18,6 +18,14 @@ const AVAILABLE_PERIODS = new Map([
   ['1d', '1d'],
 ]);
 
+const AVAILABLE_SORT_OPTIONS = new Map([
+  ['name', 'name'],
+  ['figureLevel', 'figureLevel'],
+  ['priceChange_5m', 'priceChange_5m'],
+  ['priceChange_1h', 'priceChange_1h'],
+  ['priceChange_1d', 'priceChange_1d'],
+]);
+
 /* Variables */
 
 let linePoints = [];
@@ -34,6 +42,7 @@ let previousCrosshairMove;
 let choosenInstrumentId;
 
 let instrumentsDocs = [];
+let favoriteInstruments = [];
 const lastViewedInstruments = [];
 let choosenPeriods = [AVAILABLE_PERIODS.get('5m'), AVAILABLE_PERIODS.get('1h')];
 let activePeriod = choosenPeriods[choosenPeriods.length - 1];
@@ -77,6 +86,11 @@ const settings = {
   },
 };
 
+let choosenSortSettings = {
+  type: AVAILABLE_SORT_OPTIONS.get('name'),
+  isLong: true,
+};
+
 const trading = new Trading();
 const urlSearchParams = new URLSearchParams(window.location.search);
 const params = Object.fromEntries(urlSearchParams.entries());
@@ -88,6 +102,7 @@ const $finishDatePoint = $settings.find('.finish-date-point input[type="text"]')
 const $chartsContainer = $('.charts-container');
 const $instrumentsContainer = $('.instruments-container');
 const $instrumentsList = $instrumentsContainer.find('.instruments-list .list');
+const $instrumentsHeadlines = $instrumentsContainer.find('.instruments-list .headlines');
 
 $(document).ready(async () => {
   // start settings
@@ -127,7 +142,12 @@ $(document).ready(async () => {
 
   // main logic
   renderListInstruments(instrumentsDocs);
-  await calculateFigureLevelsPercents(); // don't touch!
+
+  // don't touch
+  const lastCandles = await getLastCandles();
+  calculateFigureLevelsPercents(lastCandles);
+  calculatePriceLeaders(activePeriod, lastCandles);
+  sortListInstruments();
 
   $('.search input')
     .on('keyup', function () {
@@ -187,6 +207,25 @@ $(document).ready(async () => {
       // }
 
       choosenInstrumentId = instrumentId;
+    })
+    .on('click', '.instrument .name b', function () {
+      const $instrument = $(this).closest('.instrument');
+      const instrumentId = $instrument.data('instrumentid');
+
+      toggleFavoriteInstruments(instrumentId);
+    });
+
+  $instrumentsHeadlines.find('span')
+    .on('click', function () {
+      const type = $(this).data('type');
+      const isLong = $(this).hasClass('is_long');
+
+      const result = changeSortSettings(type, !isLong);
+
+      if (result) {
+        $(this).toggleClass('is_long');
+        sortListInstruments();
+      }
     });
 
   $('#settings')
@@ -234,6 +273,12 @@ $(document).ready(async () => {
 
       activePeriod = period;
       saveSettingsToLocalStorage({ choosenPeriods, activePeriod });
+
+      choosenSortSettings.type = AVAILABLE_SORT_OPTIONS.get(`priceChange_${activePeriod}`);
+      const lastCandles = await getLastCandles();
+      calculateFigureLevelsPercents(lastCandles);
+      calculatePriceLeaders(activePeriod, lastCandles);
+      sortListInstruments();
 
       const instrumentId = choosenInstrumentId;
       await loadCandles({ instrumentId }, choosenPeriods);
@@ -725,26 +770,28 @@ const updateCandlesForNextTick = async (instrumentDoc, period, newCandles = []) 
   }
 
   if (!isChangeable || !isFinished) {
-    trading.trades.forEach(trade => {
-      const targetSeries = chartCandles.extraSeries.filter(
-        s => s.isTrade && s.id.includes(trade.id),
-      );
+    trading.trades
+      .filter(t => t.isActive)
+      .forEach(trade => {
+        const targetSeries = chartCandles.extraSeries.filter(
+          s => s.isTrade && s.id.includes(trade.id),
+        );
 
-      let validTime = originalTimeUnix;
+        let validTime = originalTimeUnix;
 
-      if (period === AVAILABLE_PERIODS.get('1h')) {
-        validTime -= validTime % 3600;
-      } else if (period === AVAILABLE_PERIODS.get('1d')) {
-        validTime -= validTime % 86400;
-      }
+        if (period === AVAILABLE_PERIODS.get('1h')) {
+          validTime -= validTime % 3600;
+        } else if (period === AVAILABLE_PERIODS.get('1d')) {
+          validTime -= validTime % 86400;
+        }
 
-      targetSeries.forEach(s => {
-        chartCandles.drawSeries(s, {
-          value: s.value,
-          time: validTime,
+        targetSeries.forEach(s => {
+          chartCandles.drawSeries(s, {
+            value: s.value,
+            time: validTime,
+          });
         });
       });
-    });
 
     trading.limitOrders.forEach(order => {
       const targetSeries = chartCandles.extraSeries.filter(
@@ -861,7 +908,10 @@ const nextTick = async () => {
   const trades = trading.calculateTradesProfit({ price: lastCandle.close }, true);
   Trading.updateTradesInTradeList(trades);
 
-  await calculateFigureLevelsPercents();
+  const lastCandles = await getLastCandles();
+  calculateFigureLevelsPercents(lastCandles);
+  calculatePriceLeaders(activePeriod, lastCandles);
+  sortListInstruments();
 };
 
 const loadCharts = ({
@@ -1137,8 +1187,8 @@ const loadCharts = ({
         const price = param.seriesPrices.get(chartCandles.mainSeries);
 
         if (price) {
-          const differenceBetweenHighAndLow = price.high - price.low;
-          const percentPerPrice = 100 / (price.low / differenceBetweenHighAndLow);
+          const difference = Math.abs(price.close - price.open);
+          const percentPerPrice = 100 / (price.open / difference);
 
           $open.text(price.open);
           $close.text(price.close);
@@ -1428,13 +1478,68 @@ const splitDays = ({ instrumentId }) => {
 const renderListInstruments = (instrumentsDocs) => {
   let appendInstrumentsStr = '';
 
-  const sortedInstruments = instrumentsDocs
-    .sort((a, b) => { return a.minimumFigureLevelPercent < b.minimumFigureLevelPercent ? -1 : 1; });
+  instrumentsDocs
+    .forEach(doc => {
+      const isFavorite = favoriteInstruments.includes(doc._id) ? 'is_favorite' : '';
+
+      appendInstrumentsStr += `<div
+        id="instrument-${doc._id}"
+        class="instrument ${isFavorite}"
+        data-instrumentid=${doc._id}
+      >
+        <span class="${AVAILABLE_SORT_OPTIONS.get('name')}"><b></b>${doc.name}</span>
+        <span class="${AVAILABLE_SORT_OPTIONS.get('priceChange_5m')}">0%</span>
+        <span class="${AVAILABLE_SORT_OPTIONS.get('priceChange_1h')}">0%</span>
+        <span class="${AVAILABLE_SORT_OPTIONS.get('priceChange_1d')}">0%</span>
+        <span class="${AVAILABLE_SORT_OPTIONS.get('figureLevel')}">0%</span>
+      </div>`;
+    });
+
+  $instrumentsList
+    .empty()
+    .append(appendInstrumentsStr);
+};
+
+const renderListInstrumentsNew = (instrumentsDocs) => {
+  let appendInstrumentsStr = '';
+  let sortedInstruments = instrumentsDocs;
+
+  switch (choosenSortSettings.type) {
+    case AVAILABLE_SORT_OPTIONS.get('name'): break;
+
+    case AVAILABLE_SORT_OPTIONS.get('figureLevel'): {
+      sortedInstruments = instrumentsDocs
+        .sort((a, b) => {
+          return a.figureLevel.percent < b.figureLevel.percent ? -1 : 1;
+        });
+
+      break;
+    }
+
+    default: {
+      const period = choosenSortSettings.type;
+
+      if (choosenSortSettings.isLong) {
+        sortedInstruments = instrumentsDocs.sort((a, b) => {
+          return a.priceChange[period].percent < b.priceChange[period].percent ? -1 : 1;
+        });
+      } else {
+        sortedInstruments = instrumentsDocs.sort((a, b) => {
+          return a.priceChange[period].percent < b.priceChange[period].percent ? 1 : -1;
+        });
+      }
+
+      break;
+    }
+  }
 
   sortedInstruments
     .forEach((doc, index) => {
-      if (!doc.minimumFigureLevelPercent) {
-        doc.minimumFigureLevelPercent = 100;
+      if (!doc.figureLevel) {
+        doc.figureLevel = {
+          percent: 100,
+          isLong: true,
+        };
       }
 
       appendInstrumentsStr += `<div
@@ -1443,8 +1548,11 @@ const renderListInstruments = (instrumentsDocs) => {
         data-instrumentid=${doc._id}
         style="order: ${index};"
       >
-        <span class="instrument-name">${doc.name}</span>
-        <span class="figure-level-percent">${doc.minimumFigureLevelPercent.toFixed(1)}%</span>
+        <span class="name">${doc.name}</span>
+        <span class="5m">${doc.priceChange[AVAILABLE_PERIODS.get('5m')].percent.toFixed(1)}%</span>
+        <span class="1h">${doc.priceChange[AVAILABLE_PERIODS.get('1h')].percent.toFixed(1)}%</span>
+        <span class="1d">${doc.priceChange[AVAILABLE_PERIODS.get('1d')].percent.toFixed(1)}%</span>
+        <span class="figure-level-percent">${doc.figureLevel.percent.toFixed(1)}%</span>
       </div>`;
     });
 
@@ -1512,6 +1620,30 @@ const calculateVolumeForLastSwing = ({ instrumentId }, period) => {
 
   $chartsContainer.find(`.period_${period} .last-swing-data`)
     .text(`${sumVolumeText} (${Math.abs(percentPerPrice).toFixed(1)}%)`);
+};
+
+const changeSortSettings = (type, isLong) => {
+  if (choosenSortSettings.type === type && choosenSortSettings.isLong === isLong) {
+    return false;
+  }
+
+  if (type.includes('priceChange_')) {
+    const timeframe = type.split('_')[1];
+    if (timeframe !== activePeriod) {
+      return false;
+    }
+  }
+
+  if (!AVAILABLE_SORT_OPTIONS.get(type)) {
+    alert('Unknown type');
+    return false;
+  }
+
+  choosenSortSettings.type = type;
+  choosenSortSettings.isLong = isLong;
+
+  saveSettingsToLocalStorage({ choosenSortSettings });
+  return true;
 };
 
 const changeFinishDatePoint = (newValue) => {
@@ -2096,6 +2228,19 @@ const drawLimitOrders = ({ instrumentId }, limitOrder, periods = []) => {
   });
 };
 
+const toggleFavoriteInstruments = (instrumentId) => {
+  const isIncluded = favoriteInstruments.includes(instrumentId);
+
+  if (isIncluded) {
+    favoriteInstruments = favoriteInstruments.filter(id => id !== instrumentId);
+  } else {
+    favoriteInstruments.push(instrumentId);
+  }
+
+  saveSettingsToLocalStorage({ favoriteInstruments });
+  $(`#instrument-${instrumentId}`).toggleClass('is_favorite');
+};
+
 const getFigureLevelsFromLocalStorage = ({ instrumentId }) => {
   let figureLevels = localStorage.getItem('trading-helper:figure-levels');
 
@@ -2234,6 +2379,14 @@ const setStartSettings = () => {
     isSingleDateCounter = settings.isSingleDateCounter;
     $settings.find('.single-date-counter input[type="checkbox"]').attr('checked', isSingleDateCounter);
   }
+
+  if (settings.choosenSortSettings) {
+    choosenSortSettings = settings.choosenSortSettings;
+  }
+
+  if (settings.favoriteInstruments && settings.favoriteInstruments.length) {
+    favoriteInstruments = settings.favoriteInstruments;
+  }
 };
 
 const getAndSaveUserFigureLevels = async () => {
@@ -2299,13 +2452,297 @@ const getAndSaveUserFigureLevels = async () => {
   // console.log('finished');
 };
 
-const calculateFigureLevelsPercents = async () => {
+const calculateFigureLevelsPercents = (lastCandles = []) => {
+  if (!lastCandles || !lastCandles.length) {
+    return;
+  }
+
   const figureLevels = getFigureLevelsFromLocalStorage({});
 
   if (!figureLevels.length) {
     return;
   }
 
+  let targetInstrumentsDocs = instrumentsDocs;
+
+  if (isSingleDateCounter && choosenInstrumentId) {
+    targetInstrumentsDocs = [instrumentsDocs.find(d => d._id === choosenInstrumentId)];
+  }
+
+  targetInstrumentsDocs.forEach(doc => {
+    const instrumentCandle = lastCandles.find(c => c.instrument_id === doc._id);
+
+    if (!instrumentCandle) {
+      doc.figureLevel = {
+        percent: 0,
+        isLong: true,
+        isActive: false,
+      };
+
+      return true;
+    }
+
+    doc.price = instrumentCandle.data[1];
+    delete doc.figureLevel;
+    const instrumentFigureLevels = figureLevels.filter(l => l.instrumentId === doc._id);
+
+    if (!instrumentFigureLevels.length) {
+      doc.figureLevel = {
+        percent: 0,
+        isLong: true,
+        isActive: false,
+      };
+
+      return true;
+    }
+
+    instrumentFigureLevels.forEach(figureLevel => {
+      const difference = Math.abs(doc.price - figureLevel.value);
+      const percentPerPrice = 100 / (doc.price / difference);
+      const isCrossed = ((figureLevel.isLong && doc.price > figureLevel.value)
+        || (!figureLevel.isLong && doc.price < figureLevel.value));
+
+      if (doc.figureLevel === undefined
+        || percentPerPrice < doc.figureLevel.percent) {
+        doc.figureLevel = {
+          percent: percentPerPrice,
+          isCrossed,
+          isLong: figureLevel.isLong,
+          isActive: true,
+        };
+      }
+    });
+
+    if (doc.figureLevel.isCrossed) {
+      const percent = doc.figureLevel.percent;
+      doc.figureLevel.percent = -percent;
+    }
+
+    const $instrument = $(`#instrument-${doc._id}`);
+
+    $instrument
+      .find('.figureLevel')
+      .attr('class', `figureLevel ${doc.figureLevel.isLong ? 'is_long' : 'is_short'}`)
+      .text(`${doc.figureLevel.percent.toFixed(1)}%`);
+  });
+};
+
+const calculatePriceLeaders = (period, lastCandles = []) => {
+  if (!lastCandles || !lastCandles.length) {
+    return;
+  }
+
+  let targetInstrumentsDocs = instrumentsDocs;
+
+  if (isSingleDateCounter && choosenInstrumentId) {
+    targetInstrumentsDocs = [instrumentsDocs.find(d => d._id === choosenInstrumentId)];
+  }
+
+  targetInstrumentsDocs.forEach(doc => {
+    const candle = lastCandles.find(c => c.instrument_id === doc._id);
+
+    if (!candle) {
+      doc[`priceChange_${period}`] = {
+        percent: 0,
+        isLong: true,
+        isActive: false,
+      };
+
+      return true;
+    }
+
+    const [open, close] = candle.data;
+    const difference = close - open;
+    const percentPerOpen = 100 / (open / difference);
+
+    const isLong = difference >= 0;
+    const percent = parseFloat(percentPerOpen.toFixed(1));
+
+    doc[`priceChange_${period}`] = {
+      percent,
+      isLong,
+      isActive: true,
+    };
+
+    const $instrument = $(`#instrument-${doc._id}`);
+
+    $instrument
+      .find(`.priceChange_${period}`)
+      .attr('class', `priceChange_${period} ${isLong ? 'is_long' : 'is_short'}`)
+      .text(`${percent}%`);
+  });
+};
+
+const sortListInstruments = () => {
+  let targetInstrumentsDocs = instrumentsDocs;
+
+  if (isSingleDateCounter && choosenInstrumentId) {
+    targetInstrumentsDocs = [instrumentsDocs.find(d => d._id === choosenInstrumentId)];
+  }
+
+  if (!targetInstrumentsDocs.length) {
+    return true;
+  }
+
+  if (choosenSortSettings.type === AVAILABLE_SORT_OPTIONS.get('name')) {
+    return true;
+  }
+
+  const key = choosenSortSettings.type;
+  const sortedInstruments = targetInstrumentsDocs
+    .sort((a, b) => {
+      if (!a[key] || !b[key]) return 0;
+
+      if (choosenSortSettings.isLong) {
+        return a[key].percent < b[key].percent ? -1 : 1;
+      }
+
+      return a[key].percent < b[key].percent ? 1 : -1;
+    });
+
+  sortedInstruments.forEach((instrumentDoc, index) => {
+    if (!instrumentDoc[key] || !instrumentDoc[key].isActive) {
+      index = 99999;
+    }
+
+    const $instrument = $(`#instrument-${instrumentDoc._id}`);
+    $instrument.css('order', index);
+  });
+};
+
+const calculatePriceLeadersOld = (period) => {
+  instrumentsDocs.forEach(doc => {
+    const priceChange = {};
+
+    Object.keys(AVAILABLE_PERIODS).forEach(key => {
+      priceChange[key] = 0;
+    });
+
+    switch (period) {
+      case AVAILABLE_PERIODS.get('5m'): {
+        // 5m
+        const candles5m = doc[`candles_data_${period}`];
+        const firstCandle = candles5m[0];
+        const firstCandleTimeUnix = getUnix(firstCandle.time);
+
+        let [open, close] = firstCandle.data;
+        let difference = close - open;
+        let percentPerOpen = 100 / (open / Math.abs(difference));
+
+        priceChange[period] = {
+          percent: parseFloat(percentPerOpen.toFixed(1)),
+          isLong: difference >= 0,
+        };
+
+        // 1h
+        const startOfHourUnix = firstCandleTimeUnix - (firstCandleTimeUnix % 3600);
+        const indexOfStartHour = candles5m.findIndex(c => getUnix(c.time) === startOfHourUnix);
+
+        [open] = candles5m[indexOfStartHour].data;
+        close = firstCandle.data[1];
+
+        difference = close - open;
+        percentPerOpen = 100 / (open / Math.abs(difference));
+
+        priceChange[AVAILABLE_PERIODS.get('1h')] = {
+          percent: parseFloat(percentPerOpen.toFixed(1)),
+          isLong: difference >= 0,
+        };
+
+        // 1d
+        const startOfDayUnix = firstCandleTimeUnix - (firstCandleTimeUnix % 86400);
+        const indexOfStartDay = candles5m.findIndex(c => getUnix(c.time) === startOfDayUnix);
+
+        [open] = candles5m[indexOfStartDay].data;
+        close = firstCandle.data[1];
+
+        difference = close - open;
+        percentPerOpen = 100 / (open / Math.abs(difference));
+
+        priceChange[AVAILABLE_PERIODS.get('1d')] = {
+          percent: parseFloat(percentPerOpen.toFixed(1)),
+          isLong: difference >= 0,
+        };
+
+        break;
+      }
+
+      case AVAILABLE_PERIODS.get('1h'): {
+        // 5m
+        priceChange[AVAILABLE_PERIODS.get('5m')] = {
+          percent: 0,
+          isLong: true,
+        };
+
+        // 1h
+        const candles1h = doc[`candles_data_${period}`];
+        const firstCandle = candles1h[0];
+        const firstCandleTimeUnix = getUnix(firstCandle.time);
+
+        let [open, close] = firstCandle.data;
+        let difference = close - open;
+        let percentPerOpen = 100 / (open / Math.abs(difference));
+
+        priceChange[period] = {
+          percent: parseFloat(percentPerOpen.toFixed(1)),
+          isLong: difference >= 0,
+        };
+
+        // 1d
+        const startOfDayUnix = firstCandleTimeUnix - (firstCandleTimeUnix % 86400);
+        const indexOfStartDay = candles1h.findIndex(c => getUnix(c.time) === startOfDayUnix);
+
+        [open] = candles1h[indexOfStartDay].data;
+        close = firstCandle.data[1];
+
+        difference = close - open;
+        percentPerOpen = 100 / (open / Math.abs(difference));
+
+        priceChange[AVAILABLE_PERIODS.get('1d')] = {
+          percent: parseFloat(percentPerOpen.toFixed(1)),
+          isLong: difference >= 0,
+        };
+
+        break;
+      }
+
+      case AVAILABLE_PERIODS.get('1d'): {
+        // 5m
+        priceChange[AVAILABLE_PERIODS.get('5m')] = {
+          percent: 0,
+          isLong: true,
+        };
+
+        // 1h
+        priceChange[AVAILABLE_PERIODS.get('1h')] = {
+          percent: 0,
+          isLong: true,
+        };
+
+        // 1d
+        const candles1h = doc[`candles_data_${period}`];
+        const firstCandle = candles1h[0];
+
+        const [open, close] = firstCandle.data;
+        const difference = close - open;
+        const percentPerOpen = 100 / (open / Math.abs(difference));
+
+        priceChange[period] = {
+          percent: parseFloat(percentPerOpen.toFixed(1)),
+          isLong: difference >= 0,
+        };
+
+        break;
+      }
+
+      default: break;
+    }
+
+    doc.priceChange = priceChange;
+  });
+};
+
+const getLastCandles = async () => {
   let startTimeUnix = finishDatePointUnix;
 
   switch (activePeriod) {
@@ -2321,76 +2758,11 @@ const calculateFigureLevelsPercents = async () => {
     endTime: moment.unix(finishDatePointUnix),
   };
 
-  let targetInstrumentsDocs = instrumentsDocs;
-
   if (isSingleDateCounter && choosenInstrumentId) {
     getCandlesOptions.instrumentId = choosenInstrumentId;
-    targetInstrumentsDocs = [instrumentsDocs.find(d => d._id === choosenInstrumentId)];
   }
 
-  const lastCandles = await getCandlesData(getCandlesOptions);
-
-  targetInstrumentsDocs.forEach(instrumentDoc => {
-    const instrumentCandle = lastCandles.find(c => c.instrument_id === instrumentDoc._id);
-
-    if (!instrumentCandle) {
-      instrumentDoc.minimumFigureLevelPercent = 100;
-      return true;
-    }
-
-    instrumentDoc.price = instrumentCandle.data[1];
-    delete instrumentDoc.minimumFigureLevelPercent;
-    const instrumentFigureLevels = figureLevels.filter(l => l.instrumentId === instrumentDoc._id);
-
-    if (!instrumentFigureLevels.length) {
-      instrumentDoc.minimumFigureLevelPercent = 100;
-      return true;
-    }
-
-    instrumentFigureLevels.forEach(figureLevel => {
-      const difference = Math.abs(instrumentDoc.price - figureLevel.value);
-      const percentPerPrice = 100 / (instrumentDoc.price / difference);
-      const isCrossed = ((figureLevel.isLong && instrumentDoc.price > figureLevel.value)
-        || (!figureLevel.isLong && instrumentDoc.price < figureLevel.value));
-
-      if (instrumentDoc.minimumFigureLevelPercent === undefined
-        || percentPerPrice < instrumentDoc.minimumFigureLevelPercent.percent) {
-        instrumentDoc.minimumFigureLevelPercent = {
-          percent: percentPerPrice,
-          isCrossed,
-          isLong: figureLevel.isLong,
-        };
-      }
-    });
-
-    if (instrumentDoc.minimumFigureLevelPercent.isCrossed) {
-      const percent = instrumentDoc.minimumFigureLevelPercent.percent;
-      instrumentDoc.minimumFigureLevelPercent.percent = -percent;
-    }
-  });
-
-  const sortedInstruments = targetInstrumentsDocs
-    .sort((a, b) => {
-      return a.minimumFigureLevelPercent.percent < b.minimumFigureLevelPercent.percent ? -1 : 1;
-    });
-
-  sortedInstruments.forEach((instrumentDoc, index) => {
-    const $instrument = $(`#instrument-${instrumentDoc._id}`);
-    $instrument.css('order', index);
-
-    if (instrumentDoc.minimumFigureLevelPercent
-      && instrumentDoc.minimumFigureLevelPercent.percent !== undefined) {
-      const { isLong, percent } = instrumentDoc.minimumFigureLevelPercent;
-      $instrument
-        .addClass(isLong ? 'is_long' : 'is_short')
-        .find('.figure-level-percent')
-        .text(`${percent.toFixed(1)}%`);
-
-      instrumentDoc.minimumFigureLevelPercent = percent;
-    } else {
-      $instrument.removeClass(['is_long', 'is_short']);
-    }
-  });
+  return getCandlesData(getCandlesOptions);
 };
 
 const calculateReduceValue = (linePoints, period) => {

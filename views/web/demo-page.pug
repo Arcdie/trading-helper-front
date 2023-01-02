@@ -10,7 +10,22 @@ block content
 			.charts-container
 			
 			aside
-				include ../includes/services/list-instruments-form
+				.instruments-container
+					.search
+						input(type="text" placeholder="Поиск")
+						button#settings
+							img(src="/images/settings.png", alt="settings")
+					
+					.instruments-list
+						.headlines
+							span.name(data-type="name") Инструмент
+							span.is_long(data-type="priceChange_5m") 5M
+							span.is_long(data-type="priceChange_1h") 1H
+							span.is_long(data-type="priceChange_1d") 1D
+							span.figure-level-percent.is_long(data-type="figureLevel") FL
+
+						.list
+
 				include ../includes/services/trading-form
 				
 		.row

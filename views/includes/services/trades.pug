@@ -5,6 +5,9 @@
         tr
           th Профит
           th Сделки
+          th Комиссии
+          th Мин. профит
+          th Макс. профит
       
         tr
           td.profit
@@ -15,6 +18,22 @@
             span.win 0
             | /
             span.lose 0
+            | (
+            span.relation 0
+            | )
+        
+          td.sum-commissions
+            span 0
+            | $
+
+          td.min-profit
+            span 0
+            | $
+            
+          td.max-profit
+            span 0
+            | $
+        
 
     .trading-list
       table
@@ -25,6 +44,7 @@
           th %
           th Тип
           th Статус
+          th Комиссия
           th Цена покупки
           th Цена продажи
           th Дата входа
