@@ -109,6 +109,8 @@ $(document).ready(async () => {
 
   trading.init();
   setStartSettings();
+  trading.loadHistoryTrades();
+  // trading.clearHistoryTrades();
 
   // saveSettingsToLocalStorage({ finishDatePointUnix: false });
 
@@ -402,7 +404,37 @@ $(document).ready(async () => {
         return true;
       }
 
-      if (e.keyCode === 80) {
+      if (e.keyCode === 187) {
+        // +
+        if (!choosenInstrumentId) {
+          choosenInstrumentId = instrumentsDocs.find(d => d.index === 0)._id;
+        }
+
+        const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
+        const nextIndex = instrumentDoc.index + 1;
+        let nextInstrumentDoc = instrumentsDocs.find(doc => doc.index === nextIndex);
+
+        if (!nextInstrumentDoc) {
+          nextInstrumentDoc = instrumentsDocs.find(d => d.index === 0);
+        }
+
+        $instrumentsList.find(`#instrument-${nextInstrumentDoc._id}`).click();
+      } else if (e.keyCode === 189) {
+        // -
+        if (!choosenInstrumentId) {
+          choosenInstrumentId = instrumentsDocs.find(d => d.index === 0)._id;
+        }
+
+        const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
+        const nextIndex = instrumentDoc.index - 1;
+        let nextInstrumentDoc = instrumentsDocs.find(doc => doc.index === nextIndex);
+
+        if (!nextInstrumentDoc) {
+          nextInstrumentDoc = instrumentsDocs.find(d => d.index === 0);
+        }
+
+        $instrumentsList.find(`#instrument-${nextInstrumentDoc._id}`).click();
+      } else if (e.keyCode === 80) {
         // P
         trading.$tradingForm.find('.action-block .buy button').click();
       } else if (e.keyCode === 219) {
@@ -919,6 +951,7 @@ const loadCharts = ({
 }) => {
   $chartsContainer.empty();
   const instrumentDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
+  document.title = instrumentDoc.name;
 
   let appendStr = '';
 
@@ -2600,13 +2633,14 @@ const sortListInstruments = () => {
       return a[key].percent < b[key].percent ? 1 : -1;
     });
 
-  sortedInstruments.forEach((instrumentDoc, index) => {
-    if (!instrumentDoc[key] || !instrumentDoc[key].isActive) {
-      index = 99999;
+  sortedInstruments.forEach((doc, index) => {
+    if (!doc[key] || !doc[key].isActive) {
+      index = 9999 + index;
     }
 
-    const $instrument = $(`#instrument-${instrumentDoc._id}`);
+    const $instrument = $(`#instrument-${doc._id}`);
     $instrument.css('order', index);
+    doc.index = index;
   });
 };
 

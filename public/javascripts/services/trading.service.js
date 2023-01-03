@@ -258,6 +258,7 @@ class Trading {
         }
 
         this.trades.push(newTrade);
+        Trading.addTradesToHistory([newTrade]);
         this.calculateTradesProfit({ price });
         this.addTradesToTradeList([newTrade]);
         this.updateCommonStatistics();
@@ -345,6 +346,7 @@ class Trading {
     }
 
     this.trades.push(newTrade);
+    // Trading.addTradesToHistory([newTrade]);
     this.addTradesToTradeList([newTrade]);
 
     return newTrade;
@@ -754,6 +756,48 @@ class Trading {
     this.$tradingStatistics.find('.number-trades span.win').text(numberTrades[0]);
     this.$tradingStatistics.find('.number-trades span.lose').text(numberTrades[1]);
     this.$tradingStatistics.find('.number-trades span.relation').text(tradesRelationPercent);
+  }
+
+  loadHistoryTrades() {
+    const trades = Trading.getHistoryTrades();
+
+    if (trades.length) {
+      this.trades = trades;
+      this.calculateTradesProfit({});
+      this.addTradesToTradeList(this.trades);
+      this.updateCommonStatistics();
+    }
+  }
+
+  clearHistoryTrades() {
+    localStorage.removeItem('trading-helper:trades');
+
+    this.trades = [];
+
+    this.minProfit = 0;
+    this.maxProfit = 0;
+    this.totalCommissions = 0;
+    this.tradesRelationPercent = 0;
+
+    this.$tradingList.find('tr.trade').remove();
+    this.updateCommonStatistics();
+  }
+
+  static addTradesToHistory(newTrades = []) {
+    const trades = Trading.getHistoryTrades();
+
+    newTrades.push(...trades);
+    localStorage.setItem('trading-helper:trades', JSON.stringify(newTrades));
+  }
+
+  static getHistoryTrades() {
+    const trades = localStorage.getItem('trading-helper:trades');
+
+    if (!trades) {
+      return [];
+    }
+
+    return JSON.parse(trades);
   }
 
   static updateTradesInTradeList(trades = []) {
