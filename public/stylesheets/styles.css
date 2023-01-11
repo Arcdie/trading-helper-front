@@ -233,6 +233,24 @@ input:checked + .slider:before {
 .slider.round:before {
   border-radius: 50%; }
 
+.clear-trades {
+  position: absolute;
+  right: 6px;
+  top: 8px; }
+  .clear-trades input[type="text"] {
+    width: 20px;
+    text-align: center; }
+  .clear-trades button {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+    background-color: transparent;
+    border: 1px solid black;
+    margin-left: 5px; }
+    .clear-trades button:hover {
+      color: white;
+      background-color: black; }
+
 .trades {
   width: 100%; }
   .trades .trading-statistics {
@@ -244,6 +262,7 @@ input:checked + .slider:before {
         .trades .trading-statistics table tr:last-child {
           border-bottom: none; }
         .trades .trading-statistics table tr th {
+          position: relative;
           padding: 10px 0;
           border-right: 1px solid black; }
           .trades .trading-statistics table tr th:last-child {
@@ -278,6 +297,13 @@ input:checked + .slider:before {
         border-right: 1px solid black; }
         .trades .trading-list table tr td:last-child {
           border-right: none; }
+        .trades .trading-list table tr td.index {
+          cursor: pointer; }
+        .trades .trading-list table tr td.strategy {
+          width: 75px; }
+          .trades .trading-list table tr td.strategy input[type="text"] {
+            width: 20px;
+            text-align: center; }
         .trades .trading-list table tr td.type {
           color: red; }
           .trades .trading-list table tr td.type.long {

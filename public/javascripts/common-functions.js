@@ -22,6 +22,7 @@ const constants = {
   BLUE_COLOR: '#2196F3',
   DARK_BLUE_COLOR: '#0800FF',
   GRAY_COLOR: '#A7A7A7',
+  PURPLE_COLOR: '#F715FF',
 };
 
 /* Functions */

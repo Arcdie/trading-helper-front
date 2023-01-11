@@ -1,5 +1,5 @@
 /* global
-functions, makeRequest, getUnix, getRandomNumber, getPrecision, formatNumberToPretty, toRGB,
+functions, makeRequest, getUnix, getRandomNumber, getPrecision, formatNumberToPretty, toRGB, saveAs,
 objects, user, moment, constants,
 classes, ChartCandles, IndicatorVolume, IndicatorMovingAverage, Trading,
 */
@@ -99,6 +99,7 @@ const params = Object.fromEntries(urlSearchParams.entries());
 const $settings = $('.settings');
 const $finishDatePoint = $settings.find('.finish-date-point input[type="text"]');
 
+const $trades = $('.trades');
 const $chartsContainer = $('.charts-container');
 const $instrumentsContainer = $('.instruments-container');
 const $instrumentsList = $instrumentsContainer.find('.instruments-list .list');
@@ -110,7 +111,6 @@ $(document).ready(async () => {
   trading.init();
   setStartSettings();
   trading.loadHistoryTrades();
-  // trading.clearHistoryTrades();
 
   // saveSettingsToLocalStorage({ finishDatePointUnix: false });
 
@@ -230,6 +230,33 @@ $(document).ready(async () => {
       }
     });
 
+  $trades.find('.clear-trades')
+    .on('click', 'button.clear', () => {
+      trading.clearHistoryTrades();
+    })
+    .on('click', 'button.export', () => {
+      if (!trading.trades.length) {
+        return true;
+      }
+
+      const todayDate = moment().format('DD.MM.YYYY');
+
+      const file = new File(
+        [JSON.stringify(trading.trades)],
+        `${todayDate}.json`,
+        { type: 'text/plain;charset=utf-8' },
+      );
+
+      saveAs(file);
+    })
+    .on('click', 'button.import', () => {
+
+    })
+    .on('change', 'input.strategy', function () {
+      const value = $(this).val();
+      trading.filterTrades(value);
+    });
+
   $('#settings')
     .on('click', async () => {
       await renewFigureLevels();
@@ -345,7 +372,14 @@ $(document).ready(async () => {
 
   $finishDatePoint
     .on('change', function () {
-      const value = $(this).val();
+      let value = $(this).val();
+
+      // 03.07.2021 12:20
+
+      if (value.includes(' ')) {
+        value = moment.utc(value, 'DD.MM.YYYY HH:mm').unix();
+      }
+
       changeFinishDatePoint(value);
     });
 
@@ -378,6 +412,7 @@ $(document).ready(async () => {
       }, choosenPeriods);
 
       if (trade && trade.isNew) {
+        delete trade.isNew;
         choosenPeriods.forEach(period => {
           Trading.makeTradeSeries(instrumentDoc, trade, period);
         });
@@ -404,36 +439,62 @@ $(document).ready(async () => {
         return true;
       }
 
-      if (e.keyCode === 187) {
-        // +
-        if (!choosenInstrumentId) {
-          choosenInstrumentId = instrumentsDocs.find(d => d.index === 0)._id;
-        }
+      // /*
+      if (e.keyCode === 49) {
+        // 1
+        $chartsContainer.find(`.chart-periods .${AVAILABLE_PERIODS.get('5m')}`).click();
+      } else if (e.keyCode === 50) {
+        // 2
+        $chartsContainer.find(`.chart-periods .${AVAILABLE_PERIODS.get('1h')}`).click();
+      } else if (e.keyCode === 51) {
+        // 3
+        $chartsContainer.find(`.chart-periods .${AVAILABLE_PERIODS.get('1d')}`).click();
+        // */
+      } else if (e.keyCode === 190) {
+        // >
 
-        const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
-        const nextIndex = instrumentDoc.index + 1;
-        let nextInstrumentDoc = instrumentsDocs.find(doc => doc.index === nextIndex);
-
-        if (!nextInstrumentDoc) {
-          nextInstrumentDoc = instrumentsDocs.find(d => d.index === 0);
-        }
-
-        $instrumentsList.find(`#instrument-${nextInstrumentDoc._id}`).click();
       } else if (e.keyCode === 189) {
         // -
         if (!choosenInstrumentId) {
-          choosenInstrumentId = instrumentsDocs.find(d => d.index === 0)._id;
+          choosenInstrumentId = instrumentsDocs[0]._id;
         }
 
         const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
-        const nextIndex = instrumentDoc.index - 1;
-        let nextInstrumentDoc = instrumentsDocs.find(doc => doc.index === nextIndex);
 
-        if (!nextInstrumentDoc) {
-          nextInstrumentDoc = instrumentsDocs.find(d => d.index === 0);
+        let nextInstrumentDoc = instrumentsDocs[0];
+        let nextIndex = instrumentDoc.index;
+
+        for (let i = 1; i < 10; i += 1) {
+          nextIndex += i;
+          nextInstrumentDoc = instrumentsDocs.find(doc => doc.index === nextIndex);
+          if (nextInstrumentDoc) break;
         }
 
         $instrumentsList.find(`#instrument-${nextInstrumentDoc._id}`).click();
+      } else if (e.keyCode === 187) {
+        // +
+        if (!choosenInstrumentId) {
+          choosenInstrumentId = instrumentsDocs[0]._id;
+        }
+
+        const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
+        let nextInstrumentDoc = instrumentsDocs[0];
+        let nextIndex = instrumentDoc.index;
+
+        for (let i = 1; i < 10; i += 1) {
+          nextIndex -= i;
+          const tmpDoc = instrumentsDocs.find(doc => doc.index === nextIndex);
+
+          if (tmpDoc) {
+            nextInstrumentDoc = tmpDoc;
+            break;
+          }
+        }
+
+        $instrumentsList.find(`#instrument-${nextInstrumentDoc._id}`).click();
+      } else if (e.keyCode === 77) {
+        // M
+        trading.$tradingForm.find('.risks-block .stop-limit button').click();
       } else if (e.keyCode === 80) {
         // P
         trading.$tradingForm.find('.action-block .buy button').click();
@@ -959,7 +1020,7 @@ const loadCharts = ({
     appendStr += `<div class="chart-container period_${period}" style="width: ${choosenPeriods.length === 2 ? '50' : '100'}%">
       <div class="charts-nav">
         <div class="legend">
-          <p class="values">ОТКР<span class="open">0</span>МАКС<span class="high">0</span>МИН<span class="low">0</span>ЗАКР<span class="close">0</span><span class="percent">0%</span></p>
+          <p class="values">ОТКР<span class="open">0</span>МАКС<span class="high">0</span>МИН<span class="low">0</span>ЗАКР<span class="close">0</span><span class="percent">0%</span><span class="percent-level">0%</span></p>
         </div>
 
         <div class="row">
@@ -1041,6 +1102,7 @@ const loadCharts = ({
     indicatorMovingAverageLong.calculatedData = calculatedData;
 
     chartCandles.chart.subscribeClick(param => {
+      isActiveSearching = false;
       activePeriod = chartCandles.period;
       const coordinateToPrice = chartCandles.mainSeries.coordinateToPrice(param.point.y);
       let paramTime = param.time;
@@ -2552,11 +2614,16 @@ const calculateFigureLevelsPercents = (lastCandles = []) => {
     }
 
     const $instrument = $(`#instrument-${doc._id}`);
+    const percent = doc.figureLevel.percent.toFixed(1);
 
     $instrument
       .find('.figureLevel')
       .attr('class', `figureLevel ${doc.figureLevel.isLong ? 'is_long' : 'is_short'}`)
-      .text(`${doc.figureLevel.percent.toFixed(1)}%`);
+      .text(`${percent}%`);
+
+    if (doc._id === choosenInstrumentId) {
+      $chartsContainer.find('.percent-level').text(`${percent}%`);
+    }
   });
 };
 
@@ -2607,31 +2674,30 @@ const calculatePriceLeaders = (period, lastCandles = []) => {
 };
 
 const sortListInstruments = () => {
-  let targetInstrumentsDocs = instrumentsDocs;
-
-  if (isSingleDateCounter && choosenInstrumentId) {
-    targetInstrumentsDocs = [instrumentsDocs.find(d => d._id === choosenInstrumentId)];
-  }
-
-  if (!targetInstrumentsDocs.length) {
-    return true;
-  }
-
-  if (choosenSortSettings.type === AVAILABLE_SORT_OPTIONS.get('name')) {
+  if (isSingleDateCounter) {
     return true;
   }
 
   const key = choosenSortSettings.type;
-  const sortedInstruments = targetInstrumentsDocs
-    .sort((a, b) => {
-      if (!a[key] || !b[key]) return 0;
+  let sortedInstruments = instrumentsDocs;
 
-      if (choosenSortSettings.isLong) {
-        return a[key].percent < b[key].percent ? -1 : 1;
-      }
+  if (key === AVAILABLE_SORT_OPTIONS.get('name')) {
+    sortedInstruments = instrumentsDocs
+      .sort((a, b) => {
+        return favoriteInstruments.includes(b._id) ? 1 : -1;
+      });
+  } else {
+    sortedInstruments = instrumentsDocs
+      .sort((a, b) => {
+        if (!a[key] || !b[key]) return 0;
 
-      return a[key].percent < b[key].percent ? 1 : -1;
-    });
+        if (choosenSortSettings.isLong) {
+          return a[key].percent < b[key].percent ? -1 : 1;
+        }
+
+        return a[key].percent < b[key].percent ? 1 : -1;
+      });
+  }
 
   sortedInstruments.forEach((doc, index) => {
     if (!doc[key] || !doc[key].isActive) {

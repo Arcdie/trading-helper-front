@@ -7,7 +7,14 @@
           th Сделки
           th Комиссии
           th Мин. профит
-          th Макс. профит
+          th
+            | Макс. профит
+
+            .clear-trades
+              input.strategy(type="text", placeholder="0")
+              button.import i
+              button.export e
+              button.clear x
       
         tr
           td.profit
@@ -39,6 +46,8 @@
       table
         tr
           th #
+          th Статегия
+          th Инструмент
           th К-во трейдов
           th Профит
           th %
@@ -48,4 +57,4 @@
           th Цена покупки
           th Цена продажи
           th Дата входа
-          th Дата выхода        
+          th Дата выхода 

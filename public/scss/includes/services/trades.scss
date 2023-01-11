@@ -1,3 +1,28 @@
+.clear-trades {
+  position: absolute;
+  right: 6px;
+  top: 8px;
+
+  input[type="text"] {
+    width: 20px;
+    text-align: center;
+  }
+
+  button {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+    background-color: transparent;
+    border: 1px solid black;
+    margin-left: 5px;
+
+    &:hover {
+      color: white;
+      background-color: black;
+    }
+  }
+}
+
 .trades {
   width: 100%;
 
@@ -15,6 +40,7 @@
         }
 
         th {
+          position: relative;
           padding: 10px 0;
           border-right: 1px solid black;
 
@@ -78,6 +104,19 @@
 
           &:last-child {
             border-right: none;
+          }
+
+          &.index {
+            cursor: pointer;
+          }
+
+          &.strategy {
+            width: 75px;
+
+            input[type="text"] {
+              width: 20px;
+              text-align: center;
+            }
           }
 
           &.type {
