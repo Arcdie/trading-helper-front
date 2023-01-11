@@ -8,8 +8,8 @@ const TRADING_CONSTANTS = {
   MIN_TAKEPROFIT_RELATION: 3,
   MIN_STOPLOSS_PERCENT: 0.2,
   DEFAULT_STOPLOSS_PERCENT: 0.5,
-  MIN_WORK_AMOUNT: 30,
-  DEFAULT_NUMBER_TRADES: 1,
+  MIN_WORK_AMOUNT: 10,
+  DEFAULT_NUMBER_TRADES: 5,
 
   MAKER_COMMISSION_PERCENT: 0.02 / 100,
   TAKER_COMMISSION_PERCENT: 0.04 / 100,
@@ -239,7 +239,7 @@ class Trading {
 
           isManual,
           takeProfitPrice: activeTrade.takeProfitPrice,
-          // stopLossPrice: activeTrade.stopLossPrice,
+          stopLossPrice: activeTrade.stopLossPrice,
         };
 
         const sumTrade = newTrade.quantity * price;
@@ -297,7 +297,7 @@ class Trading {
       isLong: this.isLong,
 
       stopLossPercent: this.stopLossPercent,
-      takeProfitPercent: this.stopLossPercent * TRADING_CONSTANTS.MIN_TAKEPROFIT_RELATION,
+      isActivatedFirstTakeProfit: false,
 
       startAt: time,
       numberTrades: this.numberTrades,
@@ -353,14 +353,14 @@ class Trading {
 
     for (let i = 0; i < newTrade.numberTrades; i += 1) {
       let takeProfitPrice = newTrade.isLong
-        ? price + (percentPerPrice * (TRADING_CONSTANTS.MIN_TAKEPROFIT_RELATION))
-        : price - (percentPerPrice * (TRADING_CONSTANTS.MIN_TAKEPROFIT_RELATION));
+        ? price + (percentPerPrice * (TRADING_CONSTANTS.MIN_TAKEPROFIT_RELATION + i))
+        : price - (percentPerPrice * (TRADING_CONSTANTS.MIN_TAKEPROFIT_RELATION + i));
 
       takeProfitPrice = parseFloat((takeProfitPrice).toFixed(tickSizePrecision));
       newTrade.takeProfitPrices.push(takeProfitPrice);
     }
 
-    newTrade.takeProfitPrice = newTrade.takeProfitPrices[0];
+    // newTrade.takeProfitPrice = newTrade.takeProfitPrices[0];
 
     const tmp = (newTrade.quantity * price) * TRADING_CONSTANTS.TAKER_COMMISSION_PERCENT;
 
@@ -388,6 +388,11 @@ class Trading {
         const targetTakeProfitPrices = trade.takeProfitPrices.filter(
           price => price <= candleData.high,
         );
+
+        if (!trade.isActivatedFirstTakeProfit && targetTakeProfitPrices.length) {
+          trade.isActivatedFirstTakeProfit = true;
+          trade.stopLossPrice = trade.takeProfitPrices[0];
+        }
 
         if (targetTakeProfitPrices.length) {
           targetTakeProfitPrices.forEach(price => {
@@ -421,6 +426,11 @@ class Trading {
         const targetTakeProfitPrices = trade.takeProfitPrices.filter(
           price => price >= candleData.low,
         );
+
+        if (!trade.isActivatedFirstTakeProfit && targetTakeProfitPrices.length) {
+          trade.isActivatedFirstTakeProfit = true;
+          trade.stopLossPrice = trade.takeProfitPrices[0];
+        }
 
         if (targetTakeProfitPrices.length) {
           targetTakeProfitPrices.forEach(price => {
