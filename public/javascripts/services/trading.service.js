@@ -30,7 +30,6 @@ class Trading {
 
     this.minProfit = 0;
     this.maxProfit = 0;
-    this.totalCommissions = 0;
     this.tradesRelationPercent = 0;
 
     this.filterValue = '';
@@ -149,6 +148,10 @@ class Trading {
   }
 
   checkLimitOrders(instrumentDoc, candleData, periods = []) {
+    if (this.limitOrders.length) {
+      return false;
+    }
+
     const workAmount = this.workAmount;
     const numberTrades = this.numberTrades;
     const stopLossPercent = this.stopLossPercent;
@@ -187,7 +190,7 @@ class Trading {
   }
 
   createTrade(instrumentDoc, { price, time }, periods, isManual = true) {
-    const activeTrade = this.trades.find(t => t.isActive);
+    const activeTrade = this.trades.reverse().find(t => t.isActive);
     const stepSize = instrumentDoc.step_size;
     const stepSizePrecision = Trading.getPrecision(stepSize);
 
@@ -244,11 +247,9 @@ class Trading {
 
         const sumTrade = newTrade.quantity * price;
         newTrade.sumCommissions = sumTrade * TRADING_CONSTANTS.TAKER_COMMISSION_PERCENT;
-        this.totalCommissions += newTrade.sumCommissions;
 
         if (result <= 0) {
-          const trade = this.trades.find(t => t.id === activeTrade.id);
-          trade.isActive = false;
+          activeTrade.isActive = false;
 
           // Trading.removeTradesFromHistory([trade]);
           // Trading.addTradesToHistory([trade]);
@@ -349,8 +350,6 @@ class Trading {
       newTrade.sumCommissions = sumTrade * TRADING_CONSTANTS.TAKER_COMMISSION_PERCENT;
     }
 
-    this.totalCommissions += newTrade.sumCommissions;
-
     for (let i = 0; i < newTrade.numberTrades; i += 1) {
       let takeProfitPrice = newTrade.isLong
         ? price + (percentPerPrice * (TRADING_CONSTANTS.MIN_TAKEPROFIT_RELATION + i))
@@ -378,89 +377,95 @@ class Trading {
   }
 
   nextTick(instrumentDoc, candleData, periods = [], isActivatedLimitOrder = false) {
+    const activeTrade = this.trades.reverse().find(t => t.isActive);
+
+    if (!activeTrade) {
+      return;
+    }
+
     const originalData = {
       isLong: this.isLong,
       numberTrades: this.numberTrades,
     };
 
-    this.trades.filter(t => t.isActive).forEach(trade => {
-      if (trade.isLong) {
-        const targetTakeProfitPrices = trade.takeProfitPrices.filter(
-          price => price <= candleData.high,
-        );
+    if (activeTrade.isLong) {
+      const targetTakeProfitPrices = activeTrade.takeProfitPrices.filter(
+        price => price <= candleData.high,
+      );
 
-        if (!trade.isActivatedFirstTakeProfit && targetTakeProfitPrices.length) {
-          trade.isActivatedFirstTakeProfit = true;
-          trade.stopLossPrice = trade.takeProfitPrices[0];
-        }
+      if (!activeTrade.isActivatedFirstTakeProfit && targetTakeProfitPrices.length) {
+        isActivatedLimitOrder = true; // !tmp!
+        activeTrade.isActivatedFirstTakeProfit = true;
+        activeTrade.stopLossPrice = activeTrade.takeProfitPrices[0];
+      }
 
-        if (targetTakeProfitPrices.length) {
-          targetTakeProfitPrices.forEach(price => {
-            this.isLong = false;
-            this.numberTrades = 1;
+      if (targetTakeProfitPrices.length) {
+        targetTakeProfitPrices.forEach(price => {
+          this.isLong = false;
+          this.numberTrades = 1;
 
-            this.createTrade(instrumentDoc, {
-              price, time: candleData.originalTime,
-            }, periods, false);
+          this.createTrade(instrumentDoc, {
+            price, time: candleData.originalTime,
+          }, periods, false);
 
-            trade.takeProfitPrices = trade.takeProfitPrices.filter(p => p !== price);
-          });
+          activeTrade.takeProfitPrices = activeTrade.takeProfitPrices.filter(p => p !== price);
+        });
 
-          Trading.changeSeriesLineStyle(instrumentDoc, trade, targetTakeProfitPrices, periods);
-        }
+        Trading.changeSeriesLineStyle(instrumentDoc, activeTrade, targetTakeProfitPrices, periods);
+      }
 
-        if (trade.takeProfitPrices.length) {
-          if ((isActivatedLimitOrder && candleData.close <= trade.stopLossPrice)
-            || (!isActivatedLimitOrder && candleData.low <= trade.stopLossPrice)) {
-            this.isLong = false;
-            this.numberTrades = trade.takeProfitPrices.length;
+      if (activeTrade.takeProfitPrices.length) {
+        if ((isActivatedLimitOrder && candleData.close <= activeTrade.stopLossPrice)
+          || (!isActivatedLimitOrder && candleData.low <= activeTrade.stopLossPrice)) {
+          this.isLong = false;
+          this.numberTrades = activeTrade.takeProfitPrices.length;
 
-            this.createTrade(instrumentDoc, {
-              price: trade.stopLossPrice, time: candleData.originalTime,
-            }, periods, false);
+          this.createTrade(instrumentDoc, {
+            price: activeTrade.stopLossPrice, time: candleData.originalTime,
+          }, periods, false);
 
-            Trading.changeSeriesLineStyle(instrumentDoc, trade, [], periods);
-          }
-        }
-      } else {
-        const targetTakeProfitPrices = trade.takeProfitPrices.filter(
-          price => price >= candleData.low,
-        );
-
-        if (!trade.isActivatedFirstTakeProfit && targetTakeProfitPrices.length) {
-          trade.isActivatedFirstTakeProfit = true;
-          trade.stopLossPrice = trade.takeProfitPrices[0];
-        }
-
-        if (targetTakeProfitPrices.length) {
-          targetTakeProfitPrices.forEach(price => {
-            this.isLong = true;
-            this.numberTrades = 1;
-
-            this.createTrade(instrumentDoc, {
-              price, time: candleData.originalTime,
-            }, periods, false);
-
-            trade.takeProfitPrices = trade.takeProfitPrices.filter(p => p !== price);
-          });
-
-          Trading.changeSeriesLineStyle(instrumentDoc, trade, targetTakeProfitPrices, periods);
-        }
-
-        if (trade.takeProfitPrices.length) {
-          if ((isActivatedLimitOrder && candleData.close >= trade.stopLossPrice)
-            || (!isActivatedLimitOrder && candleData.high >= trade.stopLossPrice)) {
-            this.isLong = true;
-            this.numberTrades = trade.takeProfitPrices.length;
-            this.createTrade(instrumentDoc, {
-              price: trade.stopLossPrice, time: candleData.originalTime,
-            }, periods, false);
-
-            Trading.changeSeriesLineStyle(instrumentDoc, trade, [], periods);
-          }
+          Trading.changeSeriesLineStyle(instrumentDoc, activeTrade, [], periods);
         }
       }
-    });
+    } else {
+      const targetTakeProfitPrices = activeTrade.takeProfitPrices.filter(
+        price => price >= candleData.low,
+      );
+
+      if (!activeTrade.isActivatedFirstTakeProfit && targetTakeProfitPrices.length) {
+        isActivatedLimitOrder = true; // !tmp!
+        activeTrade.isActivatedFirstTakeProfit = true;
+        activeTrade.stopLossPrice = activeTrade.takeProfitPrices[0];
+      }
+
+      if (targetTakeProfitPrices.length) {
+        targetTakeProfitPrices.forEach(price => {
+          this.isLong = true;
+          this.numberTrades = 1;
+
+          this.createTrade(instrumentDoc, {
+            price, time: candleData.originalTime,
+          }, periods, false);
+
+          activeTrade.takeProfitPrices = activeTrade.takeProfitPrices.filter(p => p !== price);
+        });
+
+        Trading.changeSeriesLineStyle(instrumentDoc, activeTrade, targetTakeProfitPrices, periods);
+      }
+
+      if (activeTrade.takeProfitPrices.length) {
+        if ((isActivatedLimitOrder && candleData.close >= activeTrade.stopLossPrice)
+          || (!isActivatedLimitOrder && candleData.high >= activeTrade.stopLossPrice)) {
+          this.isLong = true;
+          this.numberTrades = activeTrade.takeProfitPrices.length;
+          this.createTrade(instrumentDoc, {
+            price: activeTrade.stopLossPrice, time: candleData.originalTime,
+          }, periods, false);
+
+          Trading.changeSeriesLineStyle(instrumentDoc, activeTrade, [], periods);
+        }
+      }
+    }
 
     this.isLong = originalData.isLong;
     // this.numberTrades = originalData.numberTrades;
@@ -479,11 +484,14 @@ class Trading {
         );
       }
 
-      targetSeries.forEach(s => {
-        s.applyOptions({
+      targetSeries.forEach(tS => {
+        tS.applyOptions({
           lineType: LightweightCharts.LineType.Simple,
           lineStyle: LightweightCharts.LineStyle.LargeDashed,
         });
+
+        chartCandles.extraSeries = chartCandles.extraSeries
+          .filter(s => s.id !== tS.id && s.value !== tS.value);
       });
     });
   }
@@ -512,7 +520,6 @@ class Trading {
   removeTrades(trades = []) {
     trades.forEach(trade => {
       this.trades = this.trades.filter(t => t.id !== trade.id);
-      this.totalCommissions -= trade.sumCommissions;
     });
 
     Trading.removeTradesFromTradeList(trades);
@@ -622,8 +629,18 @@ class Trading {
   calculateTradesProfit({ price }, doManageOnlyActive = false) {
     let { trades } = this;
 
+    if (!trades.length) {
+      return [];
+    }
+
     if (doManageOnlyActive) {
-      trades = trades.filter(t => t.isActive);
+      const activeTrade = trades.reverse().find(t => t.isActive);
+
+      if (!activeTrade) {
+        return [];
+      }
+
+      trades = [activeTrade];
     }
 
     trades.forEach(trade => {
@@ -651,10 +668,14 @@ class Trading {
 
   calculateCommonProfit() {
     let commonProfit = 0;
+    let totalCommissions = 0;
+
     const numberTrades = [0, 0]; // [win, lose]
 
     const majorTrades = {};
     this.trades.forEach(trade => {
+      totalCommissions += trade.sumCommissions;
+
       if (trade.isActive || !trade.parentId || !trade.isFilterTarget) return;
 
       commonProfit += trade.profit;
@@ -705,6 +726,7 @@ class Trading {
     return {
       commonProfit,
       numberTrades,
+      totalCommissions,
     };
   }
 
@@ -768,18 +790,14 @@ class Trading {
         _this.removeTrades(trades);
       });
 
-    /*
     this.$tradingList
       .on('click', '.trade .profit', function () {
         const $trade = $(this).closest('.trade');
         const $index = $trade.find('td.index');
-
         const index = parseInt($index.text(), 10);
-        const trades = _this.trades.filter(t => t.index === index);
 
-        _this.flipTradesProfit(trades);
+        _this.flipTradesProfit(index);
       });
-    */
 
     this.$tradingList
       .on('change', '.trade .strategy input', function () {
@@ -801,39 +819,44 @@ class Trading {
       });
   }
 
-  /*
-  flipTradesProfit(trades = []) {
-    if (!trades) {
-      return;
+  flipTradesProfit(tradeIndex) {
+    let trades = Trading.getHistoryTrades();
+    const targetTrades = trades.filter(t => t.index === tradeIndex);
+
+    if (targetTrades.length > 2) {
+      return false;
     }
 
-    trades.forEach(trade => {
-      if (trade.isLong) {
-        const sellPrice = trade.takeProfitPrices[0];
-        trade.profit = (sellPrice - trade.buyPrice) * trade.quantity;
+    const parentTrade = targetTrades.find(t => !t.parentId);
+    const childTrade = targetTrades.find(t => t.parentId);
 
-        const differenceBetweenPrices = sellPrice - trade.buyPrice;
-        trade.profitPercent = Math.abs(100 / (trade.buyPrice / differenceBetweenPrices));
-      } else {
-        const buyPrice = trade.takeProfitPrices[0];
-        trade.profit = (trade.sellPrice - buyPrice) * trade.quantity;
+    trades = trades.filter(t => t.index !== tradeIndex);
+    const takeProfitPrice = parentTrade.takeProfitPrices[0];
 
-        const differenceBetweenPrices = trade.sellPrice - buyPrice;
-        trade.profitPercent = Math.abs(100 / (trade.sellPrice / differenceBetweenPrices));
-      }
+    if (childTrade.isLong) {
+      childTrade.sellPrice = takeProfitPrice;
+      childTrade.profit = (childTrade.sellPrice - childTrade.buyPrice) * childTrade.quantity;
 
-      if (trade.profit < 0) {
-        trade.profitPercent = -trade.profitPercent;
-      }
-    });
+      const differenceBetweenPrices = childTrade.sellPrice - childTrade.buyPrice;
+      childTrade.profitPercent = Math.abs(100 / (childTrade.buyPrice / differenceBetweenPrices));
+    } else {
+      childTrade.buyPrice = takeProfitPrice;
+      childTrade.profit = (childTrade.sellPrice - childTrade.buyPrice) * childTrade.quantity;
 
-    Trading.removeTradesFromHistory(trades);
-    Trading.addTradesToHistory(trades);
+      const differenceBetweenPrices = childTrade.sellPrice - childTrade.buyPrice;
+      childTrade.profitPercent = Math.abs(100 / (childTrade.sellPrice / differenceBetweenPrices));
+    }
 
+    if (childTrade.profit < 0) {
+      childTrade.profitPercent = -childTrade.profitPercent;
+    }
+
+    trades.push(parentTrade, childTrade);
+
+    localStorage.setItem('trading-helper:trades', JSON.stringify(trades));
     this.$tradingList.find('tr.trade').remove();
     this.loadHistoryTrades();
   }
-  */
 
   addTradesToTradeList(trades = []) {
     let appendStr = '';
@@ -851,31 +874,36 @@ class Trading {
         <td class="commission">${trade.sumCommissions.toFixed(4)}</td>
         <td class="buy-price">${trade.buyPrice ? `${trade.buyPrice}$` : ''}</td>
         <td class="sell-price">${trade.sellPrice ? `${trade.sellPrice}$` : ''}</td>
-        <td>${moment.unix(trade.startAt).format('DD.MM.YY HH:mm')}</td>
-        <td class="end-at">${trade.endAt ? moment(trade.endAt).format('DD.MM.YY HH:mm') : ''}</td>
+        <td>${moment.unix(trade.startAt).utc().format('DD.MM.YY HH:mm')}</td>
+        <td class="end-at">${trade.endAt ? moment.utc(trade.endAt).format('DD.MM.YY HH:mm') : ''}</td>
       </tr>`;
     });
 
     this.$tradingList.find('table tr:first').after(appendStr);
   }
 
-  updateCommonStatistics() {
+  updateCommonStatistics(originalTotalCommissions = 0) {
     let {
       commonProfit,
       numberTrades,
+      totalCommissions,
     } = this.calculateCommonProfit();
+
+    if (originalTotalCommissions) {
+      totalCommissions = originalTotalCommissions;
+    }
 
     commonProfit = Number.isInteger(commonProfit)
       ? parseInt(commonProfit, 10) : commonProfit.toFixed(2);
+
+    totalCommissions = Number.isInteger(totalCommissions)
+      ? parseInt(totalCommissions, 10) : totalCommissions.toFixed(4);
 
     const minProfit = Number.isInteger(this.minProfit)
       ? parseInt(this.minProfit, 10) : this.minProfit.toFixed(2);
 
     const maxProfit = Number.isInteger(this.maxProfit)
       ? parseInt(this.maxProfit, 10) : this.maxProfit.toFixed(2);
-
-    const totalCommissions = Number.isInteger(this.totalCommissions)
-      ? parseInt(this.totalCommissions, 10) : this.totalCommissions.toFixed(4);
 
     const tradesRelationPercent = Number.isInteger(this.tradesRelationPercent)
       ? parseInt(this.tradesRelationPercent, 10) : this.tradesRelationPercent.toFixed(2);
@@ -891,17 +919,19 @@ class Trading {
   }
 
   loadHistoryTrades() {
+    this.trades = [];
     const trades = Trading.getHistoryTrades();
+
+    let totalCommissions = 0;
 
     if (trades.length) {
       this.trades = trades.sort((a, b) => { return a.index < b.index ? 1 : -1; });
       this.calculateTradesProfit({});
 
-      this.trades.forEach(trade => {
-        this.totalCommissions += trade.sumCommissions;
+      this.trades = this.trades.filter(t => {
+        totalCommissions += t.sumCommissions;
+        return !t.isActive && t.parentId;
       });
-
-      this.trades = this.trades.filter(t => !t.isActive && t.parentId);
 
       let currentProfit = 0;
       this.addTradesToTradeList(this.trades);
@@ -918,7 +948,7 @@ class Trading {
         }
       });
 
-      this.updateCommonStatistics();
+      this.updateCommonStatistics(totalCommissions);
     }
   }
 
@@ -929,7 +959,6 @@ class Trading {
 
     this.minProfit = 0;
     this.maxProfit = 0;
-    this.totalCommissions = 0;
     this.tradesRelationPercent = 0;
 
     this.$tradingList.find('tr.trade').remove();

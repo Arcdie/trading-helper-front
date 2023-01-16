@@ -35,7 +35,8 @@
     "function-paren-newline": 0,
     "no-unused-expressions": 0,
     "no-loop-func": 0,
-    "no-await-in-loop": 0
+    "no-await-in-loop": 0,
+    "no-unreachable-loop": 0
   },
   "parserOptions": {
     "ecmaVersion": 2018,

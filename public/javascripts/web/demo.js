@@ -1,7 +1,7 @@
 /* global
 functions, makeRequest, getUnix, getRandomNumber, getPrecision, formatNumberToPretty, toRGB, saveAs,
 objects, user, moment, constants,
-classes, ChartCandles, IndicatorVolume, IndicatorMovingAverage, Trading,
+classes, ChartCandles, IndicatorVolume, IndicatorMovingAverage, IndicatorVolumeAverage, Trading,
 */
 
 /* Constants */
@@ -37,6 +37,8 @@ let isActiveLineDrawing = false;
 let isActiveLevelDrawing = false;
 let isActiveCrosshairMoving = false;
 let isActiveSearching = false;
+let isActiveInstrumentChoosing = false;
+let lastVisibleLogicalRange = false;
 let temporaryLineSeriesId;
 let previousCrosshairMove;
 let choosenInstrumentId;
@@ -62,6 +64,9 @@ const settings = {
     colorFor1hLevels: constants.BLUE_COLOR,
     colorFor1dLevels: constants.GREEN_COLOR,
     percentForMovingToNearestFigureLevel: 5,
+
+    distanceFromLeftSide: 100,
+    distanceFromRightSide: 100,
     // timeRenew: 86400,
   },
 
@@ -295,6 +300,7 @@ $(document).ready(async () => {
       calculatePriceLeaders(activePeriod, lastCandles);
       sortListInstruments();
 
+      lastVisibleLogicalRange = false;
       const instrumentId = choosenInstrumentId;
       await reloadCharts(instrumentId);
 
@@ -371,6 +377,7 @@ $(document).ready(async () => {
         .handler(`#instrument-${instrumentDoc._id}`);
     }
   } else {
+    isActiveInstrumentChoosing = true;
     $instrumentsContainer.addClass('is_active');
   }
 
@@ -430,6 +437,11 @@ $(document).ready(async () => {
       } else if (e.keyCode === 190) {
         // >
         await moveToNextFigureLevel();
+      } else if (e.keyCode === 82) {
+        // R
+        if (choosenInstrumentId) {
+          await reloadCharts(choosenInstrumentId);
+        }
       } else if (e.keyCode === 189) {
         // -
         if (!choosenInstrumentId) {
@@ -484,6 +496,14 @@ $(document).ready(async () => {
       } else if (e.keyCode === 76) {
         // L
         $instrumentsContainer.toggleClass('is_active');
+        isActiveInstrumentChoosing = $instrumentsContainer.hasClass('is_active');
+
+        if (isActiveInstrumentChoosing) {
+          const lastCandles = await getLastCandles();
+          calculateFigureLevelsPercents(lastCandles);
+          // calculatePriceLeaders(activePeriod, lastCandles);
+          sortListInstruments();
+        }
       } else if (e.keyCode === 83) {
         // S
         isSinglePeriod = !isSinglePeriod;
@@ -562,6 +582,7 @@ const clearInstrumentData = ({ instrumentId }) => {
 
     instrumentDoc[`chart_candles_${period}`] = null;
     instrumentDoc[`indicator_volume_${period}`] = null;
+    instrumentDoc[`indicator_volume_average_${period}`] = null;
     instrumentDoc[`indicator_moving_average_short_${period}`] = null;
     instrumentDoc[`indicator_moving_average_medium_${period}`] = null;
     instrumentDoc[`indicator_moving_average_long_${period}`] = null;
@@ -572,6 +593,7 @@ const clearInstrumentData = ({ instrumentId }) => {
   isActiveLineDrawing = false;
   isActiveLevelDrawing = false;
   temporaryLineSeriesId = false;
+  lastVisibleLogicalRange = false;
 
   trading.$tradingForm.removeClass('is_active');
 
@@ -698,6 +720,7 @@ const updateCandlesForNextTick = async (instrumentDoc, period, newCandles = []) 
 
   const chartCandles = instrumentDoc[`chart_candles_${period}`];
   const indicatorVolume = instrumentDoc[`indicator_volume_${period}`];
+  const indicatorVolumeAverage = instrumentDoc[`indicator_volume_average_${period}`];
   const indicatorMovingAverageShort = instrumentDoc[`indicator_moving_average_short_${period}`];
   const indicatorMovingAverageMedium = instrumentDoc[`indicator_moving_average_medium_${period}`];
   const indicatorMovingAverageLong = instrumentDoc[`indicator_moving_average_long_${period}`];
@@ -792,30 +815,37 @@ const updateCandlesForNextTick = async (instrumentDoc, period, newCandles = []) 
     const candlesData = chartCandles.originalData;
     lCandles = candlesData.length;
 
-    let resultCalculateMA;
+    let calculatedData;
     const targetCandlesPeriod = candlesData.slice(
       lCandles - (settings.periodForLongMA * 2), lCandles,
     );
 
-    resultCalculateMA = indicatorMovingAverageShort.calculateData(targetCandlesPeriod);
+    calculatedData = indicatorVolumeAverage.calculateData(targetCandlesPeriod);
+
+    indicatorVolumeAverage.drawSeries(
+      indicatorVolumeAverage.mainSeries,
+      calculatedData[calculatedData.length - 1],
+    );
+
+    calculatedData = indicatorMovingAverageShort.calculateData(targetCandlesPeriod);
 
     indicatorMovingAverageShort.drawSeries(
       indicatorMovingAverageShort.mainSeries,
-      resultCalculateMA[resultCalculateMA.length - 1],
+      calculatedData[calculatedData.length - 1],
     );
 
-    resultCalculateMA = indicatorMovingAverageMedium.calculateData(targetCandlesPeriod);
+    calculatedData = indicatorMovingAverageMedium.calculateData(targetCandlesPeriod);
 
     indicatorMovingAverageMedium.drawSeries(
       indicatorMovingAverageMedium.mainSeries,
-      resultCalculateMA[resultCalculateMA.length - 1],
+      calculatedData[calculatedData.length - 1],
     );
 
-    resultCalculateMA = indicatorMovingAverageLong.calculateData(targetCandlesPeriod);
+    calculatedData = indicatorMovingAverageLong.calculateData(targetCandlesPeriod);
 
     indicatorMovingAverageLong.drawSeries(
       indicatorMovingAverageLong.mainSeries,
-      resultCalculateMA[resultCalculateMA.length - 1],
+      calculatedData[calculatedData.length - 1],
     );
 
     figureLinesExtraSeries.forEach(s => {
@@ -836,28 +866,28 @@ const updateCandlesForNextTick = async (instrumentDoc, period, newCandles = []) 
   });
 
   if (!isChangeable || !isFinished) {
-    trading.trades
-      .filter(t => t.isActive)
-      .forEach(trade => {
-        const targetSeries = chartCandles.extraSeries.filter(
-          s => s.isTrade && s.id.includes(trade.id),
-        );
+    const activeTrade = trading.trades.reverse().find(t => t.isActive);
 
-        let validTime = originalTimeUnix;
+    if (activeTrade) {
+      const targetSeries = chartCandles.extraSeries.filter(
+        s => s.isTrade && s.id.includes(activeTrade.id),
+      );
 
-        if (period === AVAILABLE_PERIODS.get('1h')) {
-          validTime -= validTime % 3600;
-        } else if (period === AVAILABLE_PERIODS.get('1d')) {
-          validTime -= validTime % 86400;
-        }
+      let validTime = originalTimeUnix;
 
-        targetSeries.forEach(s => {
-          chartCandles.drawSeries(s, {
-            value: s.value,
-            time: validTime,
-          });
+      if (period === AVAILABLE_PERIODS.get('1h')) {
+        validTime -= validTime % 3600;
+      } else if (period === AVAILABLE_PERIODS.get('1d')) {
+        validTime -= validTime % 86400;
+      }
+
+      targetSeries.forEach(s => {
+        chartCandles.drawSeries(s, {
+          value: s.value,
+          time: validTime,
         });
       });
+    }
 
     trading.limitOrders.forEach(order => {
       const targetSeries = chartCandles.extraSeries.filter(
@@ -971,17 +1001,19 @@ const nextTick = async () => {
   const wasTrade = trading.checkLimitOrders(instrumentDoc, lastCandle, choosenPeriods);
   trading.nextTick(instrumentDoc, lastCandle, choosenPeriods, wasTrade);
 
-  const trades = trading.calculateTradesProfit({ price: lastCandle.close }, true);
-  Trading.updateTradesInTradeList(trades);
+  // const trades = trading.calculateTradesProfit({ price: lastCandle.close }, true);
+  // Trading.updateTradesInTradeList(trades);
 
-  const lastCandles = await getLastCandles();
-  calculateFigureLevelsPercents(lastCandles);
-  // calculatePriceLeaders(activePeriod, lastCandles);
-  sortListInstruments();
+  if (isActiveInstrumentChoosing) {
+    const lastCandles = await getLastCandles();
+    calculateFigureLevelsPercents(lastCandles);
+    // calculatePriceLeaders(activePeriod, lastCandles);
+    sortListInstruments();
+  }
 };
 
 const moveToNextFigureLevel = async () => {
-  if (!choosenInstrumentId) {
+  if (!choosenInstrumentId || activePeriod === AVAILABLE_PERIODS.get('1d')) {
     return true;
   }
 
@@ -992,6 +1024,11 @@ const moveToNextFigureLevel = async () => {
   }
 
   const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
+  const chartCandles = instrumentDoc[`chart_candles_${activePeriod}`];
+
+  document.previousTitle = document.title;
+  document.title = `${instrumentDoc.name} ...`;
+
   const lastCandle = instrumentDoc[`candles_data_${activePeriod}`][0];
   let lastCandleTimeUnix = getUnix(lastCandle.time);
 
@@ -1003,6 +1040,16 @@ const moveToNextFigureLevel = async () => {
   }
 
   let isSuccess = false;
+
+  let candles1h = await getCandlesData({
+    instrumentId: instrumentDoc._id,
+    period: AVAILABLE_PERIODS.get('1h'),
+
+    endTime: moment.unix(lastCandleTimeUnix),
+  });
+
+  candles1h = chartCandles.prepareNewData(candles1h, false);
+  const startFinishDatePointUnix = finishDatePointUnix;
 
   await (async () => {
     while (1) {
@@ -1016,13 +1063,46 @@ const moveToNextFigureLevel = async () => {
         endTime: moment.unix(incrementTime),
       };
 
-      const candles = await getCandlesData(getCandlesOptions);
+      let candles = await getCandlesData(getCandlesOptions);
       if (!candles.length) break;
 
       lastCandleTimeUnix = getUnix(candles[0].time);
+      candles = candles.reverse();
 
-      const result = candles.reverse().every(candle => {
+      for await (const candle of candles) {
         const price = candle.data[1];
+        const candleTimeUnix = getUnix(candle.time);
+
+        if (candleTimeUnix % 86400 === 0) {
+          const newCandles1h = await getCandlesData({
+            instrumentId: instrumentDoc._id,
+            period: AVAILABLE_PERIODS.get('1h'),
+
+            endTime: moment.unix(candleTimeUnix),
+            startTime: moment.unix(candles1h[candles1h.length - 1].originalTimeUnix),
+          });
+
+          candles1h.push(...chartCandles.prepareNewData(newCandles1h));
+
+          const calculatedFigureLevels = calculateNewFigureLevels(candles1h);
+          const newFigureLevels = calculatedFigureLevels
+            .filter(cL => !figureLevels.some(fL => fL.value === cL.levelPrice))
+            .map(fL => ({
+              instrumentId: instrumentDoc._id,
+              timeframe: AVAILABLE_PERIODS.get('1h'),
+              seriesId: (ChartCandles.getNewSeriesId() - fL.levelPrice).toString().replace('.', ''),
+
+              isLong: fL.isLong,
+              value: fL.levelPrice,
+              time: fL.startOfLevelUnix,
+            }));
+
+          if (newFigureLevels.length) {
+            figureLevels.push(...newFigureLevels);
+            saveFigureLevelsToLocalStorage(newFigureLevels);
+            drawFigureLevels({ instrumentId: instrumentDoc._id }, newFigureLevels);
+          }
+        }
 
         const result = figureLevels.every(figureLevel => {
           const difference = Math.abs(price - figureLevel.value);
@@ -1030,23 +1110,33 @@ const moveToNextFigureLevel = async () => {
 
           if (percentPerPrice <= settings.figureLevels.percentForMovingToNearestFigureLevel) {
             isSuccess = true;
-            finishDatePointUnix = getUnix(candle.time);
+            finishDatePointUnix = getUnix(candle.time) + incrementValue;
             return false;
           }
 
           return true;
         });
 
-        return result;
-      });
+        if (!result) {
+          break;
+        }
+      }
 
-      if (!result) {
+      if (isSuccess) {
         break;
       }
     }
   })();
 
+  document.title = document.previousTitle;
+
   if (isSuccess) {
+    const difference = finishDatePointUnix - startFinishDatePointUnix;
+
+    const days = parseInt(difference / 86400, 10);
+    const hours = parseInt((difference % 86400) / 3600, 10);
+    alert(`d: ${days}; h: ${hours}`);
+
     await reloadCharts(choosenInstrumentId);
   }
 };
@@ -1118,10 +1208,12 @@ const loadCharts = ({
     });
 
     const indicatorVolume = new IndicatorVolume($rootContainer);
+    const indicatorVolumeAverage = new IndicatorVolumeAverage(indicatorVolume.chart, { period });
 
     chartCandles.key = 'futures';
     instrumentDoc[`chart_candles_${period}`] = chartCandles;
     instrumentDoc[`indicator_volume_${period}`] = indicatorVolume;
+    instrumentDoc[`indicator_volume_average_${period}`] = indicatorVolumeAverage;
     instrumentDoc[`indicator_moving_average_short_${period}`] = indicatorMovingAverageShort;
     instrumentDoc[`indicator_moving_average_medium_${period}`] = indicatorMovingAverageMedium;
     instrumentDoc[`indicator_moving_average_long_${period}`] = indicatorMovingAverageLong;
@@ -1136,6 +1228,9 @@ const loadCharts = ({
 
     let calculatedData;
 
+    calculatedData = indicatorVolumeAverage.calculateAndDraw(chartCandles.originalData);
+    indicatorVolumeAverage.calculatedData = calculatedData;
+
     calculatedData = indicatorMovingAverageShort.calculateAndDraw(chartCandles.originalData);
     indicatorMovingAverageShort.calculatedData = calculatedData;
 
@@ -1144,6 +1239,12 @@ const loadCharts = ({
 
     calculatedData = indicatorMovingAverageLong.calculateAndDraw(chartCandles.originalData);
     indicatorMovingAverageLong.calculatedData = calculatedData;
+
+    if (lastVisibleLogicalRange) {
+      chartCandles.chart
+        .timeScale()
+        .setVisibleLogicalRange(lastVisibleLogicalRange);
+    }
 
     chartCandles.chart.subscribeClick(param => {
       isActiveSearching = false;
@@ -1453,6 +1554,7 @@ const loadCharts = ({
             return true;
           }
 
+          lastVisibleLogicalRange = newVisibleLogicalRange;
           const barsInfo = chartCandles.mainSeries.barsInLogicalRange(newVisibleLogicalRange);
 
           if (barsInfo !== null && barsInfo.barsBefore < -20) {
@@ -2393,6 +2495,170 @@ const renewFigureLevels = async () => {
 
   console.log('Renewing process is finished');
   return true;
+};
+
+const calculateNewFigureLevels = (candles = []) => {
+  const lCandles = candles.length;
+
+  if (!lCandles) {
+    return [];
+  }
+
+  const highLevels = getHighLevels({
+    candles,
+    distanceFromLeftSide: settings.figureLevels.distanceFromLeftSide,
+    distanceFromRightSide: settings.figureLevels.distanceFromRightSide,
+  });
+
+  const lowLevels = [];
+  /*
+  const lowLevels = getLowLevels({
+    candles,
+    distanceFromLeftSide: settings.figureLevels.distanceFromLeftSide,
+    distanceFromRightSide: settings.figureLevels.distanceFromRightSide,
+  });
+  */
+
+  if ((!highLevels || !highLevels.length)
+    && (!lowLevels || !lowLevels.length)) {
+    return [];
+  }
+
+  const levels = [];
+
+  lowLevels.forEach(level => {
+    const doesExistLevelWithThisPrice = levels.some(l => l.levelPrice === level.levelPrice);
+
+    if (!doesExistLevelWithThisPrice) {
+      levels.push({
+        ...level,
+        isLong: false,
+      });
+    }
+  });
+
+  highLevels.forEach(level => {
+    const doesExistLevelWithThisPrice = levels.some(l => l.levelPrice === level.levelPrice);
+
+    if (!doesExistLevelWithThisPrice) {
+      levels.push({
+        ...level,
+        isLong: true,
+      });
+    }
+  });
+
+  return levels;
+};
+
+const getHighLevels = ({
+  candles,
+  distanceFromLeftSide,
+  distanceFromRightSide,
+}) => {
+  if (!candles || !candles.length) {
+    return [];
+  }
+
+  const levels = [];
+  const lCandles = candles.length;
+
+  candles.forEach((candle, index) => {
+    if ((lCandles - index) < distanceFromRightSide) {
+      return true;
+    }
+
+    let isHighest = true;
+    let isHighCrossed = false;
+
+    for (let i = index; i < lCandles; i += 1) {
+      const tmpCandle = candles[i];
+
+      if (tmpCandle.high > candle.high) {
+        isHighCrossed = true;
+        break;
+      }
+    }
+
+    if (!isHighCrossed) {
+      for (let i = 1; i < distanceFromLeftSide + 1; i += 1) {
+        const tmpCandle = candles[index - i];
+
+        if (!tmpCandle) {
+          break;
+        }
+
+        if (tmpCandle.high > candle.high) {
+          isHighest = false;
+          break;
+        }
+      }
+    }
+
+    if (!isHighCrossed && isHighest) {
+      levels.push({
+        levelPrice: candle.high,
+        startOfLevelUnix: candle.originalTimeUnix,
+      });
+    }
+  });
+
+  return levels;
+};
+
+const getLowLevels = ({
+  candles,
+  distanceFromLeftSide,
+  distanceFromRightSide,
+}) => {
+  if (!candles || !candles.length) {
+    return [];
+  }
+
+  const levels = [];
+  const lCandles = candles.length;
+
+  candles.forEach((candle, index) => {
+    if ((lCandles - index) < distanceFromRightSide) {
+      return true;
+    }
+
+    let isLowest = true;
+    let isLowCrossed = false;
+
+    for (let i = index; i < lCandles; i += 1) {
+      const tmpCandle = candles[i];
+
+      if (tmpCandle.low < candle.low) {
+        isLowCrossed = true;
+        break;
+      }
+    }
+
+    if (!isLowCrossed) {
+      for (let i = 1; i < distanceFromLeftSide + 1; i += 1) {
+        const tmpCandle = candles[index - i];
+
+        if (!tmpCandle) {
+          break;
+        }
+
+        if (tmpCandle.low < candle.low) {
+          isLowest = false;
+          break;
+        }
+      }
+    }
+
+    if (!isLowCrossed && isLowest) {
+      levels.push({
+        levelPrice: candle.low,
+        startOfLevelUnix: candle.originalTimeUnix,
+      });
+    }
+  });
+
+  return levels;
 };
 
 const getCandlesData = async ({
