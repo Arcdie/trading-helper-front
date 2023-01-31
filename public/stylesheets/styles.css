@@ -1013,6 +1013,13 @@ button#settings {
       bottom: 15px; }
       .volume-monitoring .instrument .volume span, .volume-monitoring .instrument-extended .volume span {
         font-weight: bold; }
+    .volume-monitoring .instrument .links, .volume-monitoring .instrument-extended .links {
+      position: absolute;
+      bottom: 15px;
+      right: 10px; }
+      .volume-monitoring .instrument .links a img, .volume-monitoring .instrument-extended .links a img {
+        width: 40px;
+        height: 40px; }
     .volume-monitoring .instrument .asks .level, .volume-monitoring .instrument .bids .level, .volume-monitoring .instrument-extended .asks .level, .volume-monitoring .instrument-extended .bids .level {
       width: 100%;
       display: block;

@@ -101,6 +101,19 @@
       }
     }
 
+    .links {
+      position: absolute;
+      bottom: 15px;
+      right: 10px;
+
+      a {
+        img {
+          width: 40px;
+          height: 40px;
+        }
+      }
+    }
+
     .asks, .bids {
       .level {
         width: 100%;

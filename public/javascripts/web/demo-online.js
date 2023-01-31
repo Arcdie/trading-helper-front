@@ -100,6 +100,10 @@ wsClient.onmessage = async data => {
     switch (parsedData.actionName) {
       case 'futuresCandle5mData': updateLastCandle(parsedData.data, AVAILABLE_PERIODS.get('5m')); break;
       case 'futuresCandle1hData': updateLastCandle(parsedData.data, AVAILABLE_PERIODS.get('1h')); break;
+      case 'spotCandle5mData': updateLastCandle(parsedData.data, AVAILABLE_PERIODS.get('5m')); break;
+      case 'spotCandle1hData': updateLastCandle(parsedData.data, AVAILABLE_PERIODS.get('1h')); break;
+      case 'newInstrumentVolumeBound': addInstrumentVolumeBound(parsedData.data); break;
+      case 'deactivateInstrumentVolumeBound': removeInstrumentVolumeBound(parsedData.data); break;
       default: break;
     }
   }
@@ -124,9 +128,21 @@ $(document).ready(async () => {
   // removeFigureLinesFromLocalStorage({});
   // removeFigureLevelsFromLocalStorage({});
 
-  wsClient.send(JSON.stringify({
-    actionName: 'unsubscribeFromAll',
-  }));
+  wsClient.onopen = () => {
+    // wsClient.send(JSON.stringify({
+    //   actionName: 'unsubscribeFromAll',
+    // }));
+
+    wsClient.send(JSON.stringify({
+      actionName: 'subscribe',
+      data: {
+        subscriptionsNames: [
+          'newInstrumentVolumeBound',
+          'deactivateInstrumentVolumeBound',
+        ],
+      },
+    }));
+  };
 
   $instrumentsContainer
     .css({ maxHeight: windowHeight });
@@ -295,6 +311,7 @@ $(document).ready(async () => {
       saveSettingsToLocalStorage({ choosenPeriods, activePeriod });
 
       choosenSortSettings.type = AVAILABLE_SORT_OPTIONS.get(`priceChange_${activePeriod}`);
+
       const lastCandles = await getLastCandles();
       calculateFigureLevelsPercents(lastCandles);
       calculatePriceLeaders(activePeriod, lastCandles);
@@ -541,15 +558,13 @@ const reloadCharts = async (instrumentId) => {
   const figureLinesData = getFigureLinesFromLocalStorage({ instrumentId });
   drawFigureLines({ instrumentId }, figureLinesData);
 
-  /*
   const instrumentVolumeBounds = await getInstrumentVolumeBounds(instrumentId);
   drawInstrumentVolumeBounds({ instrumentId }, instrumentVolumeBounds.map(b => ({
     value: b.price,
     isAsk: b.is_ask,
     volumeStartedAt: b.volume_started_at,
-    volumeEndedAt: b.volume_ended_at,
+    seriesId: (ChartCandles.getNewSeriesId() - b.price).toString().replace('.', ''),
   })));
-  // */
 };
 
 const clearInstrumentData = ({ instrumentId }) => {
@@ -619,13 +634,6 @@ const loadCandles = async ({
       period,
       instrumentId,
     };
-
-    if (period === AVAILABLE_PERIODS.get('5m')) {
-      const startTime = (settings.chart.limitCandlesPerChart * 5);
-      getCandlesOptions.startTime = moment().add(-startTime, 'minutes');
-    } else if (period === AVAILABLE_PERIODS.get('1h')) {
-      getCandlesOptions.startTime = moment().add(-settings.chart.limitCandlesPerChart, 'hours');
-    }
 
     const instrumentDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
     instrumentDoc[`candles_data_${period}`] = await getCandlesData(getCandlesOptions);
@@ -884,10 +892,12 @@ const loadCharts = ({
       }
     });
 
+    const prefix = instrumentDoc.is_futures ? 'futures' : 'spot';
+
     wsClient.send(JSON.stringify({
       actionName: 'subscribe',
       data: {
-        subscriptionName: `futuresCandle${period}Data`,
+        subscriptionName: `${prefix}Candle${period}Data`,
         instrumentId: instrumentDoc._id,
       },
     }));
@@ -1335,28 +1345,21 @@ const drawInstrumentVolumeBounds = ({ instrumentId }, data = []) => {
 
       data.forEach(d => {
         d.volumeStartedAt = moment.unix(d.volumeStartedAt).utc().startOf(startOfEntity).unix();
-        d.volumeEndedAt = moment.unix(d.volumeEndedAt).utc().startOf(startOfEntity).unix();
       });
     } else {
       const coeff = 5 * 60 * 1000;
 
       data.forEach(d => {
         const ms = getUnix(d.volumeStartedAt) * 1000;
-        d.volumeEndedAt = (Math.ceil((getUnix(d.volumeEndedAt) * 1000) / coeff) * coeff) / 1000;
         d.volumeStartedAt = ((Math.ceil(ms / coeff) * coeff) / 1000) - 300;
       });
     }
 
     const firstCandleTime = candlesData[0].originalTimeUnix;
-    data = data
-      .filter(d => !d.isActive)
-      .filter(d => d.volumeStartedAt >= firstCandleTime);
-
-    console.log('data', data);
-    // todo: isActive, flags
+    data = data.filter(d => d.volumeStartedAt >= firstCandleTime);
 
     data.forEach(({
-      volumeStartedAt, volumeEndedAt, value, isAsk,
+      seriesId, volumeStartedAt, value, isAsk,
     }) => {
       const color = isAsk
         ? settings.instrumentVolumes.isAskColor
@@ -1368,6 +1371,7 @@ const drawInstrumentVolumeBounds = ({ instrumentId }, data = []) => {
         lastValueVisible: false,
       }, {
         value,
+        id: seriesId,
         time: volumeStartedAt,
         isInstrumentVolume: true,
       });
@@ -1379,7 +1383,7 @@ const drawInstrumentVolumeBounds = ({ instrumentId }, data = []) => {
           time: volumeStartedAt,
         }, {
           value,
-          time: volumeEndedAt,
+          time: candlesData[lCandles - 1].originalTimeUnix,
         }],
       );
     });
@@ -1496,16 +1500,28 @@ const updateLastCandle = (data, period) => {
     isClosed,
   } = data;
 
+  instrumentDoc.price = close;
+
   const preparedData = chartCandles.prepareNewData([{
     time: startTime,
     data: [open, close, low, high],
     volume,
   }], false)[0];
 
+  let { isDrawn } = candlesData[lCandles - 1];
+
   if (!isClosed) {
-    candlesData[lCandles - 1] = preparedData;
+    candlesData[lCandles - 1] = {
+      ...preparedData,
+      isDrawn: true,
+    };
   } else {
-    candlesData.push(preparedData);
+    isDrawn = false;
+    candlesData.push({
+      ...preparedData,
+      isDrawn: false,
+    });
+
     lCandles += 1;
   }
 
@@ -1560,23 +1576,25 @@ const updateLastCandle = (data, period) => {
     }
   }
 
-  const figureLevelsExtraSeries = chartCandles.extraSeries.filter(s => s.isFigureLevel);
-  const figureLinesExtraSeries = chartCandles.extraSeries.filter(
-    s => s.isFigureLine && s.isActive && s.timeframe === period,
-  );
+  if (!isDrawn) {
+    const figureLevelsExtraSeries = chartCandles.extraSeries.filter(s => s.isFigureLevel);
+    const figureLinesExtraSeries = chartCandles.extraSeries.filter(
+      s => s.isFigureLine && s.isActive && s.timeframe === period,
+    );
 
-  figureLinesExtraSeries.forEach(s => {
-    s.linePoints[1].value += s.isLong ? s.reduceValue : -s.reduceValue;
-    s.linePoints[1].time = preparedData.originalTimeUnix;
-    chartCandles.drawSeries(s, s.linePoints);
-  });
-
-  figureLevelsExtraSeries.forEach(s => {
-    chartCandles.drawSeries(s, {
-      value: s.value,
-      time: preparedData.originalTimeUnix,
+    figureLinesExtraSeries.forEach(s => {
+      s.linePoints[1].value += s.isLong ? s.reduceValue : -s.reduceValue;
+      s.linePoints[1].time = preparedData.originalTimeUnix;
+      chartCandles.drawSeries(s, s.linePoints);
     });
-  });
+
+    figureLevelsExtraSeries.forEach(s => {
+      chartCandles.drawSeries(s, {
+        value: s.value,
+        time: preparedData.originalTimeUnix,
+      });
+    });
+  }
 };
 
 const toggleFavoriteInstruments = (instrumentId) => {
@@ -1738,6 +1756,7 @@ const setStartSettings = () => {
 const getInstrumentVolumeBounds = async (instrumentId) => {
   const query = {
     instrumentId,
+    isOnlyActive: true,
   };
 
   const resultGetBounds = await makeRequest({
@@ -1792,6 +1811,46 @@ const getAndSaveUserFigureLevels = async () => {
   }
 
   // console.log('finished');
+};
+
+const addInstrumentVolumeBound = ({
+  price: value,
+  is_ask: isAsk,
+  instrument_id: instrumentId,
+  created_at: volumeStartedAt,
+}) => {
+  if (instrumentId !== choosenInstrumentId) {
+    return true;
+  }
+
+  drawInstrumentVolumeBounds({ instrumentId }, [{
+    value,
+    isAsk,
+    volumeStartedAt,
+    seriesId: (ChartCandles.getNewSeriesId() - value).toString().replace('.', ''),
+  }]);
+};
+
+const removeInstrumentVolumeBound = ({
+  price: value,
+  instrument_id: instrumentId,
+}) => {
+  if (instrumentId !== choosenInstrumentId) {
+    return true;
+  }
+
+  const instrumentDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
+
+  choosenPeriods.forEach(period => {
+    const chartCandles = instrumentDoc[`chart_candles_${period}`];
+    const targetSeries = chartCandles.extraSeries.find(
+      s => s.isInstrumentVolume && s.value === value,
+    );
+
+    if (targetSeries) {
+      chartCandles.removeSeries(targetSeries, false);
+    }
+  });
 };
 
 const calculateFigureLevelsPercents = (lastCandles = []) => {
@@ -1998,7 +2057,7 @@ const getCandlesData = async ({
   // console.log('start loading');
 
   const query = {
-    isFirstCall: false,
+    isFirstCall: !(startTime || endTime),
   };
 
   if (instrumentId) {

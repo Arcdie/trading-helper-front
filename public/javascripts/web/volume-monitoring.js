@@ -1,5 +1,5 @@
 /* global
-functions, makeRequest, getUnix, initPopWindow,
+functions, makeRequest, getUnix, initPopWindow, formatNumberToPretty,
 objects, WebsocketBinance, ChartCandles, moment, windows, wsClient, user
 */
 
@@ -459,6 +459,12 @@ const addNewInstrument = (instrumentDoc) => {
       <p class="average-24h">
         24H объем: <span>${formatNumberToPretty(parseInt(instrumentDoc.average_volume_for_last_24_hours / 2, 10))}</span>
       </p>
+    </div>
+
+    <div class="links">
+      <a href="/demo-online?symbol=${instrumentDoc.name}" target="_blank">
+        <img src="/images/favicon.ico" alt="logotype">
+      </a>
     </div>
 
     <div id="chart-${instrumentDoc._id}" class="chart">
