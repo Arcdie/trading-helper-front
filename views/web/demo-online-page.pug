@@ -2,7 +2,7 @@ extends ../app
 
 block variables
 	-
-		const pageTitle = 'Demo';
+		const pageTitle = 'Demo Online';
 
 block content
 	.page.demo
@@ -30,12 +30,6 @@ block content
 				
 		.row
 			.settings
-				.single-date-counter
-					input(type="checkbox")
-				
-				.finish-date-point
-					input(type="text")
-					span
 
 		include ../includes/services/trades
 
@@ -45,6 +39,7 @@ block scripts
 	script(src='/libs/trading-view-charts.min.js')
 	script(src='/libs/technical-indicators.min.js')
 
+	script(src='/javascripts/websocket.js')
 	script(src='/javascripts/chart-functions/chart-candles.js')
 	script(src='/javascripts/chart-functions/indicators/volume.js')
 	script(src='/javascripts/chart-functions/indicators/volume-average.js')
@@ -54,4 +49,4 @@ block scripts
 	script(src='/javascripts/services/trading.service.js')
 	script(src='/javascripts/services/list-instruments.service.js')
 
-	script(src='/javascripts/web/demo.js')
+	script(src='/javascripts/web/demo-online.js')

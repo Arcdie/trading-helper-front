@@ -1,16 +1,16 @@
 /* global
 functions, makeRequest, getUnix, getRandomNumber, getPrecision, formatNumberToPretty, toRGB, saveAs,
-objects, user, moment, constants,
+objects, user, moment, constants, wsClient,
 classes, ChartCandles, IndicatorVolume, IndicatorMovingAverage, IndicatorVolumeAverage, Trading,
 */
 
 /* Constants */
 
+const PAGE_KEY = 'demo-online';
 const URL_GET_CANDLES = '/api/candles';
 const URL_GET_ACTIVE_INSTRUMENTS = '/api/instruments/active';
 const URL_GET_USER_FIGURE_LEVEL_BOUNDS = '/api/user-figure-level-bounds';
-const URL_REMOVE_USER_FIGURE_LEVEL_BOUNDS = '/api/user-figure-level-bounds/remove';
-const URL_CALCULATE_USER_FIGURE_LEVEL_BOUNDS = '/api/user-figure-level-bounds/cron/calculate';
+const URL_GET_INSTRUMENT_VOLUME_BOUNDS = '/api/instrument-volume-bounds';
 
 const AVAILABLE_PERIODS = new Map([
   ['5m', '5m'],
@@ -31,7 +31,6 @@ const AVAILABLE_SORT_OPTIONS = new Map([
 let linePoints = [];
 let isLoading = false;
 let isSinglePeriod = false;
-let isSingleDateCounter = false;
 let choosedFigureShape = false;
 let isActiveLineDrawing = false;
 let isActiveLevelDrawing = false;
@@ -48,15 +47,13 @@ let favoriteInstruments = [];
 const lastViewedInstruments = [];
 let choosenPeriods = [AVAILABLE_PERIODS.get('5m'), AVAILABLE_PERIODS.get('1h')];
 let activePeriod = choosenPeriods[choosenPeriods.length - 1];
-let finishDatePointUnix = moment().startOf('hour').unix();
-let originalFinishDatePointUnix = finishDatePointUnix;
 
+const nowUnix = getUnix();
 const windowHeight = window.innerHeight;
 
 const settings = {
   chart: {
     limitCandlesPerChart: 1000,
-    // numberCandlesForHistoryBorders: 480, // 480 = 20 * 24
   },
 
   figureLevels: {
@@ -64,16 +61,17 @@ const settings = {
     colorFor1hLevels: constants.BLUE_COLOR,
     colorFor1dLevels: constants.GREEN_COLOR,
     percentForMovingToNearestFigureLevel: 5,
-
-    distanceFromLeftSide: 100,
-    distanceFromRightSide: 100,
-    // timeRenew: 86400,
   },
 
   figureLines: {
     colorFor5mLines: constants.DARK_BLUE_COLOR,
     colorFor1hLines: constants.BLUE_COLOR,
     colorFor1dLines: constants.GREEN_COLOR,
+  },
+
+  instrumentVolumes: {
+    isBidColor: constants.RED_COLOR,
+    isAskColor: constants.GREEN_COLOR,
   },
 
   movingAverage: {
@@ -95,9 +93,20 @@ const trading = new Trading();
 const urlSearchParams = new URLSearchParams(window.location.search);
 const params = Object.fromEntries(urlSearchParams.entries());
 
+wsClient.onmessage = async data => {
+  const parsedData = JSON.parse(data.data);
+
+  if (parsedData.actionName) {
+    switch (parsedData.actionName) {
+      case 'futuresCandle5mData': updateLastCandle(parsedData.data, AVAILABLE_PERIODS.get('5m')); break;
+      case 'futuresCandle1hData': updateLastCandle(parsedData.data, AVAILABLE_PERIODS.get('1h')); break;
+      default: break;
+    }
+  }
+};
+
 /* JQuery */
 const $settings = $('.settings');
-const $finishDatePoint = $settings.find('.finish-date-point input[type="text"]');
 
 const $trades = $('.trades');
 const $chartsContainer = $('.charts-container');
@@ -110,14 +119,14 @@ $(document).ready(async () => {
 
   trading.init();
   setStartSettings();
-  trading.loadHistoryTrades();
-
-  // saveSettingsToLocalStorage({ finishDatePointUnix: false });
-
-  setHistoryMoment();
+  // trading.loadHistoryTrades();
 
   // removeFigureLinesFromLocalStorage({});
   // removeFigureLevelsFromLocalStorage({});
+
+  wsClient.send(JSON.stringify({
+    actionName: 'unsubscribeFromAll',
+  }));
 
   $instrumentsContainer
     .css({ maxHeight: windowHeight });
@@ -183,21 +192,12 @@ $(document).ready(async () => {
         clearInstrumentData({ instrumentId: choosenInstrumentId });
       }
 
-      if (isSingleDateCounter) {
-        finishDatePointUnix = originalFinishDatePointUnix;
-      }
-
       $instrumentsList
         .find('.instrument')
         .removeClass('is_active');
 
       $instrument.addClass('is_active');
       await reloadCharts(instrumentId);
-
-      // todo: n
-      // if (choosenPeriod === AVAILABLE_PERIODS.get('5m')) {
-      //   splitDays({ instrumentId });
-      // }
 
       choosenInstrumentId = instrumentId;
     })
@@ -250,7 +250,7 @@ $(document).ready(async () => {
 
   $('#settings')
     .on('click', async () => {
-      await renewFigureLevels();
+
     });
 
   $chartsContainer
@@ -312,11 +312,6 @@ $(document).ready(async () => {
           drawLimitOrders({ instrumentId }, order);
         });
       }
-
-      // todo: n
-      // if (choosenPeriod === AVAILABLE_PERIODS.get('5m')) {
-      //   splitDays({ instrumentId });
-      // }
     })
     .on('click', '.drawing div', function () {
       if (!choosenInstrumentId) {
@@ -345,25 +340,6 @@ $(document).ready(async () => {
           linePoints = [];
         }
       }
-    });
-
-  $settings.find('.single-date-counter input[type="checkbox"]')
-    .change(function () {
-      isSingleDateCounter = this.checked;
-      saveSettingsToLocalStorage({ isSingleDateCounter });
-    });
-
-  $finishDatePoint
-    .on('change', function () {
-      let value = $(this).val();
-
-      // 03.07.2021 12:20
-
-      if (value.includes(' ')) {
-        value = moment.utc(value, 'DD.MM.YYYY HH:mm').unix();
-      }
-
-      changeFinishDatePoint(value);
     });
 
   if (params.symbol) {
@@ -409,10 +385,7 @@ $(document).ready(async () => {
         return true;
       }
 
-      if (e.keyCode === 93) {
-        // ]
-        nextTick();
-      } else if (e.keyCode === 27) {
+      if (e.keyCode === 27) {
         // ESC
         trading.$tradingForm.removeClass('is_active');
         $instrumentsContainer.removeClass('is_active');
@@ -434,9 +407,6 @@ $(document).ready(async () => {
         // 3
         $chartsContainer.find(`.chart-periods .${AVAILABLE_PERIODS.get('1d')}`).click();
         // */
-      } else if (e.keyCode === 190) {
-        // >
-        await moveToNextFigureLevel();
       } else if (e.keyCode === 82) {
         // R
         if (choosenInstrumentId) {
@@ -490,9 +460,6 @@ $(document).ready(async () => {
       } else if (e.keyCode === 219) {
         // [
         trading.$tradingForm.find('.action-block .sell button').click();
-      } else if (e.keyCode === 72) {
-        // H
-        await setHistoryMoment(choosenInstrumentId);
       } else if (e.keyCode === 76) {
         // L
         $instrumentsContainer.toggleClass('is_active');
@@ -501,7 +468,7 @@ $(document).ready(async () => {
         if (isActiveInstrumentChoosing) {
           const lastCandles = await getLastCandles();
           calculateFigureLevelsPercents(lastCandles);
-          // calculatePriceLeaders(activePeriod, lastCandles);
+          calculatePriceLeaders(activePeriod, lastCandles);
           sortListInstruments();
         }
       } else if (e.keyCode === 83) {
@@ -528,6 +495,8 @@ $(document).ready(async () => {
           const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
 
           if (choosedFigureShape.isFigureLevel) {
+            // todo: is_active: false in db
+
             removeFigureLevelsFromLocalStorage({
               instrumentId: instrumentDoc._id,
               seriesId: choosedFigureShape.seriesId,
@@ -571,6 +540,16 @@ const reloadCharts = async (instrumentId) => {
 
   const figureLinesData = getFigureLinesFromLocalStorage({ instrumentId });
   drawFigureLines({ instrumentId }, figureLinesData);
+
+  /*
+  const instrumentVolumeBounds = await getInstrumentVolumeBounds(instrumentId);
+  drawInstrumentVolumeBounds({ instrumentId }, instrumentVolumeBounds.map(b => ({
+    value: b.price,
+    isAsk: b.is_ask,
+    volumeStartedAt: b.volume_started_at,
+    volumeEndedAt: b.volume_ended_at,
+  })));
+  // */
 };
 
 const clearInstrumentData = ({ instrumentId }) => {
@@ -599,7 +578,6 @@ const clearInstrumentData = ({ instrumentId }) => {
 
   // trading.trades = [];
   trading.limitOrders = [];
-  // todo: finish active trades
 };
 
 const sortPeriods = (periods = []) => {
@@ -640,504 +618,17 @@ const loadCandles = async ({
     const getCandlesOptions = {
       period,
       instrumentId,
-      endTime: moment.unix(finishDatePointUnix),
     };
 
     if (period === AVAILABLE_PERIODS.get('5m')) {
       const startTime = (settings.chart.limitCandlesPerChart * 5);
-      getCandlesOptions.startTime = moment.unix(finishDatePointUnix).add(-startTime, 'minutes');
+      getCandlesOptions.startTime = moment().add(-startTime, 'minutes');
     } else if (period === AVAILABLE_PERIODS.get('1h')) {
-      getCandlesOptions.startTime = moment.unix(finishDatePointUnix).add(-settings.chart.limitCandlesPerChart, 'hours');
-
-      const value = (finishDatePointUnix % 3600);
-
-      if (value) {
-        getCandlesOptions.endTime.add(-value, 'seconds');
-      }
-    } else if (period === AVAILABLE_PERIODS.get('1d')) {
-      const value = (finishDatePointUnix % 86400);
-
-      if (value) {
-        getCandlesOptions.endTime.add(-value, 'seconds');
-      }
+      getCandlesOptions.startTime = moment().add(-settings.chart.limitCandlesPerChart, 'hours');
     }
 
     const instrumentDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
     instrumentDoc[`candles_data_${period}`] = await getCandlesData(getCandlesOptions);
-  }
-};
-
-const setHistoryMoment = async () => {
-  /*
-  const number1hCandles = instrumentDoc.original_candles_data_1h.length;
-  const randNumber = getRandomNumber(
-    settings.chart.numberCandlesForHistoryBorders,
-    number1hCandles - settings.chart.numberCandlesForHistoryBorders,
-  );
-  const targetCandleTime = getUnix(instrumentDoc.original_candles_data_1h[randNumber].time);
-  */
-
-  /*
-  const number5mCandles = instrumentDoc.original_candles_data_5m.length;
-  const first5mCandle = instrumentDoc.original_candles_data_5m[number5mCandles - 1];
-  const targetCandleTime = moment(first5mCandle.time).endOf('day').unix() + 1;
-  // */
-
-  // 1 August 2021
-
-  const settings = getSettingsFromLocalStorage();
-
-  if (settings.finishDatePointUnix) {
-    changeFinishDatePoint(settings.finishDatePointUnix);
-
-    if (activePeriod !== AVAILABLE_PERIODS.get('5m')) {
-      const divider = activePeriod === AVAILABLE_PERIODS.get('1h') ? 3600 : 86400;
-      const decrementValue = finishDatePointUnix % divider;
-
-      if (decrementValue !== 0) {
-        finishDatePointUnix -= decrementValue;
-      }
-    }
-  } else {
-    const dateUnix = moment({ day: 1, month: 2, year: 2022 }).unix();
-    changeFinishDatePoint(dateUnix);
-  }
-
-  if (choosenInstrumentId) {
-    await loadCandles({ instrumentId: choosenInstrumentId }, choosenPeriods);
-
-    loadCharts({ instrumentId: choosenInstrumentId });
-
-    // todo: n
-    // if (choosenPeriod === AVAILABLE_PERIODS.get('5m')) {
-    //   splitDays({ instrumentId: choosenInstrumentId });
-    // }
-  }
-};
-
-const updateCandlesForNextTick = async (instrumentDoc, period, newCandles = []) => {
-  const { originalData } = instrumentDoc[`chart_candles_${period}`];
-
-  const chartCandles = instrumentDoc[`chart_candles_${period}`];
-  const indicatorVolume = instrumentDoc[`indicator_volume_${period}`];
-  const indicatorVolumeAverage = instrumentDoc[`indicator_volume_average_${period}`];
-  const indicatorMovingAverageShort = instrumentDoc[`indicator_moving_average_short_${period}`];
-  const indicatorMovingAverageMedium = instrumentDoc[`indicator_moving_average_medium_${period}`];
-  const indicatorMovingAverageLong = instrumentDoc[`indicator_moving_average_long_${period}`];
-
-  let preparedData = [];
-  let figureLinesExtraSeries = [];
-  let figureLevelsExtraSeries = [];
-  const isChangeable = newCandles.length;
-
-  if (!isChangeable) {
-    const getCandlesOptions = {
-      period,
-      instrumentId: instrumentDoc._id,
-      startTime: moment.unix(originalData[originalData.length - 1].originalTimeUnix),
-      endTime: moment.unix(finishDatePointUnix),
-    };
-
-    newCandles = await getCandlesData(getCandlesOptions);
-
-    preparedData = chartCandles.prepareNewData(newCandles.map(c => ({
-      ...c,
-      time: period === AVAILABLE_PERIODS.get('1d') ? c.time : getUnix(c.time) * 1000,
-    })), false);
-
-    instrumentDoc[`candles_data_${period}`].unshift(...newCandles);
-
-    figureLevelsExtraSeries = chartCandles.extraSeries.filter(s => s.isFigureLevel);
-    figureLinesExtraSeries = chartCandles.extraSeries.filter(
-      s => s.isFigureLine && s.isActive && s.timeframe === period,
-    );
-  } else {
-    preparedData = newCandles.map(c => {
-      const currentCandle = instrumentDoc[`candles_data_${period}`][0];
-
-      if (getUnix(currentCandle.time) === c.originalTimeUnix) {
-        const { volume, data } = currentCandle;
-        let [open, close, low, high] = data;
-
-        if (c.low < low) {
-          low = c.low;
-        }
-
-        if (c.high > high) {
-          high = c.high;
-        }
-
-        const commonVolume = volume + c.volume;
-        instrumentDoc[`candles_data_${period}`][0] = {
-          ...currentCandle,
-          volume: commonVolume,
-          data: [open, c.close, low, high],
-        };
-
-        return {
-          ...c,
-          volume: commonVolume,
-          open,
-          close: c.close,
-          low,
-          high,
-          isFinished: true,
-        };
-      } else {
-        instrumentDoc[`candles_data_${period}`].unshift({
-          volume: c.volume,
-          instrument_id: instrumentDoc._id,
-          data: [c.open, c.close, c.low, c.high],
-          time: new Date(c.originalTimeUnix * 1000).toUTCString(),
-        });
-
-        c.isFinished = false;
-        return c;
-      }
-    });
-  }
-
-  preparedData.forEach(d => {
-    chartCandles.drawSeries(chartCandles.mainSeries, d);
-    indicatorVolume.drawSeries(indicatorVolume.mainSeries, {
-      value: d.volume,
-      time: d.originalTimeUnix,
-    });
-
-    let lCandles = chartCandles.originalData.length;
-
-    if (chartCandles.originalData[lCandles - 1].originalTimeUnix !== d.originalTimeUnix) {
-      chartCandles.originalData.push(d);
-    } else {
-      chartCandles.originalData[lCandles - 1] = d;
-    }
-
-    const candlesData = chartCandles.originalData;
-    lCandles = candlesData.length;
-
-    let calculatedData;
-    const targetCandlesPeriod = candlesData.slice(
-      lCandles - (settings.periodForLongMA * 2), lCandles,
-    );
-
-    calculatedData = indicatorVolumeAverage.calculateData(targetCandlesPeriod);
-
-    indicatorVolumeAverage.drawSeries(
-      indicatorVolumeAverage.mainSeries,
-      calculatedData[calculatedData.length - 1],
-    );
-
-    calculatedData = indicatorMovingAverageShort.calculateData(targetCandlesPeriod);
-
-    indicatorMovingAverageShort.drawSeries(
-      indicatorMovingAverageShort.mainSeries,
-      calculatedData[calculatedData.length - 1],
-    );
-
-    calculatedData = indicatorMovingAverageMedium.calculateData(targetCandlesPeriod);
-
-    indicatorMovingAverageMedium.drawSeries(
-      indicatorMovingAverageMedium.mainSeries,
-      calculatedData[calculatedData.length - 1],
-    );
-
-    calculatedData = indicatorMovingAverageLong.calculateData(targetCandlesPeriod);
-
-    indicatorMovingAverageLong.drawSeries(
-      indicatorMovingAverageLong.mainSeries,
-      calculatedData[calculatedData.length - 1],
-    );
-
-    figureLinesExtraSeries.forEach(s => {
-      s.linePoints[1].value += s.isLong ? s.reduceValue : -s.reduceValue;
-      s.linePoints[1].time = d.originalTimeUnix;
-
-      chartCandles.drawSeries(s, s.linePoints);
-    });
-  });
-
-  const { originalTimeUnix, isFinished } = preparedData[preparedData.length - 1];
-
-  figureLevelsExtraSeries.forEach(s => {
-    chartCandles.drawSeries(s, {
-      value: s.value,
-      time: originalTimeUnix,
-    });
-  });
-
-  if (!isChangeable || !isFinished) {
-    const activeTrade = trading.trades.reverse().find(t => t.isActive);
-
-    if (activeTrade) {
-      const targetSeries = chartCandles.extraSeries.filter(
-        s => s.isTrade && s.id.includes(activeTrade.id),
-      );
-
-      let validTime = originalTimeUnix;
-
-      if (period === AVAILABLE_PERIODS.get('1h')) {
-        validTime -= validTime % 3600;
-      } else if (period === AVAILABLE_PERIODS.get('1d')) {
-        validTime -= validTime % 86400;
-      }
-
-      targetSeries.forEach(s => {
-        chartCandles.drawSeries(s, {
-          value: s.value,
-          time: validTime,
-        });
-      });
-    }
-
-    trading.limitOrders.forEach(order => {
-      const targetSeries = chartCandles.extraSeries.filter(
-        s => s.isLimitOrder && s.id.includes(order.id),
-      );
-
-      let validTime = originalTimeUnix;
-
-      if (period === AVAILABLE_PERIODS.get('1h')) {
-        validTime -= validTime % 3600;
-      } else if (period === AVAILABLE_PERIODS.get('1d')) {
-        validTime -= validTime % 86400;
-      }
-
-      targetSeries.forEach(s => {
-        chartCandles.drawSeries(s, {
-          value: s.value,
-          time: validTime,
-        });
-      });
-    });
-  }
-
-  return preparedData;
-};
-
-const nextTick = async () => {
-  if (isLoading) {
-    return;
-  }
-
-  isLoading = true;
-
-  const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
-  let incrementValue = 300;
-
-  if (activePeriod === AVAILABLE_PERIODS.get('1h')) {
-    incrementValue = 3600;
-  } else if (activePeriod === AVAILABLE_PERIODS.get('1d')) {
-    incrementValue = 86400;
-  }
-
-  finishDatePointUnix += incrementValue;
-
-  if (!isSingleDateCounter) {
-    changeFinishDatePoint(finishDatePointUnix);
-  }
-
-  const newCandles = await updateCandlesForNextTick(instrumentDoc, activePeriod);
-
-  if (activePeriod === AVAILABLE_PERIODS.get('5m')) {
-    if (choosenPeriods.includes(AVAILABLE_PERIODS.get('1h'))) {
-      const divider = newCandles[0].originalTimeUnix % 3600;
-      const originalTimeUnix = newCandles[0].originalTimeUnix - divider;
-
-      const newCandle = {
-        ...newCandles[0],
-        originalTimeUnix,
-        time: originalTimeUnix,
-        originalTime: new Date(originalTimeUnix * 1000),
-      };
-
-      await updateCandlesForNextTick(instrumentDoc, AVAILABLE_PERIODS.get('1h'), [newCandle]);
-    }
-
-    if (choosenPeriods.includes(AVAILABLE_PERIODS.get('1d'))) {
-      const divider = newCandles[0].originalTimeUnix % 86400;
-      const originalTimeUnix = newCandles[0].originalTimeUnix - divider;
-
-      const newCandle = {
-        ...newCandles[0],
-        originalTimeUnix,
-        time: originalTimeUnix,
-        originalTime: new Date(newCandles[0].originalTimeUnix * 1000),
-      };
-
-      await updateCandlesForNextTick(instrumentDoc, AVAILABLE_PERIODS.get('1d'), [newCandle]);
-    }
-  } else if (activePeriod === AVAILABLE_PERIODS.get('1h')) {
-    if (choosenPeriods.includes(AVAILABLE_PERIODS.get('5m'))) {
-      await updateCandlesForNextTick(instrumentDoc, AVAILABLE_PERIODS.get('5m'));
-    }
-
-    if (choosenPeriods.includes(AVAILABLE_PERIODS.get('1d'))) {
-      const divider = newCandles[0].originalTimeUnix % 86400;
-      const originalTimeUnix = newCandles[0].originalTimeUnix - divider;
-
-      const newCandle = {
-        ...newCandles[0],
-        originalTimeUnix,
-        time: originalTimeUnix,
-        originalTime: new Date(newCandles[0].originalTimeUnix * 1000),
-      };
-
-      await updateCandlesForNextTick(instrumentDoc, AVAILABLE_PERIODS.get('1d'), [newCandle]);
-    }
-  } else if (activePeriod === AVAILABLE_PERIODS.get('1d')) {
-    if (choosenPeriods.includes(AVAILABLE_PERIODS.get('5m'))) {
-      await updateCandlesForNextTick(instrumentDoc, AVAILABLE_PERIODS.get('5m'));
-    }
-
-    if (choosenPeriods.includes(AVAILABLE_PERIODS.get('1h'))) {
-      await updateCandlesForNextTick(instrumentDoc, AVAILABLE_PERIODS.get('1h'));
-    }
-  }
-
-  isLoading = false;
-  const lastCandle = newCandles[newCandles.length - 1];
-  instrumentDoc.price = lastCandle.close;
-
-  const wasTrade = trading.checkLimitOrders(instrumentDoc, lastCandle, choosenPeriods);
-  trading.nextTick(instrumentDoc, lastCandle, choosenPeriods, wasTrade);
-
-  // const trades = trading.calculateTradesProfit({ price: lastCandle.close }, true);
-  // Trading.updateTradesInTradeList(trades);
-
-  if (isActiveInstrumentChoosing) {
-    const lastCandles = await getLastCandles();
-    calculateFigureLevelsPercents(lastCandles);
-    // calculatePriceLeaders(activePeriod, lastCandles);
-    sortListInstruments();
-  }
-};
-
-const moveToNextFigureLevel = async () => {
-  if (!choosenInstrumentId || activePeriod === AVAILABLE_PERIODS.get('1d')) {
-    return true;
-  }
-
-  const figureLevels = getFigureLevelsFromLocalStorage({ instrumentId: choosenInstrumentId });
-
-  if (!figureLevels.length) {
-    return true;
-  }
-
-  const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
-  const chartCandles = instrumentDoc[`chart_candles_${activePeriod}`];
-
-  document.previousTitle = document.title;
-  document.title = `${instrumentDoc.name} ...`;
-
-  const lastCandle = instrumentDoc[`candles_data_${activePeriod}`][0];
-  let lastCandleTimeUnix = getUnix(lastCandle.time);
-
-  let incrementValue = 300;
-  if (activePeriod === AVAILABLE_PERIODS.get('1h')) {
-    incrementValue = 3600;
-  } else if (activePeriod === AVAILABLE_PERIODS.get('1d')) {
-    incrementValue = 86400;
-  }
-
-  let isSuccess = false;
-
-  let candles1h = await getCandlesData({
-    instrumentId: instrumentDoc._id,
-    period: AVAILABLE_PERIODS.get('1h'),
-
-    endTime: moment.unix(lastCandleTimeUnix),
-  });
-
-  candles1h = chartCandles.prepareNewData(candles1h, false);
-  const startFinishDatePointUnix = finishDatePointUnix;
-
-  await (async () => {
-    while (1) {
-      const incrementTime = lastCandleTimeUnix + (incrementValue * 500);
-
-      const getCandlesOptions = {
-        period: activePeriod,
-        instrumentId: instrumentDoc._id,
-
-        startTime: moment.unix(lastCandleTimeUnix),
-        endTime: moment.unix(incrementTime),
-      };
-
-      let candles = await getCandlesData(getCandlesOptions);
-      if (!candles.length) break;
-
-      lastCandleTimeUnix = getUnix(candles[0].time);
-      candles = candles.reverse();
-
-      for await (const candle of candles) {
-        const price = candle.data[1];
-        const candleTimeUnix = getUnix(candle.time);
-
-        if (candleTimeUnix % 86400 === 0) {
-          const newCandles1h = await getCandlesData({
-            instrumentId: instrumentDoc._id,
-            period: AVAILABLE_PERIODS.get('1h'),
-
-            endTime: moment.unix(candleTimeUnix),
-            startTime: moment.unix(candles1h[candles1h.length - 1].originalTimeUnix),
-          });
-
-          candles1h.push(...chartCandles.prepareNewData(newCandles1h));
-
-          const calculatedFigureLevels = calculateNewFigureLevels(candles1h);
-          const newFigureLevels = calculatedFigureLevels
-            .filter(cL => !figureLevels.some(fL => fL.value === cL.levelPrice))
-            .map(fL => ({
-              instrumentId: instrumentDoc._id,
-              timeframe: AVAILABLE_PERIODS.get('1h'),
-              seriesId: (ChartCandles.getNewSeriesId() - fL.levelPrice).toString().replace('.', ''),
-
-              isLong: fL.isLong,
-              value: fL.levelPrice,
-              time: fL.startOfLevelUnix,
-            }));
-
-          if (newFigureLevels.length) {
-            figureLevels.push(...newFigureLevels);
-            saveFigureLevelsToLocalStorage(newFigureLevels);
-            drawFigureLevels({ instrumentId: instrumentDoc._id }, newFigureLevels);
-          }
-        }
-
-        const result = figureLevels.every(figureLevel => {
-          const difference = Math.abs(price - figureLevel.value);
-          const percentPerPrice = 100 / (price / difference);
-
-          if (percentPerPrice <= settings.figureLevels.percentForMovingToNearestFigureLevel) {
-            isSuccess = true;
-            finishDatePointUnix = getUnix(candle.time) + incrementValue;
-            return false;
-          }
-
-          return true;
-        });
-
-        if (!result) {
-          break;
-        }
-      }
-
-      if (isSuccess) {
-        break;
-      }
-    }
-  })();
-
-  document.title = document.previousTitle;
-
-  if (isSuccess) {
-    const difference = finishDatePointUnix - startFinishDatePointUnix;
-
-    const days = parseInt(difference / 86400, 10);
-    const hours = parseInt((difference % 86400) / 3600, 10);
-    alert(`d: ${days}; h: ${hours}`);
-
-    await reloadCharts(choosenInstrumentId);
   }
 };
 
@@ -1393,6 +884,14 @@ const loadCharts = ({
       }
     });
 
+    wsClient.send(JSON.stringify({
+      actionName: 'subscribe',
+      data: {
+        subscriptionName: `futuresCandle${period}Data`,
+        instrumentId: instrumentDoc._id,
+      },
+    }));
+
     const $ruler = $chartContainer.find('span.ruler');
     const $legend = $chartContainer.find('.legend');
     const $low = $legend.find('span.low');
@@ -1627,95 +1126,6 @@ const fillLastViewedInstruments = (instrumentId) => {
   });
 };
 
-const splitDays = ({ instrumentId }) => {
-  const instrumentDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
-
-  const chartCandles = instrumentDoc.chart_candles;
-  let { originalData } = chartCandles;
-
-  if (!originalData || !originalData.length) {
-    return [];
-  }
-
-  const firstCandle = originalData[0];
-
-  // skip not full hour
-  const divider = firstCandle.originalTimeUnix % 86400;
-
-  if (divider !== 0) {
-    const startOfNextDayUnix = (firstCandle.originalTimeUnix - divider) + 86400;
-
-    let increment = 1;
-    let startIndex = false;
-
-    while (1) {
-      const candle = originalData[increment];
-
-      if (!candle) {
-        break;
-      }
-
-      if (candle.originalTimeUnix === startOfNextDayUnix) {
-        startIndex = increment;
-        break;
-      }
-
-      increment += 1;
-    }
-
-    if (!startIndex) {
-      return [];
-    }
-
-    originalData = originalData.slice(startIndex, originalData.length);
-  }
-
-  const intervals = [];
-  let newInterval = [originalData[0]];
-  const lOriginalData = originalData.length;
-
-  let day = new Date(originalData[0].originalTime).getUTCDate();
-
-  for (let i = 1; i < lOriginalData; i += 1) {
-    const dayOfCandle = new Date(originalData[i].originalTime).getUTCDate();
-
-    if (dayOfCandle !== day) {
-      day = dayOfCandle;
-
-      intervals.push({
-        startOfPeriodUnix: newInterval[0].originalTimeUnix,
-        endOfPeriodUnix: newInterval[newInterval.length - 1].originalTimeUnix,
-      });
-
-      newInterval = [originalData[i]];
-      continue;
-    }
-
-    newInterval.push(originalData[i]);
-  }
-
-  intervals.push({
-    startOfPeriodUnix: newInterval[0].originalTimeUnix,
-    endOfPeriodUnix: newInterval[newInterval.length - 1].originalTimeUnix,
-  });
-
-  intervals.forEach(interval => {
-    const newCandleExtraSeries = chartCandles.addExtraSeries({
-      lastValueVisible: false,
-    });
-
-    chartCandles.drawSeries(newCandleExtraSeries, [{
-      value: 0,
-      time: interval.startOfPeriodUnix,
-    }, {
-      value: instrumentDoc.price * 5,
-      time: interval.startOfPeriodUnix,
-    }]);
-  });
-
-  return intervals;
-};
-
 const renderListInstruments = (instrumentsDocs) => {
   let appendInstrumentsStr = '';
 
@@ -1763,29 +1173,6 @@ const changeSortSettings = (type, isLong) => {
 
   saveSettingsToLocalStorage({ choosenSortSettings });
   return true;
-};
-
-const changeFinishDatePoint = (newValue) => {
-  let newDate;
-
-  if (Number.isInteger(parseInt(newValue, 10))) {
-    newDate = moment.unix(newValue);
-  } else {
-    newDate = moment(newValue);
-  }
-
-  if (!newDate.isValid()) {
-    alert('Invalid date');
-    return true;
-  }
-
-  newDate.utc();
-
-  finishDatePointUnix = newDate.unix();
-  originalFinishDatePointUnix = finishDatePointUnix;
-  saveSettingsToLocalStorage({ finishDatePointUnix });
-  $finishDatePoint.val(finishDatePointUnix);
-  $finishDatePoint.parent().find('span').text(newDate.format('DD.MM.YYYY HH:mm'));
 };
 
 const drawFigureLines = ({ instrumentId }, figureLinesData = [], periods = choosenPeriods) => {
@@ -1869,18 +1256,6 @@ const drawFigureLevels = ({ instrumentId }, figureLevelsData = []) => {
 
     if (!lCandles) return;
 
-    /*
-    if (period === AVAILABLE_PERIODS.get('5m')) {
-      const last5mCandle = candlesData[0];
-
-      figureLevelsData.forEach(figureLevel => {
-        if (figureLevel.time < last5mCandle.originalTimeUnix) {
-          figureLevel.time = last5mCandle.originalTimeUnix;
-        }
-      });
-    }
-    */
-
     const firstCandleTime = candlesData[0].originalTimeUnix;
 
     figureLevelsData.forEach(({
@@ -1933,6 +1308,78 @@ const drawFigureLevels = ({ instrumentId }, figureLevelsData = []) => {
         }, {
           value,
           time: candlesData[lCandles - 1].originalTimeUnix,
+        }],
+      );
+    });
+  });
+};
+
+const drawInstrumentVolumeBounds = ({ instrumentId }, data = []) => {
+  if (!data.length) return;
+
+  const instrumentDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
+
+  choosenPeriods.forEach(period => {
+    if (period !== AVAILABLE_PERIODS.get('5m')) {
+      return;
+    }
+
+    const chartCandles = instrumentDoc[`chart_candles_${period}`];
+    const candlesData = chartCandles.originalData;
+    const lCandles = candlesData.length;
+
+    if (!lCandles) return;
+
+    if (period !== AVAILABLE_PERIODS.get('5m')) {
+      const startOfEntity = period === AVAILABLE_PERIODS.get('1h') ? 'hour' : 'day';
+
+      data.forEach(d => {
+        d.volumeStartedAt = moment.unix(d.volumeStartedAt).utc().startOf(startOfEntity).unix();
+        d.volumeEndedAt = moment.unix(d.volumeEndedAt).utc().startOf(startOfEntity).unix();
+      });
+    } else {
+      const coeff = 5 * 60 * 1000;
+
+      data.forEach(d => {
+        const ms = getUnix(d.volumeStartedAt) * 1000;
+        d.volumeEndedAt = (Math.ceil((getUnix(d.volumeEndedAt) * 1000) / coeff) * coeff) / 1000;
+        d.volumeStartedAt = ((Math.ceil(ms / coeff) * coeff) / 1000) - 300;
+      });
+    }
+
+    const firstCandleTime = candlesData[0].originalTimeUnix;
+    data = data
+      .filter(d => !d.isActive)
+      .filter(d => d.volumeStartedAt >= firstCandleTime);
+
+    console.log('data', data);
+    // todo: isActive, flags
+
+    data.forEach(({
+      volumeStartedAt, volumeEndedAt, value, isAsk,
+    }) => {
+      const color = isAsk
+        ? settings.instrumentVolumes.isAskColor
+        : settings.instrumentVolumes.isBidColor;
+
+      const newSeries = chartCandles.addExtraSeries({
+        color,
+        lineStyle: 0,
+        lastValueVisible: false,
+      }, {
+        value,
+        time: volumeStartedAt,
+        isInstrumentVolume: true,
+      });
+
+      chartCandles.drawSeries(
+        newSeries,
+        [{
+          value,
+          time: volumeStartedAt,
+        }, {
+          value,
+          time: volumeEndedAt,
         }],
       );
     });
@@ -2021,6 +1468,117 @@ const drawLimitOrders = ({ instrumentId }, limitOrder, periods = []) => {
   });
 };
 
+const updateLastCandle = (data, period) => {
+  if (data.instrumentId !== choosenInstrumentId
+    || !choosenPeriods.includes(period)) {
+    return true;
+  }
+
+  const instrumentDoc = instrumentsDocs.find(doc => doc._id === data.instrumentId);
+
+  const chartCandles = instrumentDoc[`chart_candles_${period}`];
+  const indicatorVolume = instrumentDoc[`indicator_volume_${period}`];
+  const indicatorVolumeAverage = instrumentDoc[`indicator_volume_average_${period}`];
+  const indicatorMovingAverageShort = instrumentDoc[`indicator_moving_average_short_${period}`];
+  const indicatorMovingAverageMedium = instrumentDoc[`indicator_moving_average_medium_${period}`];
+  const indicatorMovingAverageLong = instrumentDoc[`indicator_moving_average_long_${period}`];
+
+  const candlesData = chartCandles.originalData;
+  let lCandles = candlesData.length;
+
+  const {
+    startTime,
+    open,
+    close,
+    high,
+    low,
+    volume,
+    isClosed,
+  } = data;
+
+  const preparedData = chartCandles.prepareNewData([{
+    time: startTime,
+    data: [open, close, low, high],
+    volume,
+  }], false)[0];
+
+  if (!isClosed) {
+    candlesData[lCandles - 1] = preparedData;
+  } else {
+    candlesData.push(preparedData);
+    lCandles += 1;
+  }
+
+  chartCandles.drawSeries(chartCandles.mainSeries, preparedData);
+
+  indicatorVolume.drawSeries(indicatorVolume.mainSeries, {
+    value: preparedData.volume,
+    time: preparedData.originalTimeUnix,
+  });
+
+  if (isClosed) {
+    let calculatedData;
+    const targetCandlesPeriod = candlesData.slice(
+      lCandles - (settings.periodForLongMA * 2), lCandles,
+    );
+
+    calculatedData = indicatorVolumeAverage.calculateData(targetCandlesPeriod);
+
+    indicatorVolumeAverage.drawSeries(
+      indicatorVolumeAverage.mainSeries,
+      calculatedData[calculatedData.length - 1],
+    );
+
+    calculatedData = indicatorMovingAverageShort.calculateData(targetCandlesPeriod);
+
+    indicatorMovingAverageShort.drawSeries(
+      indicatorMovingAverageShort.mainSeries,
+      calculatedData[calculatedData.length - 1],
+    );
+
+    calculatedData = indicatorMovingAverageMedium.calculateData(targetCandlesPeriod);
+
+    indicatorMovingAverageMedium.drawSeries(
+      indicatorMovingAverageMedium.mainSeries,
+      calculatedData[calculatedData.length - 1],
+    );
+
+    calculatedData = indicatorMovingAverageLong.calculateData(targetCandlesPeriod);
+
+    indicatorMovingAverageLong.drawSeries(
+      indicatorMovingAverageLong.mainSeries,
+      calculatedData[calculatedData.length - 1],
+    );
+
+    if (instrumentDoc.name === 'BTCUSDTPERP') {
+      setTimeout(async () => {
+        const lastCandles = await getLastCandles();
+        calculateFigureLevelsPercents(lastCandles);
+        calculatePriceLeaders(activePeriod, lastCandles);
+        sortListInstruments();
+      }, 10000);
+    }
+  }
+
+  const figureLevelsExtraSeries = chartCandles.extraSeries.filter(s => s.isFigureLevel);
+  const figureLinesExtraSeries = chartCandles.extraSeries.filter(
+    s => s.isFigureLine && s.isActive && s.timeframe === period,
+  );
+
+  figureLinesExtraSeries.forEach(s => {
+    s.linePoints[1].value += s.isLong ? s.reduceValue : -s.reduceValue;
+    s.linePoints[1].time = preparedData.originalTimeUnix;
+    chartCandles.drawSeries(s, s.linePoints);
+  });
+
+  figureLevelsExtraSeries.forEach(s => {
+    chartCandles.drawSeries(s, {
+      value: s.value,
+      time: preparedData.originalTimeUnix,
+    });
+  });
+};
+
 const toggleFavoriteInstruments = (instrumentId) => {
   const isIncluded = favoriteInstruments.includes(instrumentId);
 
@@ -2035,7 +1593,7 @@ const toggleFavoriteInstruments = (instrumentId) => {
 };
 
 const getFigureLevelsFromLocalStorage = ({ instrumentId }) => {
-  let figureLevels = localStorage.getItem('trading-helper:figure-levels');
+  let figureLevels = localStorage.getItem(`trading-helper:${PAGE_KEY}:figure-levels`);
 
   if (!figureLevels) {
     return [];
@@ -2053,7 +1611,7 @@ const getFigureLevelsFromLocalStorage = ({ instrumentId }) => {
 const saveFigureLevelsToLocalStorage = (figureLevelsData = []) => {
   const figureLevels = getFigureLevelsFromLocalStorage({});
   figureLevels.push(...figureLevelsData);
-  localStorage.setItem('trading-helper:figure-levels', JSON.stringify(figureLevels));
+  localStorage.setItem(`trading-helper:${PAGE_KEY}:figure-levels`, JSON.stringify(figureLevels));
 };
 
 const removeFigureLevelsFromLocalStorage = ({
@@ -2062,7 +1620,7 @@ const removeFigureLevelsFromLocalStorage = ({
   seriesId,
 }) => {
   if (!instrumentId) {
-    localStorage.removeItem('trading-helper:figure-levels');
+    localStorage.removeItem(`trading-helper:${PAGE_KEY}:figure-levels`);
     return;
   }
 
@@ -2070,7 +1628,7 @@ const removeFigureLevelsFromLocalStorage = ({
 
   if (!value && !seriesId) {
     figureLevels = figureLevels.filter(e => e.instrumentId !== instrumentId);
-    localStorage.setItem('trading-helper:figure-levels', JSON.stringify(figureLevels));
+    localStorage.setItem(`trading-helper:${PAGE_KEY}:figure-levels`, JSON.stringify(figureLevels));
     return;
   }
 
@@ -2086,11 +1644,11 @@ const removeFigureLevelsFromLocalStorage = ({
     });
   }
 
-  localStorage.setItem('trading-helper:figure-levels', JSON.stringify(figureLevels));
+  localStorage.setItem(`trading-helper:${PAGE_KEY}:figure-levels`, JSON.stringify(figureLevels));
 };
 
 const getFigureLinesFromLocalStorage = ({ instrumentId }) => {
-  let figureLines = localStorage.getItem('trading-helper:figure-lines');
+  let figureLines = localStorage.getItem(`trading-helper:${PAGE_KEY}:figure-lines`);
 
   if (!figureLines) {
     return [];
@@ -2108,7 +1666,7 @@ const getFigureLinesFromLocalStorage = ({ instrumentId }) => {
 const saveFigureLineToLocalStorage = (figureLineData) => {
   const figureLines = getFigureLinesFromLocalStorage({});
   figureLines.push(figureLineData);
-  localStorage.setItem('trading-helper:figure-lines', JSON.stringify(figureLines));
+  localStorage.setItem(`trading-helper:${PAGE_KEY}:figure-lines`, JSON.stringify(figureLines));
 };
 
 const removeFigureLinesFromLocalStorage = ({
@@ -2116,7 +1674,7 @@ const removeFigureLinesFromLocalStorage = ({
   instrumentId,
 }) => {
   if (!instrumentId) {
-    localStorage.removeItem('trading-helper:figure-lines');
+    localStorage.removeItem(`trading-helper:${PAGE_KEY}:figure-lines`);
     return;
   }
 
@@ -2130,11 +1688,11 @@ const removeFigureLinesFromLocalStorage = ({
     );
   }
 
-  localStorage.setItem('trading-helper:figure-lines', JSON.stringify(figureLines));
+  localStorage.setItem(`trading-helper:${PAGE_KEY}:figure-lines`, JSON.stringify(figureLines));
 };
 
 const getSettingsFromLocalStorage = () => {
-  const settings = localStorage.getItem('trading-helper:settings');
+  const settings = localStorage.getItem(`trading-helper:${PAGE_KEY}:settings`);
   return settings ? JSON.parse(settings) : {};
 };
 
@@ -2146,7 +1704,7 @@ const saveSettingsToLocalStorage = (changes = {}) => {
     ...changes,
   };
 
-  localStorage.setItem('trading-helper:settings', JSON.stringify(newSettings));
+  localStorage.setItem(`trading-helper:${PAGE_KEY}:settings`, JSON.stringify(newSettings));
 };
 
 const setStartSettings = () => {
@@ -2160,17 +1718,8 @@ const setStartSettings = () => {
     activePeriod = settings.activePeriod;
   }
 
-  if (settings.finishDatePointUnix) {
-    changeFinishDatePoint(settings.finishDatePointUnix);
-  }
-
   if (settings.isSinglePeriod !== undefined) {
     isSinglePeriod = settings.isSinglePeriod;
-  }
-
-  if (settings.isSingleDateCounter !== undefined) {
-    isSingleDateCounter = settings.isSingleDateCounter;
-    $settings.find('.single-date-counter input[type="checkbox"]').attr('checked', isSingleDateCounter);
   }
 
   if (settings.choosenSortSettings) {
@@ -2184,6 +1733,27 @@ const setStartSettings = () => {
   if (settings.favoriteInstruments && settings.favoriteInstruments.length) {
     favoriteInstruments = settings.favoriteInstruments;
   }
+};
+
+const getInstrumentVolumeBounds = async (instrumentId) => {
+  const query = {
+    instrumentId,
+  };
+
+  const resultGetBounds = await makeRequest({
+    method: 'GET',
+    url: URL_GET_INSTRUMENT_VOLUME_BOUNDS,
+    query,
+  });
+
+  if (!resultGetBounds || !resultGetBounds.status) {
+    alert(resultGetBounds.message || 'Cant makeRequest URL_GET_INSTRUMENT_VOLUME_BOUNDS');
+    return false;
+  }
+
+  // console.log('finished');
+
+  return resultGetBounds.result;
 };
 
 const getAndSaveUserFigureLevels = async () => {
@@ -2202,31 +1772,6 @@ const getAndSaveUserFigureLevels = async () => {
     alert(resultGetFigureBounds.message || 'Cant makeRequest URL_GET_USER_FIGURE_LEVEL_BOUNDS');
     return false;
   }
-
-  let startTimeUnix = finishDatePointUnix;
-
-  switch (activePeriod) {
-    case AVAILABLE_PERIODS.get('5m'): startTimeUnix -= 300; break;
-    case AVAILABLE_PERIODS.get('1h'): startTimeUnix -= 3600; break;
-    case AVAILABLE_PERIODS.get('1d'): startTimeUnix -= 86400; break;
-    default: break;
-  }
-
-  const getCandlesOptions = {
-    period: activePeriod,
-    startTime: moment.unix(startTimeUnix - 1),
-    endTime: moment.unix(finishDatePointUnix),
-  };
-
-  const lastCandles = await getCandlesData(getCandlesOptions);
-
-  instrumentsDocs.forEach(doc => {
-    const candle = lastCandles.find(c => c.instrument_id === doc._id);
-
-    if (candle) {
-      doc.price = candle.data[1];
-    }
-  });
 
   const figureLevelsData = resultGetFigureBounds.result.map(r => {
     const { price } = instrumentsDocs.find(d => d._id === r.instrument_id);
@@ -2260,13 +1805,7 @@ const calculateFigureLevelsPercents = (lastCandles = []) => {
     return;
   }
 
-  let targetInstrumentsDocs = instrumentsDocs;
-
-  if (isSingleDateCounter && choosenInstrumentId) {
-    targetInstrumentsDocs = [instrumentsDocs.find(d => d._id === choosenInstrumentId)];
-  }
-
-  targetInstrumentsDocs.forEach(doc => {
+  instrumentsDocs.forEach(doc => {
     const instrumentCandle = lastCandles.find(c => c.instrument_id === doc._id);
 
     if (!instrumentCandle) {
@@ -2334,13 +1873,7 @@ const calculatePriceLeaders = (period, lastCandles = []) => {
     return;
   }
 
-  let targetInstrumentsDocs = instrumentsDocs;
-
-  if (isSingleDateCounter && choosenInstrumentId) {
-    targetInstrumentsDocs = [instrumentsDocs.find(d => d._id === choosenInstrumentId)];
-  }
-
-  targetInstrumentsDocs.forEach(doc => {
+  instrumentsDocs.forEach(doc => {
     const candle = lastCandles.find(c => c.instrument_id === doc._id);
 
     if (!candle) {
@@ -2376,10 +1909,6 @@ const calculatePriceLeaders = (period, lastCandles = []) => {
 };
 
 const sortListInstruments = () => {
-  if (isSingleDateCounter) {
-    return true;
-  }
-
   const key = choosenSortSettings.type;
   let sortedInstruments = instrumentsDocs;
 
@@ -2413,24 +1942,19 @@ const sortListInstruments = () => {
 };
 
 const getLastCandles = async () => {
-  let startTimeUnix = finishDatePointUnix;
+  let startTimeUnix = nowUnix;
 
   switch (activePeriod) {
-    case AVAILABLE_PERIODS.get('5m'): startTimeUnix -= 300; break;
-    case AVAILABLE_PERIODS.get('1h'): startTimeUnix -= 3600; break;
-    case AVAILABLE_PERIODS.get('1d'): startTimeUnix -= 86400; break;
+    case AVAILABLE_PERIODS.get('5m'): startTimeUnix -= 300 + (startTimeUnix % 300); break;
+    case AVAILABLE_PERIODS.get('1h'): startTimeUnix -= 3600 + (startTimeUnix % 3600); break;
+    case AVAILABLE_PERIODS.get('1d'): startTimeUnix -= 86400 + (startTimeUnix % 86400); break;
     default: break;
   }
 
   const getCandlesOptions = {
     period: activePeriod,
     startTime: moment.unix(startTimeUnix - 1),
-    endTime: moment.unix(finishDatePointUnix),
   };
-
-  if (isSingleDateCounter && choosenInstrumentId) {
-    getCandlesOptions.instrumentId = choosenInstrumentId;
-  }
 
   return getCandlesData(getCandlesOptions);
 };
@@ -2462,207 +1986,6 @@ const calculateReduceValue = (linePoints, period) => {
 
   const differenceBetweenValues = Math.abs(linePoints[0].value - linePoints[1].value);
   return differenceBetweenValues / numberCandles;
-};
-
-const renewFigureLevels = async () => {
-  console.log('Started renewing process');
-
-  const resultRemoveFigureLevels = await makeRequest({
-    method: 'POST',
-    url: URL_REMOVE_USER_FIGURE_LEVEL_BOUNDS,
-  });
-
-  if (!resultRemoveFigureLevels || !resultRemoveFigureLevels.status) {
-    alert(resultRemoveFigureLevels.message || `Cant makeRequest ${URL_REMOVE_USER_FIGURE_LEVEL_BOUNDS}`);
-    return false;
-  }
-
-  console.log('Old figure levels removed');
-
-  const resultCalculate = await makeRequest({
-    method: 'GET',
-    url: URL_CALCULATE_USER_FIGURE_LEVEL_BOUNDS,
-    query: {
-      endTime: moment.unix(finishDatePointUnix).toISOString(),
-    },
-  });
-
-  if (!resultCalculate || !resultCalculate.status) {
-    alert(resultCalculate.message || `Cant makeRequest ${URL_CALCULATE_USER_FIGURE_LEVEL_BOUNDS}`);
-    return false;
-  }
-
-  console.log('New figure levels calculated and saved');
-
-  removeFigureLevelsFromLocalStorage({});
-  await getAndSaveUserFigureLevels();
-
-  console.log('Renewing process is finished');
-  return true;
-};
-
-const calculateNewFigureLevels = (candles = []) => {
-  const lCandles = candles.length;
-
-  if (!lCandles) {
-    return [];
-  }
-
-  const highLevels = getHighLevels({
-    candles,
-    distanceFromLeftSide: settings.figureLevels.distanceFromLeftSide,
-    distanceFromRightSide: settings.figureLevels.distanceFromRightSide,
-  });
-
-  const lowLevels = [];
-  /*
-  const lowLevels = getLowLevels({
-    candles,
-    distanceFromLeftSide: settings.figureLevels.distanceFromLeftSide,
-    distanceFromRightSide: settings.figureLevels.distanceFromRightSide,
-  });
-  */
-
-  if ((!highLevels || !highLevels.length)
-    && (!lowLevels || !lowLevels.length)) {
-    return [];
-  }
-
-  const levels = [];
-
-  lowLevels.forEach(level => {
-    const doesExistLevelWithThisPrice = levels.some(l => l.levelPrice === level.levelPrice);
-
-    if (!doesExistLevelWithThisPrice) {
-      levels.push({
-        ...level,
-        isLong: false,
-      });
-    }
-  });
-
-  highLevels.forEach(level => {
-    const doesExistLevelWithThisPrice = levels.some(l => l.levelPrice === level.levelPrice);
-
-    if (!doesExistLevelWithThisPrice) {
-      levels.push({
-        ...level,
-        isLong: true,
-      });
-    }
-  });
-
-  return levels;
-};
-
-const getHighLevels = ({
-  candles,
-  distanceFromLeftSide,
-  distanceFromRightSide,
-}) => {
-  if (!candles || !candles.length) {
-    return [];
-  }
-
-  const levels = [];
-  const lCandles = candles.length;
-
-  candles.forEach((candle, index) => {
-    if ((lCandles - index) < distanceFromRightSide) {
-      return true;
-    }
-
-    let isHighest = true;
-    let isHighCrossed = false;
-
-    for (let i = index; i < lCandles; i += 1) {
-      const tmpCandle = candles[i];
-
-      if (tmpCandle.high > candle.high) {
-        isHighCrossed = true;
-        break;
-      }
-    }
-
-    if (!isHighCrossed) {
-      for (let i = 1; i < distanceFromLeftSide + 1; i += 1) {
-        const tmpCandle = candles[index - i];
-
-        if (!tmpCandle) {
-          break;
-        }
-
-        if (tmpCandle.high > candle.high) {
-          isHighest = false;
-          break;
-        }
-      }
-    }
-
-    if (!isHighCrossed && isHighest) {
-      levels.push({
-        levelPrice: candle.high,
-        startOfLevelUnix: candle.originalTimeUnix,
-      });
-    }
-  });
-
-  return levels;
-};
-
-const getLowLevels = ({
-  candles,
-  distanceFromLeftSide,
-  distanceFromRightSide,
-}) => {
-  if (!candles || !candles.length) {
-    return [];
-  }
-
-  const levels = [];
-  const lCandles = candles.length;
-
-  candles.forEach((candle, index) => {
-    if ((lCandles - index) < distanceFromRightSide) {
-      return true;
-    }
-
-    let isLowest = true;
-    let isLowCrossed = false;
-
-    for (let i = index; i < lCandles; i += 1) {
-      const tmpCandle = candles[i];
-
-      if (tmpCandle.low < candle.low) {
-        isLowCrossed = true;
-        break;
-      }
-    }
-
-    if (!isLowCrossed) {
-      for (let i = 1; i < distanceFromLeftSide + 1; i += 1) {
-        const tmpCandle = candles[index - i];
-
-        if (!tmpCandle) {
-          break;
-        }
-
-        if (tmpCandle.low < candle.low) {
-          isLowest = false;
-          break;
-        }
-      }
-    }
-
-    if (!isLowCrossed && isLowest) {
-      levels.push({
-        levelPrice: candle.low,
-        startOfLevelUnix: candle.originalTimeUnix,
-      });
-    }
-  });
-
-  return levels;
 };
 
 const getCandlesData = async ({
