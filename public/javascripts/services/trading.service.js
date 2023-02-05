@@ -7,8 +7,9 @@ classes, LightweightCharts,
 const TRADING_CONSTANTS = {
   MIN_TAKEPROFIT_RELATION: 3,
   MIN_STOPLOSS_PERCENT: 0.2,
+  LOSS_PERCENT_PER_DEPOSIT: 0.5,
   DEFAULT_STOPLOSS_PERCENT: 0.5,
-  MIN_WORK_AMOUNT: 10,
+  MIN_WORK_AMOUNT: 20,
   DEFAULT_NUMBER_TRADES: 5,
 
   MAKER_COMMISSION_PERCENT: 0.02 / 100,
@@ -309,34 +310,56 @@ class Trading {
 
     newTrade.isFilterTarget = newTrade.strategyId === '';
 
-    let quantity = this.workAmount / price;
-    if (quantity < stepSize) {
-      alert('quantity < stepSize');
-      return;
-    }
-
-    const remainder = quantity % stepSize;
-    if (remainder !== 0) {
-      quantity -= remainder;
-
-      if (quantity < stepSize) {
-        alert('quantity < stepSize');
-        return;
-      }
-    }
-
-    quantity *= this.numberTrades;
+    const sumTrade = this.workAmount * this.numberTrades;
+    const allowedSumLoss = sumTrade * (TRADING_CONSTANTS.LOSS_PERCENT_PER_DEPOSIT / 100);
 
     const percentPerPrice = price * (newTrade.stopLossPercent / 100);
     const tickSizePrecision = Trading.getPrecision(instrumentDoc.tick_size); // 0.001
 
-    const stopLossPrice = newTrade.isLong
+    const stopLossPrice = parseFloat((newTrade.isLong
       ? price - percentPerPrice
-      : price + percentPerPrice;
+      : price + percentPerPrice
+    ).toFixed(tickSizePrecision));
 
+    let quantity = sumTrade / price;
+    const profit = Math.abs(((stopLossPrice - price) * quantity));
+    const coefficient = profit / allowedSumLoss;
+
+    if (coefficient > 0) {
+      quantity /= coefficient;
+    } else {
+      alert(`coefficient = ${coefficient}`);
+    }
+
+    let quantityForOneTrade = quantity / this.numberTrades;
+
+    if (quantityForOneTrade < stepSize) {
+      alert('quantity < stepSize (1)');
+      return;
+    }
+
+    const remainder = quantityForOneTrade % stepSize;
+    if (remainder !== 0) {
+      quantityForOneTrade -= remainder;
+
+      if (quantityForOneTrade < stepSize) {
+        alert('quantity < stepSize (2)');
+        return;
+      }
+
+      quantity -= (remainder * this.numberTrades);
+    }
+
+    quantity = parseFloat((quantity).toFixed(stepSizePrecision));
+
+    if (quantity < stepSize) {
+      alert('quantity < stepSize (3)');
+      return;
+    }
+
+    newTrade.quantity = quantity;
+    newTrade.stopLossPrice = stopLossPrice;
     newTrade.takeProfitPrices = [];
-    newTrade.quantity = parseFloat((quantity).toFixed(stepSizePrecision));
-    newTrade.stopLossPrice = parseFloat((stopLossPrice).toFixed(tickSizePrecision));
 
     if (newTrade.isLong) {
       newTrade.buyPrice = price;
@@ -646,7 +669,7 @@ class Trading {
     trades.forEach(trade => {
       if (trade.isLong) {
         const sellPrice = trade.sellPrice || price;
-        trade.profit = (sellPrice - trade.buyPrice) * trade.quantity;
+        trade.profit =  (sellPrice - trade.buyPrice) * trade.quantity;
 
         const differenceBetweenPrices = sellPrice - trade.buyPrice;
         trade.profitPercent = Math.abs(100 / (trade.buyPrice / differenceBetweenPrices));

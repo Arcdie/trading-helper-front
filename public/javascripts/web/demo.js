@@ -6,6 +6,7 @@ classes, ChartCandles, IndicatorVolume, IndicatorMovingAverage, IndicatorVolumeA
 
 /* Constants */
 
+const PAGE_KEY = 'demo';
 const URL_GET_CANDLES = '/api/candles';
 const URL_GET_ACTIVE_INSTRUMENTS = '/api/instruments/active';
 const URL_GET_USER_FIGURE_LEVEL_BOUNDS = '/api/user-figure-level-bounds';
@@ -24,6 +25,14 @@ const AVAILABLE_SORT_OPTIONS = new Map([
   ['priceChange_5m', 'priceChange_5m'],
   ['priceChange_1h', 'priceChange_1h'],
   ['priceChange_1d', 'priceChange_1d'],
+]);
+
+const AVAILABLE_NEXT_EVENTS = new Map([
+  ['figureLevel', 'figureLevel'],
+  ['increasedVolume', 'increasedVolume'],
+  ['priceJump', 'priceJump'],
+  ['absorption', 'absorption'],
+  ['sluggishPrice', 'sluggishPrice'],
 ]);
 
 /* Variables */
@@ -90,6 +99,8 @@ let choosenSortSettings = {
   type: AVAILABLE_SORT_OPTIONS.get('name'),
   isLong: true,
 };
+
+let choosenNextEvent = AVAILABLE_NEXT_EVENTS.get('priceJump');
 
 const trading = new Trading();
 const urlSearchParams = new URLSearchParams(window.location.search);
@@ -436,7 +447,26 @@ $(document).ready(async () => {
         // */
       } else if (e.keyCode === 190) {
         // >
-        await moveToNextFigureLevel();
+
+        if (!choosenInstrumentId) {
+          return true;
+        }
+
+        let execFunc;
+        switch (choosenNextEvent) {
+          case AVAILABLE_NEXT_EVENTS.get('priceJump'): execFunc = moveToNextPriceJump; break;
+          case AVAILABLE_NEXT_EVENTS.get('absorption'): execFunc = moveToNextAbsorption; break;
+          case AVAILABLE_NEXT_EVENTS.get('figureLevel'): execFunc = moveToNextFigureLevel; break;
+          case AVAILABLE_NEXT_EVENTS.get('increasedVolume'): execFunc = moveToNextIncreasedVolume; break;
+          case AVAILABLE_NEXT_EVENTS.get('sluggishPrice'): break;
+          default: alert('No function for this event');
+        }
+
+        if (!execFunc) {
+          return true;
+        }
+
+        await execFunc();
       } else if (e.keyCode === 82) {
         // R
         if (choosenInstrumentId) {
@@ -481,6 +511,9 @@ $(document).ready(async () => {
         }
 
         $instrumentsList.find(`#instrument-${nextInstrumentDoc._id}`).click();
+      } else if (e.keyCode === 79) {
+        // O
+        trading.$tradingForm.find('.risks-block .sl button').click();
       } else if (e.keyCode === 77) {
         // M
         trading.$tradingForm.find('.risks-block .stop-limit button').click();
@@ -1013,7 +1046,7 @@ const nextTick = async () => {
 };
 
 const moveToNextFigureLevel = async () => {
-  if (!choosenInstrumentId || activePeriod === AVAILABLE_PERIODS.get('1d')) {
+  if (activePeriod === AVAILABLE_PERIODS.get('1d')) {
     return true;
   }
 
@@ -1121,6 +1154,247 @@ const moveToNextFigureLevel = async () => {
           break;
         }
       }
+
+      if (isSuccess) {
+        break;
+      }
+    }
+  })();
+
+  document.title = document.previousTitle;
+
+  if (isSuccess) {
+    const difference = finishDatePointUnix - startFinishDatePointUnix;
+
+    const days = parseInt(difference / 86400, 10);
+    const hours = parseInt((difference % 86400) / 3600, 10);
+    alert(`d: ${days}; h: ${hours}`);
+
+    await reloadCharts(choosenInstrumentId);
+  }
+};
+
+const moveToNextPriceJump = async () => {
+  const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
+
+  document.previousTitle = document.title;
+  document.title = `${instrumentDoc.name} ...`;
+
+  const lastCandle = instrumentDoc[`candles_data_${activePeriod}`][0];
+  let lastCandleTimeUnix = getUnix(lastCandle.time);
+
+  let incrementValue = 300;
+  if (activePeriod === AVAILABLE_PERIODS.get('1h')) {
+    incrementValue = 3600;
+  } else if (activePeriod === AVAILABLE_PERIODS.get('1d')) {
+    incrementValue = 86400;
+  }
+
+  let isSuccess = false;
+  const startFinishDatePointUnix = finishDatePointUnix;
+
+  await (async () => {
+    while (1) {
+      const incrementTime = lastCandleTimeUnix + (incrementValue * 500);
+
+      const getCandlesOptions = {
+        period: activePeriod,
+        instrumentId: instrumentDoc._id,
+
+        startTime: moment.unix(lastCandleTimeUnix),
+        endTime: moment.unix(incrementTime),
+      };
+
+      let candles = await getCandlesData(getCandlesOptions);
+      if (!candles.length) break;
+
+      lastCandleTimeUnix = getUnix(candles[0].time);
+      candles = candles.reverse();
+
+      candles.every(candle => {
+        const [open, close] = candle.data;
+        const isLong = close > open;
+        const difference = Math.abs(open - close);
+        const percentPerPrice = 100 / (open / difference);
+
+        if (percentPerPrice >= 3 && isLong) {
+          isSuccess = true;
+          finishDatePointUnix = getUnix(candle.time) + incrementValue;
+          return false;
+        }
+
+        return true;
+      });
+
+      if (isSuccess) {
+        break;
+      }
+    }
+  })();
+
+  document.title = document.previousTitle;
+
+  if (isSuccess) {
+    const difference = finishDatePointUnix - startFinishDatePointUnix;
+
+    const days = parseInt(difference / 86400, 10);
+    const hours = parseInt((difference % 86400) / 3600, 10);
+    alert(`d: ${days}; h: ${hours}`);
+
+    await reloadCharts(choosenInstrumentId);
+  }
+};
+
+const moveToNextAbsorption = async () => {
+  const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
+
+  document.previousTitle = document.title;
+  document.title = `${instrumentDoc.name} ...`;
+
+  const lastCandle = instrumentDoc[`candles_data_${activePeriod}`][0];
+  let lastCandleTimeUnix = getUnix(lastCandle.time);
+
+  let incrementValue = 300;
+  if (activePeriod === AVAILABLE_PERIODS.get('1h')) {
+    incrementValue = 3600;
+  } else if (activePeriod === AVAILABLE_PERIODS.get('1d')) {
+    incrementValue = 86400;
+  }
+
+  let isSuccess = false;
+  const startFinishDatePointUnix = finishDatePointUnix;
+
+  await (async () => {
+    while (1) {
+      const incrementTime = lastCandleTimeUnix + (incrementValue * 500);
+
+      const getCandlesOptions = {
+        period: activePeriod,
+        instrumentId: instrumentDoc._id,
+
+        startTime: moment.unix(lastCandleTimeUnix),
+        endTime: moment.unix(incrementTime),
+      };
+
+      let candles = await getCandlesData(getCandlesOptions);
+      if (!candles.length) break;
+
+      lastCandleTimeUnix = getUnix(candles[0].time);
+      candles = candles.reverse();
+
+      candles.every((candle, index) => {
+        const prevCandle = candles[index - 1];
+
+        if (!prevCandle) {
+          return true;
+        }
+
+        let [open, close] = prevCandle.data;
+        const isLongPrevCandle = close > open;
+        let difference = Math.abs(open - close);
+        const percentPerPricePrevCandle = 100 / (open / difference);
+
+        if (percentPerPricePrevCandle >= 3) {
+          [open, close] = candle.data;
+          const isLong = close > open;
+
+          if (isLongPrevCandle !== isLong) {
+            difference = Math.abs(open - close);
+            const percentPerPrice = 100 / (open / difference);
+
+            if (percentPerPrice >= percentPerPricePrevCandle) {
+              isSuccess = true;
+              finishDatePointUnix = getUnix(candle.time) + incrementValue;
+              return false;
+            }
+          }
+        }
+
+        return true;
+      });
+
+      if (isSuccess) {
+        break;
+      }
+    }
+  })();
+
+  document.title = document.previousTitle;
+
+  if (isSuccess) {
+    const difference = finishDatePointUnix - startFinishDatePointUnix;
+
+    const days = parseInt(difference / 86400, 10);
+    const hours = parseInt((difference % 86400) / 3600, 10);
+    alert(`d: ${days}; h: ${hours}`);
+
+    await reloadCharts(choosenInstrumentId);
+  }
+};
+
+const moveToNextIncreasedVolume = async () => {
+  const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
+
+  const chartCandles = instrumentDoc[`chart_candles_${activePeriod}`];
+  const indicatorVolumeAverage = instrumentDoc[`indicator_volume_average_${activePeriod}`];
+
+  document.previousTitle = document.title;
+  document.title = `${instrumentDoc.name} ...`;
+
+  const lastCandle = instrumentDoc[`candles_data_${activePeriod}`][0];
+  let lastCandleTimeUnix = getUnix(lastCandle.time);
+
+  let incrementValue = 300;
+  if (activePeriod === AVAILABLE_PERIODS.get('1h')) {
+    incrementValue = 3600;
+  } else if (activePeriod === AVAILABLE_PERIODS.get('1d')) {
+    incrementValue = 86400;
+  }
+
+  let isSuccess = false;
+  const startFinishDatePointUnix = finishDatePointUnix;
+
+  const originalData = JSON.parse(JSON.stringify(chartCandles.originalData));
+  let lCandles = originalData.length;
+
+  await (async () => {
+    while (1) {
+      const incrementTime = lastCandleTimeUnix + (incrementValue * 500);
+
+      const getCandlesOptions = {
+        period: activePeriod,
+        instrumentId: instrumentDoc._id,
+
+        startTime: moment.unix(lastCandleTimeUnix),
+        endTime: moment.unix(incrementTime),
+      };
+
+      let candles = await getCandlesData(getCandlesOptions);
+      if (!candles.length) break;
+
+      lastCandleTimeUnix = getUnix(candles[0].time);
+      candles = candles.reverse();
+
+      candles.every(candle => {
+        const preparedData = chartCandles.prepareNewData([candle], false);
+        originalData.push(preparedData[0]);
+        lCandles += 1;
+
+        const targetCandlesPeriod = originalData.slice(
+          lCandles - (settings.periodForLongMA * 2), lCandles,
+        );
+
+        const calculatedData = indicatorVolumeAverage.calculateData(targetCandlesPeriod);
+        const lastValue = calculatedData[calculatedData.length - 1].value;
+
+        if ((candle.volume / lastValue) >= 5) {
+          isSuccess = true;
+          finishDatePointUnix = getUnix(candle.time) + incrementValue;
+          return false;
+        }
+
+        return true;
+      });
 
       if (isSuccess) {
         break;
@@ -2035,7 +2309,7 @@ const toggleFavoriteInstruments = (instrumentId) => {
 };
 
 const getFigureLevelsFromLocalStorage = ({ instrumentId }) => {
-  let figureLevels = localStorage.getItem('trading-helper:figure-levels');
+  let figureLevels = localStorage.getItem(`trading-helper:${PAGE_KEY}:figure-levels`);
 
   if (!figureLevels) {
     return [];
@@ -2053,7 +2327,7 @@ const getFigureLevelsFromLocalStorage = ({ instrumentId }) => {
 const saveFigureLevelsToLocalStorage = (figureLevelsData = []) => {
   const figureLevels = getFigureLevelsFromLocalStorage({});
   figureLevels.push(...figureLevelsData);
-  localStorage.setItem('trading-helper:figure-levels', JSON.stringify(figureLevels));
+  localStorage.setItem(`trading-helper:${PAGE_KEY}:figure-levels`, JSON.stringify(figureLevels));
 };
 
 const removeFigureLevelsFromLocalStorage = ({
@@ -2062,7 +2336,7 @@ const removeFigureLevelsFromLocalStorage = ({
   seriesId,
 }) => {
   if (!instrumentId) {
-    localStorage.removeItem('trading-helper:figure-levels');
+    localStorage.removeItem(`trading-helper:${PAGE_KEY}:figure-levels`);
     return;
   }
 
@@ -2070,7 +2344,7 @@ const removeFigureLevelsFromLocalStorage = ({
 
   if (!value && !seriesId) {
     figureLevels = figureLevels.filter(e => e.instrumentId !== instrumentId);
-    localStorage.setItem('trading-helper:figure-levels', JSON.stringify(figureLevels));
+    localStorage.setItem(`trading-helper:${PAGE_KEY}:figure-levels`, JSON.stringify(figureLevels));
     return;
   }
 
@@ -2086,11 +2360,11 @@ const removeFigureLevelsFromLocalStorage = ({
     });
   }
 
-  localStorage.setItem('trading-helper:figure-levels', JSON.stringify(figureLevels));
+  localStorage.setItem(`trading-helper:${PAGE_KEY}:figure-levels`, JSON.stringify(figureLevels));
 };
 
 const getFigureLinesFromLocalStorage = ({ instrumentId }) => {
-  let figureLines = localStorage.getItem('trading-helper:figure-lines');
+  let figureLines = localStorage.getItem(`trading-helper:${PAGE_KEY}:figure-lines`);
 
   if (!figureLines) {
     return [];
@@ -2108,7 +2382,7 @@ const getFigureLinesFromLocalStorage = ({ instrumentId }) => {
 const saveFigureLineToLocalStorage = (figureLineData) => {
   const figureLines = getFigureLinesFromLocalStorage({});
   figureLines.push(figureLineData);
-  localStorage.setItem('trading-helper:figure-lines', JSON.stringify(figureLines));
+  localStorage.setItem(`trading-helper:${PAGE_KEY}:figure-lines`, JSON.stringify(figureLines));
 };
 
 const removeFigureLinesFromLocalStorage = ({
@@ -2116,7 +2390,7 @@ const removeFigureLinesFromLocalStorage = ({
   instrumentId,
 }) => {
   if (!instrumentId) {
-    localStorage.removeItem('trading-helper:figure-lines');
+    localStorage.removeItem(`trading-helper:${PAGE_KEY}:figure-lines`);
     return;
   }
 
@@ -2130,11 +2404,12 @@ const removeFigureLinesFromLocalStorage = ({
     );
   }
 
-  localStorage.setItem('trading-helper:figure-lines', JSON.stringify(figureLines));
+  localStorage.setItem(`trading-helper:${PAGE_KEY}:figure-lines`, JSON.stringify(figureLines));
 };
 
 const getSettingsFromLocalStorage = () => {
-  const settings = localStorage.getItem('trading-helper:settings');
+  const settings = localStorage.getItem(`trading-helper:settings`);
+  // const settings = localStorage.getItem(`trading-helper:${PAGE_KEY}:settings`);
   return settings ? JSON.parse(settings) : {};
 };
 
@@ -2146,7 +2421,8 @@ const saveSettingsToLocalStorage = (changes = {}) => {
     ...changes,
   };
 
-  localStorage.setItem('trading-helper:settings', JSON.stringify(newSettings));
+  localStorage.setItem(`trading-helper:settings`, JSON.stringify(newSettings));
+  // localStorage.setItem(`trading-helper:${PAGE_KEY}:settings`, JSON.stringify(newSettings));
 };
 
 const setStartSettings = () => {
@@ -2179,6 +2455,10 @@ const setStartSettings = () => {
     if (choosenSortSettings.isLong) {
       $instrumentsHeadlines.find(`span[data-type=${choosenSortSettings.type}]`).addClass('is_long');
     }
+  }
+
+  if (settings.choosenNextEvent) {
+    choosenNextEvent = settings.choosenNextEvent;
   }
 
   if (settings.favoriteInstruments && settings.favoriteInstruments.length) {
@@ -2465,6 +2745,9 @@ const calculateReduceValue = (linePoints, period) => {
 };
 
 const renewFigureLevels = async () => {
+  document.previousTitle = document.title;
+  document.title = 'Loading...';
+
   console.log('Started renewing process');
 
   const resultRemoveFigureLevels = await makeRequest({
@@ -2498,6 +2781,8 @@ const renewFigureLevels = async () => {
   await getAndSaveUserFigureLevels();
 
   console.log('Renewing process is finished');
+  document.title = document.previousTitle;
+
   return true;
 };
 
