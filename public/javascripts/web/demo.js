@@ -1,7 +1,7 @@
 /* global
 functions, makeRequest, getUnix, getRandomNumber, getPrecision, formatNumberToPretty, toRGB, saveAs,
 objects, user, moment, constants, moveTo,
-classes, ChartCandles, IndicatorVolume, IndicatorMovingAverage, IndicatorVolumeAverage, Trading,
+classes, ChartCandles, IndicatorVolume, IndicatorMovingAverage, IndicatorVolumeAverage, TradingDemo,
 */
 
 /* Constants */
@@ -105,7 +105,7 @@ let choosenSortSettings = {
 
 let choosenNextEvent = AVAILABLE_NEXT_EVENTS.get('movingAveragesCrossed');
 
-const trading = new Trading();
+const trading = new TradingDemo();
 const urlSearchParams = new URLSearchParams(window.location.search);
 const params = Object.fromEntries(urlSearchParams.entries());
 
@@ -412,7 +412,7 @@ $(document).ready(async () => {
       if (trade && trade.isNew) {
         delete trade.isNew;
         choosenPeriods.forEach(period => {
-          Trading.makeTradeSeries(instrumentDoc, trade, period);
+          TradingDemo.makeTradeSeries(instrumentDoc, trade, period);
         });
       }
     });
@@ -1294,7 +1294,7 @@ const loadCharts = ({
         });
 
         choosenPeriods.forEach(period => {
-          Trading.makeLimitOrderSeries(instrumentDoc, limitOrder, period);
+          TradingDemo.makeLimitOrderSeries(instrumentDoc, limitOrder, period);
         });
 
         choosedFigureShape = {
@@ -1862,7 +1862,7 @@ const drawTrades = ({ instrumentId }, trade, periods = []) => {
   const instrumentDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
 
   periods.forEach(period => {
-    const series = Trading.makeTradeSeries(instrumentDoc, trade, period);
+    const series = TradingDemo.makeTradeSeries(instrumentDoc, trade, period);
 
     if (!series.length) return;
 
@@ -1903,7 +1903,7 @@ const drawLimitOrders = ({ instrumentId }, limitOrder, periods = []) => {
   const instrumentDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
 
   periods.forEach(period => {
-    const series = Trading.makeLimitOrderSeries(instrumentDoc, limitOrder, period);
+    const series = TradingDemo.makeLimitOrderSeries(instrumentDoc, limitOrder, period);
 
     if (!series.length) return;
 

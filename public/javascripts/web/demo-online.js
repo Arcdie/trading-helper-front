@@ -1,7 +1,7 @@
 /* global
 functions, makeRequest, getUnix, getRandomNumber, getPrecision, formatNumberToPretty, toRGB, saveAs,
 objects, user, moment, constants, wsClient,
-classes, ChartCandles, IndicatorVolume, IndicatorMovingAverage, IndicatorVolumeAverage, Trading,
+classes, ChartCandles, IndicatorVolume, IndicatorMovingAverage, IndicatorVolumeAverage, TradingDemoOnline,
 */
 
 /* Constants */
@@ -89,7 +89,7 @@ let choosenSortSettings = {
   isLong: true,
 };
 
-const trading = new Trading();
+const trading = new TradingDemoOnline(PAGE_KEY);
 const urlSearchParams = new URLSearchParams(window.location.search);
 const params = Object.fromEntries(urlSearchParams.entries());
 
@@ -100,8 +100,6 @@ wsClient.onmessage = async data => {
     switch (parsedData.actionName) {
       case 'futuresCandle5mData': updateLastCandle(parsedData.data, AVAILABLE_PERIODS.get('5m')); break;
       case 'futuresCandle1hData': updateLastCandle(parsedData.data, AVAILABLE_PERIODS.get('1h')); break;
-      case 'spotCandle5mData': updateLastCandle(parsedData.data, AVAILABLE_PERIODS.get('5m')); break;
-      case 'spotCandle1hData': updateLastCandle(parsedData.data, AVAILABLE_PERIODS.get('1h')); break;
       case 'newInstrumentVolumeBound': addInstrumentVolumeBound(parsedData.data); break;
       case 'deactivateInstrumentVolumeBound': removeInstrumentVolumeBound(parsedData.data); break;
       default: break;
@@ -123,16 +121,12 @@ $(document).ready(async () => {
 
   trading.init();
   setStartSettings();
-  // trading.loadHistoryTrades();
+  trading.loadHistoryTrades();
 
   // removeFigureLinesFromLocalStorage({});
   // removeFigureLevelsFromLocalStorage({});
 
   wsClient.onopen = () => {
-    // wsClient.send(JSON.stringify({
-    //   actionName: 'unsubscribeFromAll',
-    // }));
-
     wsClient.send(JSON.stringify({
       actionName: 'subscribe',
       data: {
@@ -321,7 +315,7 @@ $(document).ready(async () => {
       const instrumentId = choosenInstrumentId;
       await reloadCharts(instrumentId);
 
-      const activeTrade = trading.trades.find(t => t.isActive);
+      const activeTrade = trading.trades.find(t => t.isActive && t.instrumentId === instrumentId);
       activeTrade && drawTrades({ instrumentId }, activeTrade);
 
       if (trading.limitOrders.length) {
@@ -391,7 +385,7 @@ $(document).ready(async () => {
       if (trade && trade.isNew) {
         delete trade.isNew;
         choosenPeriods.forEach(period => {
-          Trading.makeTradeSeries(instrumentDoc, trade, period);
+          TradingDemoOnline.makeTradeSeries(instrumentDoc, trade, period);
         });
       }
     });
@@ -881,7 +875,7 @@ const loadCharts = ({
         });
 
         choosenPeriods.forEach(period => {
-          Trading.makeLimitOrderSeries(instrumentDoc, limitOrder, period);
+          TradingDemoOnline.makeLimitOrderSeries(instrumentDoc, limitOrder, period);
         });
 
         choosedFigureShape = {
@@ -1401,7 +1395,7 @@ const drawTrades = ({ instrumentId }, trade, periods = []) => {
   const instrumentDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
 
   periods.forEach(period => {
-    const series = Trading.makeTradeSeries(instrumentDoc, trade, period);
+    const series = TradingDemoOnline.makeTradeSeries(instrumentDoc, trade, period);
 
     if (!series.length) return;
 
@@ -1442,7 +1436,7 @@ const drawLimitOrders = ({ instrumentId }, limitOrder, periods = []) => {
   const instrumentDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
 
   periods.forEach(period => {
-    const series = Trading.makeLimitOrderSeries(instrumentDoc, limitOrder, period);
+    const series = TradingDemoOnline.makeLimitOrderSeries(instrumentDoc, limitOrder, period);
 
     if (!series.length) return;
 
@@ -1536,6 +1530,8 @@ const updateLastCandle = (data, period) => {
   });
 
   if (isClosed) {
+    trading.nextTick(instrumentDoc, preparedData, choosenPeriods, false);
+
     let calculatedData;
     const targetCandlesPeriod = candlesData.slice(
       lCandles - (settings.periodForLongMA * 2), lCandles,

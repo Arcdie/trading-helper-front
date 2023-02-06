@@ -16,14 +16,16 @@ const TRADING_CONSTANTS = {
   TAKER_COMMISSION_PERCENT: 0.04 / 100,
 };
 
-class Trading {
-  constructor() {
+class TradingDemo {
+  constructor(pageKey) {
     this.$tradingForm = $('.trading-form');
     this.$tradingList = $('.trading-list');
     this.$tradingStatistics = $('.trading-statistics');
 
     this.trades = [];
     this.limitOrders = [];
+
+    this.pageKey = pageKey || 'localhost';
 
     this.isLong = false;
     this.isActiveStopLossChoice = false;
@@ -174,7 +176,7 @@ class Trading {
 
         if (trade && trade.isNew) {
           periods.forEach(period => {
-            Trading.makeTradeSeries(instrumentDoc, trade, period);
+            TradingDemo.makeTradeSeries(instrumentDoc, trade, period);
           });
         }
 
@@ -191,9 +193,13 @@ class Trading {
   }
 
   createTrade(instrumentDoc, { price, time }, periods, isManual = true) {
-    const activeTrade = this.trades.reverse().find(t => t.isActive);
+    // const activeTrade = this.trades.reverse().find(t => t.isActive);
+
+    const activeTrade = this.trades
+      .find(t => t.isActive && t.instrumentName === instrumentDoc.name);
+
     const stepSize = instrumentDoc.step_size;
-    const stepSizePrecision = Trading.getPrecision(stepSize);
+    const stepSizePrecision = TradingDemo.getPrecision(stepSize);
 
     if (activeTrade) {
       if ((activeTrade.isLong && this.isLong)
@@ -223,6 +229,7 @@ class Trading {
           strategyId: activeTrade.strategyId,
           id: new Date().getTime(),
           parentId: activeTrade.id,
+          instrumentId: instrumentDoc._id,
           instrumentName: instrumentDoc.name,
 
           isActive: false,
@@ -252,10 +259,10 @@ class Trading {
         if (result <= 0) {
           activeTrade.isActive = false;
 
-          // Trading.removeTradesFromHistory([trade]);
-          // Trading.addTradesToHistory([trade]);
-          Trading.removeTradesFromTradeList([activeTrade]);
-          Trading.changeSeriesLineStyle(instrumentDoc, activeTrade, [], periods);
+          // this.removeTradesFromHistory([trade]);
+          // this.addTradesToHistory([trade]);
+          TradingDemo.removeTradesFromTradeList([activeTrade]);
+          TradingDemo.changeSeriesLineStyle(instrumentDoc, activeTrade, [], periods);
 
           if (result === 0) {
             this.changeNumberTrades(TRADING_CONSTANTS.DEFAULT_NUMBER_TRADES);
@@ -266,13 +273,13 @@ class Trading {
           // }
         } else {
           this.calculateTradesProfit({ price });
-          Trading.updateTradesInTradeList([activeTrade]);
+          TradingDemo.updateTradesInTradeList([activeTrade]);
 
           this.changeNumberTrades(activeTrade.numberTrades);
         }
 
         this.trades.push(newTrade);
-        Trading.addTradesToHistory([newTrade]);
+        this.addTradesToHistory([newTrade]);
         this.calculateTradesProfit({ price });
         this.addTradesToTradeList([newTrade]);
         this.updateCommonStatistics();
@@ -292,6 +299,7 @@ class Trading {
       index: this.trades.length + 1,
       strategyId: this.lastStrategyId,
       id: new Date().getTime(),
+      instrumentId: instrumentDoc._id,
       instrumentName: instrumentDoc.name,
 
       isNew: true,
@@ -314,7 +322,7 @@ class Trading {
     const allowedSumLoss = sumTrade * (TRADING_CONSTANTS.LOSS_PERCENT_PER_DEPOSIT / 100);
 
     const percentPerPrice = price * (newTrade.stopLossPercent / 100);
-    const tickSizePrecision = Trading.getPrecision(instrumentDoc.tick_size); // 0.001
+    const tickSizePrecision = TradingDemo.getPrecision(instrumentDoc.tick_size); // 0.001
 
     const stopLossPrice = parseFloat((newTrade.isLong
       ? price - percentPerPrice
@@ -332,6 +340,11 @@ class Trading {
     }
 
     let quantityForOneTrade = quantity / this.numberTrades;
+
+    // if (quantityForOneTrade < 5) {
+    //   alert('quantityForOneTrade < 5');
+    //   return;
+    // }
 
     if (quantityForOneTrade < stepSize) {
       alert('quantity < stepSize (1)');
@@ -397,13 +410,16 @@ class Trading {
 
     this.trades.push(newTrade);
     this.addTradesToTradeList([newTrade]);
-    Trading.addTradesToHistory([newTrade]);
+    this.addTradesToHistory([newTrade]);
 
     return newTrade;
   }
 
   nextTick(instrumentDoc, candleData, periods = [], isActivatedLimitOrder = false) {
-    const activeTrade = this.trades.reverse().find(t => t.isActive);
+    // const activeTrade = this.trades.reverse().find(t => t.isActive);
+
+    const activeTrade = this.trades
+      .find(t => t.isActive && t.instrumentName === instrumentDoc.name);
 
     if (!activeTrade) {
       return true;
@@ -439,7 +455,8 @@ class Trading {
           activeTrade.takeProfitPrices = activeTrade.takeProfitPrices.filter(p => p !== price);
         });
 
-        Trading.changeSeriesLineStyle(instrumentDoc, activeTrade, targetTakeProfitPrices, periods);
+        TradingDemo
+          .changeSeriesLineStyle(instrumentDoc, activeTrade, targetTakeProfitPrices, periods);
       }
 
       if (activeTrade.takeProfitPrices.length) {
@@ -453,7 +470,7 @@ class Trading {
             price: activeTrade.stopLossPrice, time: candleData.originalTime,
           }, periods, false);
 
-          Trading.changeSeriesLineStyle(instrumentDoc, activeTrade, [], periods);
+          TradingDemo.changeSeriesLineStyle(instrumentDoc, activeTrade, [], periods);
         }
       } else {
         isFinished = true;
@@ -481,7 +498,8 @@ class Trading {
           activeTrade.takeProfitPrices = activeTrade.takeProfitPrices.filter(p => p !== price);
         });
 
-        Trading.changeSeriesLineStyle(instrumentDoc, activeTrade, targetTakeProfitPrices, periods);
+        TradingDemo
+          .changeSeriesLineStyle(instrumentDoc, activeTrade, targetTakeProfitPrices, periods);
       }
 
       if (activeTrade.takeProfitPrices.length) {
@@ -495,7 +513,7 @@ class Trading {
             price: activeTrade.stopLossPrice, time: candleData.originalTime,
           }, periods, false);
 
-          Trading.changeSeriesLineStyle(instrumentDoc, activeTrade, [], periods);
+          TradingDemo.changeSeriesLineStyle(instrumentDoc, activeTrade, [], periods);
         }
       } else {
         isFinished = true;
@@ -559,8 +577,8 @@ class Trading {
       this.trades = this.trades.filter(t => t.id !== trade.id);
     });
 
-    Trading.removeTradesFromTradeList(trades);
-    Trading.removeTradesFromHistory(trades);
+    TradingDemo.removeTradesFromTradeList(trades);
+    this.removeTradesFromHistory(trades);
     this.calculateTradesProfit({});
     this.updateCommonStatistics();
   }
@@ -683,7 +701,7 @@ class Trading {
     trades.forEach(trade => {
       if (trade.isLong) {
         const sellPrice = trade.sellPrice || price;
-        trade.profit =  (sellPrice - trade.buyPrice) * trade.quantity;
+        trade.profit = (sellPrice - trade.buyPrice) * trade.quantity;
 
         const differenceBetweenPrices = sellPrice - trade.buyPrice;
         trade.profitPercent = Math.abs(100 / (trade.buyPrice / differenceBetweenPrices));
@@ -848,8 +866,8 @@ class Trading {
           t.isManual = !t.isManual;
         });
 
-        Trading.removeTradesFromHistory(targetTrades);
-        Trading.addTradesToHistory(targetTrades);
+        _this.removeTradesFromHistory(targetTrades);
+        _this.addTradesToHistory(targetTrades);
 
         _this.$tradingList.find('tr.trade').remove();
         _this.loadHistoryTrades();
@@ -870,13 +888,13 @@ class Trading {
 
         _this.lastStrategyId = value;
 
-        Trading.removeTradesFromHistory(targetTrades);
-        Trading.addTradesToHistory(targetTrades);
+        _this.removeTradesFromHistory(targetTrades);
+        _this.addTradesToHistory(targetTrades);
       });
   }
 
   flipTradesProfit(tradeIndex) {
-    let trades = Trading.getHistoryTrades();
+    let trades = this.getHistoryTrades();
     const targetTrades = trades.filter(t => t.index === tradeIndex);
 
     if (targetTrades.length > 2) {
@@ -909,7 +927,7 @@ class Trading {
 
     trades.push(parentTrade, childTrade);
 
-    localStorage.setItem('trading-helper:trades', JSON.stringify(trades));
+    localStorage.setItem(`trading-helper:${this.pageKey}:trades`, JSON.stringify(trades));
     this.$tradingList.find('tr.trade').remove();
     this.loadHistoryTrades();
   }
@@ -976,7 +994,7 @@ class Trading {
 
   loadHistoryTrades() {
     this.trades = [];
-    const trades = Trading.getHistoryTrades();
+    const trades = this.getHistoryTrades();
 
     let totalCommissions = 0;
 
@@ -1009,7 +1027,7 @@ class Trading {
   }
 
   clearHistoryTrades() {
-    localStorage.removeItem('trading-helper:trades');
+    localStorage.removeItem(`trading-helper:${this.pageKey}:trades`);
 
     this.trades = [];
 
@@ -1041,25 +1059,25 @@ class Trading {
     this.updateCommonStatistics();
   }
 
-  static addTradesToHistory(newTrades = []) {
-    const trades = Trading.getHistoryTrades();
+  addTradesToHistory(newTrades = []) {
+    const trades = this.getHistoryTrades();
 
     newTrades.push(...trades);
-    localStorage.setItem('trading-helper:trades', JSON.stringify(newTrades));
+    localStorage.setItem(`trading-helper:${this.pageKey}:trades`, JSON.stringify(newTrades));
   }
 
-  static removeTradesFromHistory(tradesToRemove = []) {
-    let trades = Trading.getHistoryTrades();
+  removeTradesFromHistory(tradesToRemove = []) {
+    let trades = this.getHistoryTrades();
 
     tradesToRemove.forEach(t => {
       trades = trades.filter(trade => t.id !== trade.id);
     });
 
-    localStorage.setItem('trading-helper:trades', JSON.stringify(trades));
+    localStorage.setItem(`trading-helper:${this.pageKey}:trades`, JSON.stringify(trades));
   }
 
-  static getHistoryTrades() {
-    const trades = localStorage.getItem('trading-helper:trades');
+  getHistoryTrades() {
+    const trades = localStorage.getItem(`trading-helper:${this.pageKey}:trades`);
 
     if (!trades) {
       return [];
