@@ -468,6 +468,9 @@ $(document).ready(async () => {
         }
 
         $instrumentsList.find(`#instrument-${nextInstrumentDoc._id}`).click();
+      } else if (e.keyCode === 67) {
+        // C
+        trading.$tradingForm.find('.risks-block .sl button').click();
       } else if (e.keyCode === 77) {
         // M
         trading.$tradingForm.find('.risks-block .stop-limit button').click();
@@ -1581,6 +1584,7 @@ const updateLastCandle = (data, period) => {
     const figureLinesExtraSeries = chartCandles.extraSeries.filter(
       s => s.isFigureLine && s.isActive && s.timeframe === period,
     );
+    const instrumentVolumeExtraSeries = chartCandles.extraSeries.filter(s => s.isInstrumentVolume);
 
     figureLinesExtraSeries.forEach(s => {
       s.linePoints[1].value += s.isLong ? s.reduceValue : -s.reduceValue;
@@ -1589,6 +1593,13 @@ const updateLastCandle = (data, period) => {
     });
 
     figureLevelsExtraSeries.forEach(s => {
+      chartCandles.drawSeries(s, {
+        value: s.value,
+        time: preparedData.originalTimeUnix,
+      });
+    });
+
+    instrumentVolumeExtraSeries.forEach(s => {
       chartCandles.drawSeries(s, {
         value: s.value,
         time: preparedData.originalTimeUnix,

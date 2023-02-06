@@ -1,6 +1,6 @@
 /* global
 functions, makeRequest, getUnix, getRandomNumber, getPrecision, formatNumberToPretty, toRGB, saveAs,
-objects, user, moment, constants,
+objects, user, moment, constants, moveTo,
 classes, ChartCandles, IndicatorVolume, IndicatorMovingAverage, IndicatorVolumeAverage, Trading,
 */
 
@@ -33,6 +33,9 @@ const AVAILABLE_NEXT_EVENTS = new Map([
   ['priceJump', 'priceJump'],
   ['absorption', 'absorption'],
   ['sluggishPrice', 'sluggishPrice'],
+
+  ['lifetimeMovingAverage', 'lifetimeMovingAverage'],
+  ['movingAveragesCrossed', 'movingAveragesCrossed'],
 ]);
 
 /* Variables */
@@ -100,7 +103,7 @@ let choosenSortSettings = {
   isLong: true,
 };
 
-let choosenNextEvent = AVAILABLE_NEXT_EVENTS.get('priceJump');
+let choosenNextEvent = AVAILABLE_NEXT_EVENTS.get('movingAveragesCrossed');
 
 const trading = new Trading();
 const urlSearchParams = new URLSearchParams(window.location.search);
@@ -453,13 +456,21 @@ $(document).ready(async () => {
         }
 
         let execFunc;
-        switch (choosenNextEvent) {
-          case AVAILABLE_NEXT_EVENTS.get('priceJump'): execFunc = moveToNextPriceJump; break;
-          case AVAILABLE_NEXT_EVENTS.get('absorption'): execFunc = moveToNextAbsorption; break;
-          case AVAILABLE_NEXT_EVENTS.get('figureLevel'): execFunc = moveToNextFigureLevel; break;
-          case AVAILABLE_NEXT_EVENTS.get('increasedVolume'): execFunc = moveToNextIncreasedVolume; break;
-          case AVAILABLE_NEXT_EVENTS.get('sluggishPrice'): break;
-          default: alert('No function for this event');
+        const activeTrade = trading.trades.find(t => t.isActive);
+
+        if (activeTrade) {
+          return moveTo.moveToFinishTrade(activeTrade);
+        } else {
+          switch (choosenNextEvent) {
+            case AVAILABLE_NEXT_EVENTS.get('priceJump'): execFunc = moveTo.moveToNextPriceJump; break;
+            case AVAILABLE_NEXT_EVENTS.get('absorption'): execFunc = moveTo.moveToNextAbsorption; break;
+            case AVAILABLE_NEXT_EVENTS.get('figureLevel'): execFunc = moveTo.moveToNextFigureLevel; break;
+            case AVAILABLE_NEXT_EVENTS.get('increasedVolume'): execFunc = moveTo.moveToNextIncreasedVolume; break;
+            case AVAILABLE_NEXT_EVENTS.get('lifetimeMovingAverage'): execFunc = moveTo.moveToNextLifetimeMovingAverage; break;
+            case AVAILABLE_NEXT_EVENTS.get('movingAveragesCrossed'): execFunc = moveTo.moveToNextMovingAveragesCrossed; break;
+            case AVAILABLE_NEXT_EVENTS.get('sluggishPrice'): break;
+            default: alert('No function for this event');
+          }
         }
 
         if (!execFunc) {
@@ -511,8 +522,8 @@ $(document).ready(async () => {
         }
 
         $instrumentsList.find(`#instrument-${nextInstrumentDoc._id}`).click();
-      } else if (e.keyCode === 79) {
-        // O
+      } else if (e.keyCode === 67) {
+        // C
         trading.$tradingForm.find('.risks-block .sl button').click();
       } else if (e.keyCode === 77) {
         // M
@@ -1042,376 +1053,6 @@ const nextTick = async () => {
     calculateFigureLevelsPercents(lastCandles);
     // calculatePriceLeaders(activePeriod, lastCandles);
     sortListInstruments();
-  }
-};
-
-const moveToNextFigureLevel = async () => {
-  if (activePeriod === AVAILABLE_PERIODS.get('1d')) {
-    return true;
-  }
-
-  const figureLevels = getFigureLevelsFromLocalStorage({ instrumentId: choosenInstrumentId });
-
-  if (!figureLevels.length) {
-    return true;
-  }
-
-  const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
-  const chartCandles = instrumentDoc[`chart_candles_${activePeriod}`];
-
-  document.previousTitle = document.title;
-  document.title = `${instrumentDoc.name} ...`;
-
-  const lastCandle = instrumentDoc[`candles_data_${activePeriod}`][0];
-  let lastCandleTimeUnix = getUnix(lastCandle.time);
-
-  let incrementValue = 300;
-  if (activePeriod === AVAILABLE_PERIODS.get('1h')) {
-    incrementValue = 3600;
-  } else if (activePeriod === AVAILABLE_PERIODS.get('1d')) {
-    incrementValue = 86400;
-  }
-
-  let isSuccess = false;
-
-  let candles1h = await getCandlesData({
-    instrumentId: instrumentDoc._id,
-    period: AVAILABLE_PERIODS.get('1h'),
-
-    endTime: moment.unix(lastCandleTimeUnix),
-  });
-
-  candles1h = chartCandles.prepareNewData(candles1h, false);
-  const startFinishDatePointUnix = finishDatePointUnix;
-
-  await (async () => {
-    while (1) {
-      const incrementTime = lastCandleTimeUnix + (incrementValue * 500);
-
-      const getCandlesOptions = {
-        period: activePeriod,
-        instrumentId: instrumentDoc._id,
-
-        startTime: moment.unix(lastCandleTimeUnix),
-        endTime: moment.unix(incrementTime),
-      };
-
-      let candles = await getCandlesData(getCandlesOptions);
-      if (!candles.length) break;
-
-      lastCandleTimeUnix = getUnix(candles[0].time);
-      candles = candles.reverse();
-
-      for await (const candle of candles) {
-        const price = candle.data[1];
-        const candleTimeUnix = getUnix(candle.time);
-
-        if (candleTimeUnix % 86400 === 0) {
-          const newCandles1h = await getCandlesData({
-            instrumentId: instrumentDoc._id,
-            period: AVAILABLE_PERIODS.get('1h'),
-
-            endTime: moment.unix(candleTimeUnix),
-            startTime: moment.unix(candles1h[candles1h.length - 1].originalTimeUnix),
-          });
-
-          candles1h.push(...chartCandles.prepareNewData(newCandles1h));
-
-          const calculatedFigureLevels = calculateNewFigureLevels(candles1h);
-          const newFigureLevels = calculatedFigureLevels
-            .filter(cL => !figureLevels.some(fL => fL.value === cL.levelPrice))
-            .map(fL => ({
-              instrumentId: instrumentDoc._id,
-              timeframe: AVAILABLE_PERIODS.get('1h'),
-              seriesId: (ChartCandles.getNewSeriesId() - fL.levelPrice).toString().replace('.', ''),
-
-              isLong: fL.isLong,
-              value: fL.levelPrice,
-              time: fL.startOfLevelUnix,
-            }));
-
-          if (newFigureLevels.length) {
-            figureLevels.push(...newFigureLevels);
-            saveFigureLevelsToLocalStorage(newFigureLevels);
-            drawFigureLevels({ instrumentId: instrumentDoc._id }, newFigureLevels);
-          }
-        }
-
-        const result = figureLevels.every(figureLevel => {
-          const difference = Math.abs(price - figureLevel.value);
-          const percentPerPrice = 100 / (price / difference);
-
-          if (percentPerPrice <= settings.figureLevels.percentForMovingToNearestFigureLevel) {
-            isSuccess = true;
-            finishDatePointUnix = getUnix(candle.time) + incrementValue;
-            return false;
-          }
-
-          return true;
-        });
-
-        if (!result) {
-          break;
-        }
-      }
-
-      if (isSuccess) {
-        break;
-      }
-    }
-  })();
-
-  document.title = document.previousTitle;
-
-  if (isSuccess) {
-    const difference = finishDatePointUnix - startFinishDatePointUnix;
-
-    const days = parseInt(difference / 86400, 10);
-    const hours = parseInt((difference % 86400) / 3600, 10);
-    alert(`d: ${days}; h: ${hours}`);
-
-    await reloadCharts(choosenInstrumentId);
-  }
-};
-
-const moveToNextPriceJump = async () => {
-  const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
-
-  document.previousTitle = document.title;
-  document.title = `${instrumentDoc.name} ...`;
-
-  const lastCandle = instrumentDoc[`candles_data_${activePeriod}`][0];
-  let lastCandleTimeUnix = getUnix(lastCandle.time);
-
-  let incrementValue = 300;
-  if (activePeriod === AVAILABLE_PERIODS.get('1h')) {
-    incrementValue = 3600;
-  } else if (activePeriod === AVAILABLE_PERIODS.get('1d')) {
-    incrementValue = 86400;
-  }
-
-  let isSuccess = false;
-  const startFinishDatePointUnix = finishDatePointUnix;
-
-  await (async () => {
-    while (1) {
-      const incrementTime = lastCandleTimeUnix + (incrementValue * 500);
-
-      const getCandlesOptions = {
-        period: activePeriod,
-        instrumentId: instrumentDoc._id,
-
-        startTime: moment.unix(lastCandleTimeUnix),
-        endTime: moment.unix(incrementTime),
-      };
-
-      let candles = await getCandlesData(getCandlesOptions);
-      if (!candles.length) break;
-
-      lastCandleTimeUnix = getUnix(candles[0].time);
-      candles = candles.reverse();
-
-      candles.every(candle => {
-        const [open, close] = candle.data;
-        const isLong = close > open;
-        const difference = Math.abs(open - close);
-        const percentPerPrice = 100 / (open / difference);
-
-        if (percentPerPrice >= 3 && isLong) {
-          isSuccess = true;
-          finishDatePointUnix = getUnix(candle.time) + incrementValue;
-          return false;
-        }
-
-        return true;
-      });
-
-      if (isSuccess) {
-        break;
-      }
-    }
-  })();
-
-  document.title = document.previousTitle;
-
-  if (isSuccess) {
-    const difference = finishDatePointUnix - startFinishDatePointUnix;
-
-    const days = parseInt(difference / 86400, 10);
-    const hours = parseInt((difference % 86400) / 3600, 10);
-    alert(`d: ${days}; h: ${hours}`);
-
-    await reloadCharts(choosenInstrumentId);
-  }
-};
-
-const moveToNextAbsorption = async () => {
-  const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
-
-  document.previousTitle = document.title;
-  document.title = `${instrumentDoc.name} ...`;
-
-  const lastCandle = instrumentDoc[`candles_data_${activePeriod}`][0];
-  let lastCandleTimeUnix = getUnix(lastCandle.time);
-
-  let incrementValue = 300;
-  if (activePeriod === AVAILABLE_PERIODS.get('1h')) {
-    incrementValue = 3600;
-  } else if (activePeriod === AVAILABLE_PERIODS.get('1d')) {
-    incrementValue = 86400;
-  }
-
-  let isSuccess = false;
-  const startFinishDatePointUnix = finishDatePointUnix;
-
-  await (async () => {
-    while (1) {
-      const incrementTime = lastCandleTimeUnix + (incrementValue * 500);
-
-      const getCandlesOptions = {
-        period: activePeriod,
-        instrumentId: instrumentDoc._id,
-
-        startTime: moment.unix(lastCandleTimeUnix),
-        endTime: moment.unix(incrementTime),
-      };
-
-      let candles = await getCandlesData(getCandlesOptions);
-      if (!candles.length) break;
-
-      lastCandleTimeUnix = getUnix(candles[0].time);
-      candles = candles.reverse();
-
-      candles.every((candle, index) => {
-        const prevCandle = candles[index - 1];
-
-        if (!prevCandle) {
-          return true;
-        }
-
-        let [open, close] = prevCandle.data;
-        const isLongPrevCandle = close > open;
-        let difference = Math.abs(open - close);
-        const percentPerPricePrevCandle = 100 / (open / difference);
-
-        if (percentPerPricePrevCandle >= 3) {
-          [open, close] = candle.data;
-          const isLong = close > open;
-
-          if (isLongPrevCandle !== isLong) {
-            difference = Math.abs(open - close);
-            const percentPerPrice = 100 / (open / difference);
-
-            if (percentPerPrice >= percentPerPricePrevCandle) {
-              isSuccess = true;
-              finishDatePointUnix = getUnix(candle.time) + incrementValue;
-              return false;
-            }
-          }
-        }
-
-        return true;
-      });
-
-      if (isSuccess) {
-        break;
-      }
-    }
-  })();
-
-  document.title = document.previousTitle;
-
-  if (isSuccess) {
-    const difference = finishDatePointUnix - startFinishDatePointUnix;
-
-    const days = parseInt(difference / 86400, 10);
-    const hours = parseInt((difference % 86400) / 3600, 10);
-    alert(`d: ${days}; h: ${hours}`);
-
-    await reloadCharts(choosenInstrumentId);
-  }
-};
-
-const moveToNextIncreasedVolume = async () => {
-  const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
-
-  const chartCandles = instrumentDoc[`chart_candles_${activePeriod}`];
-  const indicatorVolumeAverage = instrumentDoc[`indicator_volume_average_${activePeriod}`];
-
-  document.previousTitle = document.title;
-  document.title = `${instrumentDoc.name} ...`;
-
-  const lastCandle = instrumentDoc[`candles_data_${activePeriod}`][0];
-  let lastCandleTimeUnix = getUnix(lastCandle.time);
-
-  let incrementValue = 300;
-  if (activePeriod === AVAILABLE_PERIODS.get('1h')) {
-    incrementValue = 3600;
-  } else if (activePeriod === AVAILABLE_PERIODS.get('1d')) {
-    incrementValue = 86400;
-  }
-
-  let isSuccess = false;
-  const startFinishDatePointUnix = finishDatePointUnix;
-
-  const originalData = JSON.parse(JSON.stringify(chartCandles.originalData));
-  let lCandles = originalData.length;
-
-  await (async () => {
-    while (1) {
-      const incrementTime = lastCandleTimeUnix + (incrementValue * 500);
-
-      const getCandlesOptions = {
-        period: activePeriod,
-        instrumentId: instrumentDoc._id,
-
-        startTime: moment.unix(lastCandleTimeUnix),
-        endTime: moment.unix(incrementTime),
-      };
-
-      let candles = await getCandlesData(getCandlesOptions);
-      if (!candles.length) break;
-
-      lastCandleTimeUnix = getUnix(candles[0].time);
-      candles = candles.reverse();
-
-      candles.every(candle => {
-        const preparedData = chartCandles.prepareNewData([candle], false);
-        originalData.push(preparedData[0]);
-        lCandles += 1;
-
-        const targetCandlesPeriod = originalData.slice(
-          lCandles - (settings.periodForLongMA * 2), lCandles,
-        );
-
-        const calculatedData = indicatorVolumeAverage.calculateData(targetCandlesPeriod);
-        const lastValue = calculatedData[calculatedData.length - 1].value;
-
-        if ((candle.volume / lastValue) >= 5) {
-          isSuccess = true;
-          finishDatePointUnix = getUnix(candle.time) + incrementValue;
-          return false;
-        }
-
-        return true;
-      });
-
-      if (isSuccess) {
-        break;
-      }
-    }
-  })();
-
-  document.title = document.previousTitle;
-
-  if (isSuccess) {
-    const difference = finishDatePointUnix - startFinishDatePointUnix;
-
-    const days = parseInt(difference / 86400, 10);
-    const hours = parseInt((difference % 86400) / 3600, 10);
-    alert(`d: ${days}; h: ${hours}`);
-
-    await reloadCharts(choosenInstrumentId);
   }
 };
 

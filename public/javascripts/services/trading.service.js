@@ -242,8 +242,8 @@ class Trading {
           profitPercent: 0,
 
           isManual,
-          takeProfitPrice: activeTrade.takeProfitPrice,
           stopLossPrice: activeTrade.stopLossPrice,
+          // takeProfitPrice: activeTrade.takeProfitPrice,
         };
 
         const sumTrade = newTrade.quantity * price;
@@ -359,6 +359,7 @@ class Trading {
 
     newTrade.quantity = quantity;
     newTrade.stopLossPrice = stopLossPrice;
+    newTrade.originalStopLossPrice = newTrade.stopLossPrice;
     newTrade.takeProfitPrices = [];
 
     if (newTrade.isLong) {
@@ -392,6 +393,8 @@ class Trading {
       newTrade.breakevenPrice = price - ((tmp * 2) / quantity);
     }
 
+    newTrade.originalTakeProfitPrices = newTrade.takeProfitPrices;
+
     this.trades.push(newTrade);
     this.addTradesToTradeList([newTrade]);
     Trading.addTradesToHistory([newTrade]);
@@ -403,8 +406,10 @@ class Trading {
     const activeTrade = this.trades.reverse().find(t => t.isActive);
 
     if (!activeTrade) {
-      return;
+      return true;
     }
+
+    let isFinished = false;
 
     const originalData = {
       isLong: this.isLong,
@@ -440,6 +445,7 @@ class Trading {
       if (activeTrade.takeProfitPrices.length) {
         if ((isActivatedLimitOrder && candleData.close <= activeTrade.stopLossPrice)
           || (!isActivatedLimitOrder && candleData.low <= activeTrade.stopLossPrice)) {
+          isFinished = true;
           this.isLong = false;
           this.numberTrades = activeTrade.takeProfitPrices.length;
 
@@ -449,6 +455,8 @@ class Trading {
 
           Trading.changeSeriesLineStyle(instrumentDoc, activeTrade, [], periods);
         }
+      } else {
+        isFinished = true;
       }
     } else {
       const targetTakeProfitPrices = activeTrade.takeProfitPrices.filter(
@@ -479,19 +487,25 @@ class Trading {
       if (activeTrade.takeProfitPrices.length) {
         if ((isActivatedLimitOrder && candleData.close >= activeTrade.stopLossPrice)
           || (!isActivatedLimitOrder && candleData.high >= activeTrade.stopLossPrice)) {
+          isFinished = true;
           this.isLong = true;
           this.numberTrades = activeTrade.takeProfitPrices.length;
+
           this.createTrade(instrumentDoc, {
             price: activeTrade.stopLossPrice, time: candleData.originalTime,
           }, periods, false);
 
           Trading.changeSeriesLineStyle(instrumentDoc, activeTrade, [], periods);
         }
+      } else {
+        isFinished = true;
       }
     }
 
     this.isLong = originalData.isLong;
     // this.numberTrades = originalData.numberTrades;
+
+    return isFinished;
   }
 
   static changeSeriesLineStyle(instrumentDoc, trade, values = [], periods = []) {
@@ -609,7 +623,7 @@ class Trading {
       color: constants.RED_COLOR,
       lastValueVisible: false,
     }, {
-      value: trade.stopLossPrice,
+      value: trade.originalStopLossPrice,
       isTrade: true,
       id: `stoploss-${trade.id}`,
     });
@@ -620,7 +634,7 @@ class Trading {
       // breakevenSeries,
     ];
 
-    trade.takeProfitPrices.forEach(takeProfitPrice => {
+    trade.originalTakeProfitPrices.forEach(takeProfitPrice => {
       const takeProfitSeries = chartCandles.addExtraSeries({
         color: constants.GREEN_COLOR,
         lastValueVisible: false,
@@ -820,6 +834,25 @@ class Trading {
         const index = parseInt($index.text(), 10);
 
         _this.flipTradesProfit(index);
+      });
+
+    this.$tradingList
+      .on('click', '.trade .type', function () {
+        const $trade = $(this).closest('.trade');
+        const $index = $trade.find('td.index');
+        const index = parseInt($index.text(), 10);
+
+        const targetTrades = _this.trades.filter(t => t.index === index);
+
+        targetTrades.forEach(t => {
+          t.isManual = !t.isManual;
+        });
+
+        Trading.removeTradesFromHistory(targetTrades);
+        Trading.addTradesToHistory(targetTrades);
+
+        _this.$tradingList.find('tr.trade').remove();
+        _this.loadHistoryTrades();
       });
 
     this.$tradingList
