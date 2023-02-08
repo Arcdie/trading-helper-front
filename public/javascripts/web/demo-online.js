@@ -100,6 +100,8 @@ wsClient.onmessage = async data => {
     switch (parsedData.actionName) {
       case 'futuresCandle5mData': updateLastCandle(parsedData.data, AVAILABLE_PERIODS.get('5m')); break;
       case 'futuresCandle1hData': updateLastCandle(parsedData.data, AVAILABLE_PERIODS.get('1h')); break;
+      case 'spotCandle5mData': updateLastCandle(parsedData.data, AVAILABLE_PERIODS.get('5m')); break;
+      case 'spitCandle1hData': updateLastCandle(parsedData.data, AVAILABLE_PERIODS.get('1h')); break;
       case 'newInstrumentVolumeBound': addInstrumentVolumeBound(parsedData.data); break;
       case 'deactivateInstrumentVolumeBound': removeInstrumentVolumeBound(parsedData.data); break;
       default: break;
@@ -150,7 +152,7 @@ $(document).ready(async () => {
   const resultGetInstruments = await makeRequest({
     method: 'GET',
     url: URL_GET_ACTIVE_INSTRUMENTS,
-    query: { isOnlyFutures: true },
+    // query: { isOnlyFutures: true },
   });
 
   if (!resultGetInstruments || !resultGetInstruments.status) {
@@ -1601,6 +1603,32 @@ const updateLastCandle = (data, period) => {
         time: preparedData.originalTimeUnix,
       });
     });
+
+    if (choosenInstrumentId) {
+      const activeTrade = trading.trades
+        .find(t => t.isActive && t.instrumentId === choosenInstrumentId);
+
+      if (activeTrade) {
+        const targetSeries = chartCandles.extraSeries.filter(
+          s => s.isTrade && s.id.includes(activeTrade.id),
+        );
+
+        let validTime = preparedData.originalTimeUnix;
+
+        if (period === AVAILABLE_PERIODS.get('1h')) {
+          validTime -= validTime % 3600;
+        } else if (period === AVAILABLE_PERIODS.get('1d')) {
+          validTime -= validTime % 86400;
+        }
+
+        targetSeries.forEach(s => {
+          chartCandles.drawSeries(s, {
+            value: s.value,
+            time: validTime,
+          });
+        });
+      }
+    }
   }
 };
 

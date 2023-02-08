@@ -75,7 +75,7 @@ const settings = {
     colorFor5mLevels: constants.DARK_BLUE_COLOR,
     colorFor1hLevels: constants.BLUE_COLOR,
     colorFor1dLevels: constants.GREEN_COLOR,
-    percentForMovingToNearestFigureLevel: 5,
+    percentForMovingToNearestFigureLevel: 3,
 
     distanceFromLeftSide: 100,
     distanceFromRightSide: 100,
@@ -103,7 +103,7 @@ let choosenSortSettings = {
   isLong: true,
 };
 
-let choosenNextEvent = AVAILABLE_NEXT_EVENTS.get('movingAveragesCrossed');
+let choosenNextEvent = AVAILABLE_NEXT_EVENTS.get('priceJump');
 
 const trading = new TradingDemo();
 const urlSearchParams = new URLSearchParams(window.location.search);
@@ -462,7 +462,11 @@ $(document).ready(async () => {
           return moveTo.moveToFinishTrade(activeTrade);
         } else {
           switch (choosenNextEvent) {
-            case AVAILABLE_NEXT_EVENTS.get('priceJump'): execFunc = moveTo.moveToNextPriceJump; break;
+            case AVAILABLE_NEXT_EVENTS.get('priceJump'):
+              execFunc = moveTo.moveToNextPriceJump;
+              // execFunc = moveTo.moveToNextPriceJumpPlusFigureLevels;
+              break;
+
             case AVAILABLE_NEXT_EVENTS.get('absorption'): execFunc = moveTo.moveToNextAbsorption; break;
             case AVAILABLE_NEXT_EVENTS.get('figureLevel'): execFunc = moveTo.moveToNextFigureLevel; break;
             case AVAILABLE_NEXT_EVENTS.get('increasedVolume'): execFunc = moveTo.moveToNextIncreasedVolume; break;

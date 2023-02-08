@@ -1,4 +1,4 @@
-// /* eslint-disable */
+/* eslint-disable */
 
 const moveTo = {
   async moveToNextFigureLevel() {
@@ -7,10 +7,6 @@ const moveTo = {
     }
 
     const figureLevels = getFigureLevelsFromLocalStorage({ instrumentId: choosenInstrumentId });
-
-    if (!figureLevels.length) {
-      return true;
-    }
 
     const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
     const chartCandles = instrumentDoc[`chart_candles_${activePeriod}`];
@@ -130,8 +126,148 @@ const moveTo = {
     }
   },
 
+  async moveToNextPriceJumpPlusFigureLevels() {
+    if (activePeriod === AVAILABLE_PERIODS.get('1d')) {
+      return true;
+    }
+
+    const figureLevels = getFigureLevelsFromLocalStorage({ instrumentId: choosenInstrumentId });
+
+    const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
+    const chartCandles = instrumentDoc[`chart_candles_${activePeriod}`];
+
+    document.previousTitle = document.title;
+    document.title = `${instrumentDoc.name} ...`;
+
+    const lastCandle = instrumentDoc[`candles_data_${activePeriod}`][0];
+    let lastCandleTimeUnix = getUnix(lastCandle.time);
+
+    let incrementValue = 300;
+    if (activePeriod === AVAILABLE_PERIODS.get('1h')) {
+      incrementValue = 3600;
+    } else if (activePeriod === AVAILABLE_PERIODS.get('1d')) {
+      incrementValue = 86400;
+    }
+
+    let isSuccess = false;
+
+    let candles1h = await getCandlesData({
+      instrumentId: instrumentDoc._id,
+      period: AVAILABLE_PERIODS.get('1h'),
+
+      endTime: moment.unix(lastCandleTimeUnix),
+    });
+
+    candles1h = chartCandles.prepareNewData(candles1h, false);
+    const startFinishDatePointUnix = finishDatePointUnix;
+
+    const originalData = JSON.parse(JSON.stringify(chartCandles.originalData));
+    let lCandles = originalData.length;
+
+    await (async () => {
+      while (1) {
+        const incrementTime = lastCandleTimeUnix + (incrementValue * 500);
+
+        const getCandlesOptions = {
+          period: activePeriod,
+          instrumentId: instrumentDoc._id,
+
+          startTime: moment.unix(lastCandleTimeUnix),
+          endTime: moment.unix(incrementTime),
+        };
+
+        let candles = await getCandlesData(getCandlesOptions);
+        if (!candles.length) break;
+
+        lastCandleTimeUnix = getUnix(candles[0].time);
+        candles = candles.reverse();
+
+        for await (const candle of candles) {
+          const price = candle.data[1];
+          const candleTimeUnix = getUnix(candle.time);
+
+          if (candleTimeUnix % 86400 === 0) {
+            const newCandles1h = await getCandlesData({
+              instrumentId: instrumentDoc._id,
+              period: AVAILABLE_PERIODS.get('1h'),
+
+              endTime: moment.unix(candleTimeUnix),
+              startTime: moment.unix(candles1h[candles1h.length - 1].originalTimeUnix),
+            });
+
+            candles1h.push(...chartCandles.prepareNewData(newCandles1h));
+
+            const calculatedFigureLevels = calculateNewFigureLevels(candles1h);
+            const newFigureLevels = calculatedFigureLevels
+              .filter(cL => !figureLevels.some(fL => fL.value === cL.levelPrice))
+              .map(fL => ({
+                instrumentId: instrumentDoc._id,
+                timeframe: AVAILABLE_PERIODS.get('1h'),
+                seriesId: (ChartCandles.getNewSeriesId() - fL.levelPrice).toString().replace('.', ''),
+
+                isLong: fL.isLong,
+                value: fL.levelPrice,
+                time: fL.startOfLevelUnix,
+              }));
+
+            if (newFigureLevels.length) {
+              figureLevels.push(...newFigureLevels);
+              saveFigureLevelsToLocalStorage(newFigureLevels);
+              drawFigureLevels({ instrumentId: instrumentDoc._id }, newFigureLevels);
+            }
+          }
+
+          const preparedData = chartCandles.prepareNewData([candle], false)[0];
+          originalData.push(preparedData);
+          lCandles += 1;
+
+          let averagePercent = 0;
+          const targetCandlesPeriod = originalData.slice(lCandles - 36, lCandles);
+
+          targetCandlesPeriod.forEach(c => {
+            const isLong = c.close > c.open;
+
+            const differenceBetweenPrices = isLong ? c.high - c.open : c.open - c.low;
+            const percentPerPrice = 100 / (c.open / differenceBetweenPrices);
+
+            averagePercent += percentPerPrice;
+          });
+
+          averagePercent = parseFloat((averagePercent / 36).toFixed(2));
+
+          const isLong = preparedData.close > preparedData.open;
+          const differenceBetweenPrices = Math.abs(preparedData.open - preparedData.close);
+          const percentPerPrice = 100 / (preparedData.open / differenceBetweenPrices);
+
+          if (percentPerPrice > (averagePercent * 5) && isLong) {
+            isSuccess = true;
+            finishDatePointUnix = getUnix(candle.time) + incrementValue;
+            break;
+          }
+        }
+
+        if (isSuccess) {
+          break;
+        }
+      }
+    })();
+
+    document.title = document.previousTitle;
+
+    if (isSuccess) {
+      const difference = finishDatePointUnix - startFinishDatePointUnix;
+
+      const days = parseInt(difference / 86400, 10);
+      const hours = parseInt((difference % 86400) / 3600, 10);
+      alert(`d: ${days}; h: ${hours}`);
+
+      await reloadCharts(choosenInstrumentId);
+    }
+  },
+
   async moveToNextPriceJump() {
     const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
+    const chartCandles = instrumentDoc[`chart_candles_${activePeriod}`];
 
     document.previousTitle = document.title;
     document.title = `${instrumentDoc.name} ...`;
@@ -148,6 +284,9 @@ const moveTo = {
 
     let isSuccess = false;
     const startFinishDatePointUnix = finishDatePointUnix;
+
+    const originalData = JSON.parse(JSON.stringify(chartCandles.originalData));
+    let lCandles = originalData.length;
 
     await (async () => {
       while (1) {
@@ -168,12 +307,29 @@ const moveTo = {
         candles = candles.reverse();
 
         candles.every(candle => {
-          const [open, close] = candle.data;
-          const isLong = close > open;
-          const difference = Math.abs(open - close);
-          const percentPerPrice = 100 / (open / difference);
+          const preparedData = chartCandles.prepareNewData([candle], false)[0];
+          originalData.push(preparedData);
+          lCandles += 1;
 
-          if (percentPerPrice >= 3 && isLong) {
+          let averagePercent = 0;
+          const targetCandlesPeriod = originalData.slice(lCandles - 36, lCandles);
+
+          targetCandlesPeriod.forEach(c => {
+            const isLong = c.close > c.open;
+
+            const differenceBetweenPrices = isLong ? c.high - c.open : c.open - c.low;
+            const percentPerPrice = 100 / (c.open / differenceBetweenPrices);
+
+            averagePercent += percentPerPrice;
+          });
+
+          averagePercent = parseFloat((averagePercent / 36).toFixed(2));
+
+          const isLong = preparedData.close > preparedData.open;
+          const differenceBetweenPrices = Math.abs(preparedData.open - preparedData.close);
+          const percentPerPrice = 100 / (preparedData.open / differenceBetweenPrices);
+
+          if (percentPerPrice > (averagePercent * 5) && isLong) {
             isSuccess = true;
             finishDatePointUnix = getUnix(candle.time) + incrementValue;
             return false;
@@ -669,7 +825,7 @@ const moveTo = {
         const lastCandle = instrumentDoc[`candles_data_${period}`][0];
         const lastCandleTimeUnix = getUnix(lastCandle.time);
 
-        const series = Trading.makeTradeSeries(instrumentDoc, activeTrade, period);
+        const series = TradingDemo.makeTradeSeries(instrumentDoc, activeTrade, period);
 
         let startAt = activeTrade.startAt;
 
@@ -680,6 +836,11 @@ const moveTo = {
         }
 
         series.forEach(s => {
+          s.applyOptions({
+            lineType: LightweightCharts.LineType.Simple,
+            lineStyle: LightweightCharts.LineStyle.LargeDashed,
+          });
+
           chartCandles.drawSeries(
             s,
             [{

@@ -437,11 +437,13 @@ class TradingDemo {
         price => price <= candleData.high,
       );
 
+      /*
       if (!activeTrade.isActivatedFirstTakeProfit && targetTakeProfitPrices.length) {
         isActivatedLimitOrder = true; // !tmp!
         activeTrade.isActivatedFirstTakeProfit = true;
         activeTrade.stopLossPrice = activeTrade.takeProfitPrices[0];
       }
+      */
 
       if (targetTakeProfitPrices.length) {
         targetTakeProfitPrices.forEach(price => {
@@ -480,11 +482,13 @@ class TradingDemo {
         price => price >= candleData.low,
       );
 
+      /*
       if (!activeTrade.isActivatedFirstTakeProfit && targetTakeProfitPrices.length) {
         isActivatedLimitOrder = true; // !tmp!
         activeTrade.isActivatedFirstTakeProfit = true;
         activeTrade.stopLossPrice = activeTrade.takeProfitPrices[0];
       }
+      */
 
       if (targetTakeProfitPrices.length) {
         targetTakeProfitPrices.forEach(price => {
@@ -659,7 +663,7 @@ class TradingDemo {
       }, {
         value: takeProfitPrice,
         isTrade: true,
-        id: `takeprofit-${trade.id}`,
+        id: `takeprofit-${trade.id}-${takeProfitPrice}`,
       });
 
       series.push(takeProfitSeries);
