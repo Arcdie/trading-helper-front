@@ -1,0 +1,26 @@
+.trading-form.new
+  .action-block
+    .buy
+      button(title="P") Buy
+      input(type="text", placeholder="0")
+    .sell
+      button(title="[") Sell
+      input(type="text", placeholder="0")
+    
+  .risks-block
+    .stop-limit
+      button(title="M") LIMIT
+      input(type="text", placeholder="0")      
+
+    .sl
+      div
+        button(title="C")
+          span SL
+        //- input(type="checkbox")
+      input(type="text", placeholder="0")
+
+  .number-trades-block
+    input(type="text", placeholder="0", value="0")
+
+  .work-amount-block
+    input(type="text", placeholder="0", value="0")

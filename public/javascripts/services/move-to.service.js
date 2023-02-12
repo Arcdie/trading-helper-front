@@ -745,8 +745,8 @@ const moveTo = {
     }
   },
 
-  async moveToFinishTrade(activeTrade) {
-    if (!activeTrade) {
+  async moveToFinishTransaction(activeTransaction) {
+    if (!activeTransaction || !activeTransaction.isActive) {
       return true;
     }
 
@@ -792,12 +792,16 @@ const moveTo = {
           const preparedData = chartCandles.prepareNewData([candle], false)[0];
           originalData.push(preparedData);
 
-          const isFinished = trading.nextTick(instrumentDoc, preparedData, choosenPeriods, false);
+          const result = trading.nextTick(instrumentDoc, preparedData, choosenPeriods, false);
 
-          if (isFinished) {
-            isSuccess = true;
-            finishDatePointUnix = getUnix(candle.time) + incrementValue;
-            return false;
+          if (result) {
+            tradingList.updateTradesInTradeList(result.transaction, result.changes);
+
+            if (result.action === EActions.get('transactionFinished')) {
+              isSuccess = true;
+              finishDatePointUnix = getUnix(candle.time) + incrementValue;
+              return false;
+            }
           }
 
           return true;
@@ -812,6 +816,9 @@ const moveTo = {
     document.title = document.previousTitle;
 
     if (isSuccess) {
+      tradingList.setTransactions(trading.transactions);
+      tradingList.updateCommonStatistics();
+
       const difference = finishDatePointUnix - startFinishDatePointUnix;
 
       const days = parseInt(difference / 86400, 10);
@@ -819,40 +826,7 @@ const moveTo = {
       alert(`d: ${days}; h: ${hours}`);
 
       await reloadCharts(choosenInstrumentId);
-
-      choosenPeriods.forEach(period => {
-        const chartCandles = instrumentDoc[`chart_candles_${period}`];
-        const lastCandle = instrumentDoc[`candles_data_${period}`][0];
-        const lastCandleTimeUnix = getUnix(lastCandle.time);
-
-        const series = TradingDemo.makeTradeSeries(instrumentDoc, activeTrade, period);
-
-        let startAt = activeTrade.startAt;
-
-        if (period === AVAILABLE_PERIODS.get('1h')) {
-          startAt -= startAt % 3600;
-        } else if (period === AVAILABLE_PERIODS.get('1d')) {
-          startAt -= startAt % 86400;
-        }
-
-        series.forEach(s => {
-          s.applyOptions({
-            lineType: LightweightCharts.LineType.Simple,
-            lineStyle: LightweightCharts.LineStyle.LargeDashed,
-          });
-
-          chartCandles.drawSeries(
-            s,
-            [{
-              value: s.value,
-              time: startAt,
-            }, {
-              value: s.value,
-              time: lastCandleTimeUnix,
-            }],
-          );
-        });
-      });
+      drawTrades({ instrumentId: instrumentDoc._id, }, activeTransaction, choosenPeriods);
     }
   },
 };

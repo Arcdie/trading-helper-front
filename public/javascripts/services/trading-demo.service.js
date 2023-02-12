@@ -17,7 +17,7 @@ const TRADING_CONSTANTS = {
 };
 
 class TradingDemo {
-  constructor(pageKey) {
+  constructor(pageKey, settings = {}) {
     this.$tradingForm = $('.trading-form');
     this.$tradingList = $('.trading-list');
     this.$tradingStatistics = $('.trading-statistics');
@@ -30,6 +30,7 @@ class TradingDemo {
     this.isLong = false;
     this.isActiveStopLossChoice = false;
     this.isActiveLimitOrderChoice = false;
+    this.isAutoStopLoss = settings.isAutoStopLoss || false;
 
     this.minProfit = 0;
     this.maxProfit = 0;
@@ -801,7 +802,7 @@ class TradingDemo {
 
     this.$tradingForm.find('.work-amount-block input').val(this.workAmount);
     this.$tradingForm.find('.number-trades-block input').val(this.numberTrades);
-    this.$tradingForm.find('.risks-block .sl input').val(this.stopLossPercent);
+    this.$tradingForm.find('.risks-block .sl input[type="text"]').val(this.stopLossPercent);
   }
 
   loadEventHandlers() {
@@ -823,6 +824,11 @@ class TradingDemo {
       .on('change', function () {
         const value = parseFloat($(this).val());
         _this.changeStopLossPercent(value);
+      });
+
+    this.$tradingForm.find('.risks-block .sl input[type="checkbox"]')
+      .change(function () {
+        _this.isAutoStopLoss = this.checked;
       });
 
     this.$tradingForm.find('.risks-block .sl button')

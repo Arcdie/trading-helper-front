@@ -79,7 +79,7 @@ button#settings {
   .risks-block {
     display: flex;
 
-    div {
+    .stop-limit, .sl {
       width: 50%;
       display: flex;
       flex-direction: column;
@@ -110,11 +110,30 @@ button#settings {
       }
 
       &.sl {
-        button {
+        div {
           background-color: #fa1010c2;
 
           &:hover {
             background-color: #fa101063;
+          }
+
+          button {
+            width: 72%;
+            display: inline-block;
+            box-sizing: border-box;
+            border: none;
+            background-color: transparent;
+
+            span {
+              padding-left: 27px;
+            }
+          }
+
+          input[type="checkbox"] {
+            width: 20%;
+            display: inline-block;
+            position: relative;
+            top: 2px;
           }
         }
 

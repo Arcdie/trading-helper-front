@@ -16,7 +16,6 @@ let deposit = workAmount * numberTrades; // 100$
 const allowedSumLoss = deposit * (allowedLossPercentPerDeposit / 100); // 0.5$
 
 const stopLossPrice = instrumentPrice - (instrumentPrice * (stopLossPercent / 100)); // 0.99$
-const difference = instrumentPrice - stopLossPrice; // 0.01$
 
 let quantity = deposit / instrumentPrice; // 100
 

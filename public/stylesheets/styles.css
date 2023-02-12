@@ -365,30 +365,43 @@ button#settings {
         border-left: 1px solid black; }
   .trading-form .risks-block {
     display: flex; }
-    .trading-form .risks-block div {
+    .trading-form .risks-block .stop-limit, .trading-form .risks-block .sl {
       width: 50%;
       display: flex;
       flex-direction: column; }
-      .trading-form .risks-block div button {
+      .trading-form .risks-block .stop-limit button, .trading-form .risks-block .sl button {
         cursor: pointer;
         border: none;
         padding: 5px; }
-      .trading-form .risks-block div input[type="text"] {
+      .trading-form .risks-block .stop-limit input[type="text"], .trading-form .risks-block .sl input[type="text"] {
         padding: 5px;
         outline: none;
         border: none;
         text-align: center;
         box-sizing: border-box;
         border-bottom: 1px solid black; }
-      .trading-form .risks-block div.stop-limit button {
+      .trading-form .risks-block .stop-limit.stop-limit button, .trading-form .risks-block .sl.stop-limit button {
         background-color: #3dff2bc2; }
-        .trading-form .risks-block div.stop-limit button:hover {
+        .trading-form .risks-block .stop-limit.stop-limit button:hover, .trading-form .risks-block .sl.stop-limit button:hover {
           background-color: #3dff2b61; }
-      .trading-form .risks-block div.sl button {
+      .trading-form .risks-block .stop-limit.sl div, .trading-form .risks-block .sl.sl div {
         background-color: #fa1010c2; }
-        .trading-form .risks-block div.sl button:hover {
+        .trading-form .risks-block .stop-limit.sl div:hover, .trading-form .risks-block .sl.sl div:hover {
           background-color: #fa101063; }
-      .trading-form .risks-block div.sl input[type="text"] {
+        .trading-form .risks-block .stop-limit.sl div button, .trading-form .risks-block .sl.sl div button {
+          width: 72%;
+          display: inline-block;
+          box-sizing: border-box;
+          border: none;
+          background-color: transparent; }
+          .trading-form .risks-block .stop-limit.sl div button span, .trading-form .risks-block .sl.sl div button span {
+            padding-left: 27px; }
+        .trading-form .risks-block .stop-limit.sl div input[type="checkbox"], .trading-form .risks-block .sl.sl div input[type="checkbox"] {
+          width: 20%;
+          display: inline-block;
+          position: relative;
+          top: 2px; }
+      .trading-form .risks-block .stop-limit.sl input[type="text"], .trading-form .risks-block .sl.sl input[type="text"] {
         border-left: 1px solid black; }
   .trading-form .work-amount-block {
     box-sizing: border-box;

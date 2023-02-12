@@ -1,6 +1,7 @@
 /* global
 functions, getUnix, getQueue,
-objects, moment, LightweightCharts */
+objects, moment,  AVAILABLE_PERIODS
+classes, LightweightCharts */
 
 class ChartCandles {
   constructor($rootContainer, period, instrumentDoc, doUseAutoscale = true) {
@@ -211,7 +212,7 @@ class ChartCandles {
     this.chart.remove();
   }
 
-  removeSeries(series, isMainSeries) {
+  removeSeries(series, isMainSeries = false) {
     this.chart.removeSeries(series);
 
     if (isMainSeries) {
@@ -280,6 +281,18 @@ class ChartCandles {
 
   getInstrumentPrice() {
     return this.originalData[this.originalData.length - 1].close;
+  }
+
+  static getValidTime(timeUnix, period) {
+    let validTime = timeUnix;
+
+    if (period === AVAILABLE_PERIODS.get('1h')) {
+      validTime -= validTime % 3600;
+    } else if (period === AVAILABLE_PERIODS.get('1d')) {
+      validTime -= validTime % 86400;
+    }
+
+    return validTime;
   }
 
   static getNewSeriesId() {
