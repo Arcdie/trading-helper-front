@@ -54,17 +54,13 @@ class TradingDemoList {
   addTradesToTradeList(transaction, trades = []) {
     let appendStr = '';
 
-    let currentIndex = this.trading.transactions.length;
+    let currentIndex = 1;
     const $firstElement = this.$tradingList.find('table tr.trade:first');
 
-    if (!$firstElement.length) {
-      currentIndex = 1;
-    } else {
-      const transactionId = $firstElement.data('transactionId');
-
-      if (transactionId === transaction.id) {
-        currentIndex = parseInt($firstElement.find('.index').text(), 10);
-      }
+    if ($firstElement.length) {
+      const transactionId = $firstElement.data('transactionid');
+      const index = parseInt($firstElement.find('.index').text(), 10);
+      currentIndex = transactionId === transaction.id ? index : index + 1;
     }
 
     trades.forEach(trade => {
@@ -82,7 +78,7 @@ class TradingDemoList {
         <td class="status ${trade.isActive ? 'is_active' : ''}"></td>
         <td class="commission">${trade.sumCommissions.toFixed(4)}</td>
         <td>${moment.unix(trade.startedAtUnix).utc().format('DD.MM.YY HH:mm')}</td>
-        <td class="end-at">${trade.endedAtUnix ? moment.utc(trade.endedAtUnix).format('DD.MM.YY HH:mm') : ''}</td>
+        <td class="end-at">${trade.endedAtUnix ? moment.unix(trade.endedAtUnix).utc().format('DD.MM.YY HH:mm') : ''}</td>
       </tr>`;
     });
 
@@ -109,7 +105,7 @@ class TradingDemoList {
       $trade.find('.commission').text(trade.sumCommissions.toFixed(4));
 
       if (trade.endedAtUnix) {
-        const endedAt = moment.unix(transaction.endedAtUnix).format('DD.MM.YY HH:mm');
+        const endedAt = moment.unix(trade.endedAtUnix).utc().format('DD.MM.YY HH:mm');
         $trade.find('.end-at').text(endedAt);
       }
 
@@ -207,7 +203,22 @@ class TradingDemoList {
         const transaction = _this.trading.transactions.find(t => t.id === transactionId);
 
         _this.removeTradesFromTradeList([transaction]);
-        _this.removeTransactionsFromHistory([transaction]);
+
+        _this.trading.transactions = _this.trading.transactions.filter(t => t.id !== transaction.id);
+        _this.setTransactions(_this.trading.transactions);
+
+        _this.updateCommonStatistics();
+      });
+
+    this.$tradingList
+      .on('click', '.trade .type', function () {
+        const $parent = $(this).parent();
+        const transactionId = $parent.data('transactionid');
+        const transaction = _this.trading.transactions.find(t => t.id === transactionId);
+
+        transaction.isManuallyFinished = !transaction.isManuallyFinished;
+        _this.setTransactions(_this.trading.transactions);
+        _this.updateCommonStatistics();
       });
 
     // this.$tradingList
@@ -217,25 +228,6 @@ class TradingDemoList {
     //     const index = parseInt($index.text(), 10);
     //
     //     _this.flipTradesProfit(index);
-    //   });
-
-    // this.$tradingList
-    //   .on('click', '.trade .type', function () {
-    //     const $trade = $(this).closest('.trade');
-    //     const $index = $trade.find('td.index');
-    //     const index = parseInt($index.text(), 10);
-    //
-    //     const targetTrades = _this.trades.filter(t => t.index === index);
-    //
-    //     targetTrades.forEach(t => {
-    //       t.isManual = !t.isManual;
-    //     });
-    //
-    //     _this.removeTradesFromHistory(targetTrades);
-    //     _this.addTradesToHistory(targetTrades);
-    //
-    //     _this.$tradingList.find('tr.trade').remove();
-    //     _this.loadHistoryTrades();
     //   });
 
     // this.$tradingList

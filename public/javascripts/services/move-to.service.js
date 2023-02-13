@@ -1,6 +1,128 @@
 /* eslint-disable */
 
 const moveTo = {
+  async moveToNextLongAverageTouched() {
+    const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
+    const chartCandles = instrumentDoc[`chart_candles_${activePeriod}`];
+    const indicatorMovingAverageShort = instrumentDoc[`indicator_moving_average_short_${activePeriod}`];
+    const indicatorMovingAverageMedium = instrumentDoc[`indicator_moving_average_medium_${activePeriod}`];
+    const indicatorMovingAverageLong = instrumentDoc[`indicator_moving_average_long_${activePeriod}`];
+
+    document.previousTitle = document.title;
+    document.title = `${instrumentDoc.name} ...`;
+
+    const lastCandle = instrumentDoc[`candles_data_${activePeriod}`][0];
+    let lastCandleTimeUnix = getUnix(lastCandle.time);
+
+    let incrementValue = 300;
+    if (activePeriod === AVAILABLE_PERIODS.get('1h')) {
+      incrementValue = 3600;
+    } else if (activePeriod === AVAILABLE_PERIODS.get('1d')) {
+      incrementValue = 86400;
+    }
+
+    let isSuccess = false;
+    const startFinishDatePointUnix = finishDatePointUnix;
+
+    const originalData = JSON.parse(JSON.stringify(chartCandles.originalData));
+    let lCandles = originalData.length;
+
+    const limits = {
+      [AVAILABLE_PERIODS.get('5m')]: 144 / 2, // half of a day
+      [AVAILABLE_PERIODS.get('1h')]: 96 / 2, // 4 days
+      [AVAILABLE_PERIODS.get('1d')]: 5, // 5 days
+    };
+
+    let counter = 0;
+
+    await (async () => {
+      while (1) {
+        const incrementTime = lastCandleTimeUnix + (incrementValue * 500);
+
+        const getCandlesOptions = {
+          period: activePeriod,
+          instrumentId: instrumentDoc._id,
+
+          startTime: moment.unix(lastCandleTimeUnix),
+          endTime: moment.unix(incrementTime),
+        };
+
+        let candles = await getCandlesData(getCandlesOptions);
+        if (!candles.length) break;
+
+        lastCandleTimeUnix = getUnix(candles[0].time);
+        candles = candles.reverse();
+
+        candles.every(candle => {
+          const preparedData = chartCandles.prepareNewData([candle], false)[0];
+          originalData.push(preparedData);
+          lCandles += 1;
+
+          let averagePercent = 0;
+          let targetCandlesPeriod = originalData.slice(lCandles - 36, lCandles);
+
+          targetCandlesPeriod.forEach(c => {
+            const isLong = c.close > c.open;
+
+            const differenceBetweenPrices = isLong ? c.high - c.open : c.open - c.low;
+            const percentPerPrice = 100 / (c.open / differenceBetweenPrices);
+
+            averagePercent += percentPerPrice;
+          });
+
+          averagePercent = parseFloat((averagePercent / 36).toFixed(2));
+
+          targetCandlesPeriod = originalData.slice(
+            lCandles - (settings.periodForLongMA * 2), lCandles,
+          );
+
+          let calculatedData = indicatorMovingAverageShort.calculateData(targetCandlesPeriod);
+          const lastValueShortMovingAverage = calculatedData[calculatedData.length - 1].value;
+
+          calculatedData = indicatorMovingAverageMedium.calculateData(targetCandlesPeriod);
+          const lastValueMediumMovingAverage = calculatedData[calculatedData.length - 1].value;
+
+          calculatedData = indicatorMovingAverageLong.calculateData(targetCandlesPeriod);
+          const lastValueLongMovingAverage = calculatedData[calculatedData.length - 1].value;
+
+          if (lastValueShortMovingAverage > lastValueLongMovingAverage
+            && lastValueMediumMovingAverage > lastValueLongMovingAverage) {
+            counter += 1;
+
+            const difference = Math.abs(lastValueLongMovingAverage - preparedData.low);
+            const percentPerPrice = 100 / (lastValueLongMovingAverage / difference);
+
+            if (percentPerPrice <= (averagePercent * 2) && counter >= limits[activePeriod]) {
+              isSuccess = true;
+              finishDatePointUnix = getUnix(candle.time) + incrementValue;
+              return false;
+            }
+          } else {
+            counter = 0;
+          }
+
+          return true;
+        });
+
+        if (isSuccess) {
+          break;
+        }
+      }
+    })();
+
+    document.title = document.previousTitle;
+
+    if (isSuccess) {
+      const difference = finishDatePointUnix - startFinishDatePointUnix;
+
+      const days = parseInt(difference / 86400, 10);
+      const hours = parseInt((difference % 86400) / 3600, 10);
+      alert(`d: ${days}; h: ${hours}`);
+
+      await reloadCharts(choosenInstrumentId);
+    }
+  },
+
   async moveToNextFigureLevel() {
     if (activePeriod === AVAILABLE_PERIODS.get('1d')) {
       return true;
@@ -288,6 +410,8 @@ const moveTo = {
     const originalData = JSON.parse(JSON.stringify(chartCandles.originalData));
     let lCandles = originalData.length;
 
+    const factor = activePeriod === AVAILABLE_PERIODS.get('1h') ? 3 : 5;
+
     await (async () => {
       while (1) {
         const incrementTime = lastCandleTimeUnix + (incrementValue * 500);
@@ -329,7 +453,7 @@ const moveTo = {
           const differenceBetweenPrices = Math.abs(preparedData.open - preparedData.close);
           const percentPerPrice = 100 / (preparedData.open / differenceBetweenPrices);
 
-          if (percentPerPrice > (averagePercent * 5) && isLong) {
+          if (percentPerPrice > (averagePercent * factor)) {
             isSuccess = true;
             finishDatePointUnix = getUnix(candle.time) + incrementValue;
             return false;

@@ -38,6 +38,7 @@ const AVAILABLE_NEXT_EVENTS = new Map([
 
   ['lifetimeMovingAverage', 'lifetimeMovingAverage'],
   ['movingAveragesCrossed', 'movingAveragesCrossed'],
+  ['longMovingAverageTouched', 'longMovingAverageTouched'],
 ]);
 
 /* Variables */
@@ -207,9 +208,10 @@ $(document).ready(async () => {
         .removeClass('is_active');
 
       $instrument.addClass('is_active');
+      choosenInstrumentId = instrumentId;
+
       await reloadCharts(instrumentId);
 
-      choosenInstrumentId = instrumentId;
       saveSettingsToLocalStorage({ choosenInstrumentId });
     })
     .on('click', '.instrument .name b', function () {
@@ -232,10 +234,10 @@ $(document).ready(async () => {
       }
     });
 
-  trading.$tradingForm.find('.risks-block .sl input[type="checkbox"]')
-    .change(function () {
-      saveSettingsToLocalStorage({ isAutoStopLoss: this.checked });
-    });
+  // trading.$tradingForm.find('.risks-block .sl input[type="checkbox"]')
+  //   .change(function () {
+  //     saveSettingsToLocalStorage({ isAutoStopLoss: this.checked });
+  //   });
 
   $trades.find('.clear-trades')
     .on('click', 'button.clear', () => tradingList.clear())
@@ -301,17 +303,6 @@ $(document).ready(async () => {
       lastVisibleLogicalRange = false;
       const instrumentId = choosenInstrumentId;
       await reloadCharts(instrumentId);
-
-      const activeTransaction = trading.transactions.find(t => t.isActive && t.instrumentId === choosenInstrumentId);
-      activeTransaction && drawTrades({ instrumentId }, activeTransaction);
-
-      // todo:
-
-      // if (trading.limitOrders.length) {
-      //   trading.limitOrders.forEach(order => {
-      //     drawLimitOrders({ instrumentId }, order);
-      //   });
-      // }
     })
     .on('click', '.drawing div', function () {
       if (!choosenInstrumentId) {
@@ -387,111 +378,16 @@ $(document).ready(async () => {
         return false;
       }
 
-      const { action, transaction, changes } = result;
-
-      switch (action) {
+      switch (result.action) {
         case EActions.get('transactionCreated'): {
-          choosenPeriods.forEach(period => {
-            const chartCandles = instrumentDoc[`chart_candles_${period}`];
-            const transactionSeries = TradingDemo.createTransactionChartSeries(chartCandles, transaction);
-            const stopLossSeries = TradingDemo.createStopLossChartSeries(chartCandles, transaction);
-            const takeProfitSeries = transaction.trades
-              .map(trade => TradingDemo.createTakeProfitChartSeries(chartCandles, transaction, trade));
-
-            const lastCandle = chartCandles.originalData[chartCandles.originalData.length - 1];
-            const validTime = ChartCandles.getValidTime(lastCandle.originalTimeUnix, period);
-
-            [transactionSeries, stopLossSeries, ...takeProfitSeries].forEach(
-              series => chartCandles.drawSeries(series, [{ value: series.price, time: validTime }]),
-            );
-          });
-
-          tradingList.addTradesToTradeList(transaction, transaction.trades);
-
+          removeTemporaryStopLossSeries(instrumentDoc);
+          transactionCreatedHandler(instrumentDoc, result);
           break;
         }
 
-        case EActions.get('tradeCreated'): {
-          choosenPeriods.forEach(period => {
-            const chartCandles = instrumentDoc[`chart_candles_${period}`];
-            const lastCandle = chartCandles.originalData[chartCandles.originalData.length - 1];
-            const validTime = ChartCandles.getValidTime(lastCandle.originalTimeUnix, period);
-
-            const targetSeries = chartCandles.extraSeries.filter(s => s.id.includes(transaction.id));
-            targetSeries.forEach(series => chartCandles.removeSeries(series));
-
-            const transactionSeries = TradingDemo.createTransactionChartSeries(chartCandles, transaction);
-            const stopLossSeries = TradingDemo.createStopLossChartSeries(chartCandles, transaction);
-            const takeProfitSeries = transaction.trades
-              .filter(trade => trade.isActive)
-              .map(trade => TradingDemo.createTakeProfitChartSeries(chartCandles, transaction, trade));
-
-            [transactionSeries, stopLossSeries, ...takeProfitSeries].forEach(series => {
-              const values = [{
-                value: series.price,
-                time: ChartCandles.getValidTime(series.time, period),
-              }];
-
-              if (series.time !== validTime) {
-                values.push({ value: series.price, time: validTime });
-              }
-
-              chartCandles.drawSeries(series, values);
-            });
-          });
-
-          tradingList.updateTradesInTradeList(transaction, changes);
-
-          break;
-        }
-
-        case EActions.get('tradeFinished'): {
-          const values = transaction.trades
-            .filter(trade => !trade.isActive)
-            .map(trade => trade.takeProfitPrice);
-
-          choosenPeriods.forEach(period => {
-            const chartCandles = instrumentDoc[`chart_candles_${period}`];
-            const targetSeries = chartCandles.extraSeries
-              .filter(s => s.id.includes('takeprofit') && values.includes(s.price));
-
-            targetSeries.forEach(tS => {
-              tS.applyOptions({
-                lineType: LightweightCharts.LineType.Simple,
-                lineStyle: LightweightCharts.LineStyle.LargeDashed,
-              });
-
-              chartCandles.extraSeries = chartCandles.extraSeries
-                .filter(s => s.id !== tS.id && s.price !== tS.price);
-            });
-          });
-
-          tradingList.updateTradesInTradeList(transaction, changes);
-
-          break;
-        }
-
-        case EActions.get('transactionFinished'): {
-          choosenPeriods.forEach(period => {
-            const chartCandles = instrumentDoc[`chart_candles_${period}`];
-            const targetSeries = chartCandles.extraSeries.filter(s => s.id.includes(transaction.id));
-
-            targetSeries.forEach(tS => {
-              tS.applyOptions({
-                lineType: LightweightCharts.LineType.Simple,
-                lineStyle: LightweightCharts.LineStyle.LargeDashed,
-              });
-
-              chartCandles.extraSeries = chartCandles.extraSeries
-                .filter(s => !s.id.includes(transaction.id));
-            });
-          });
-
-          tradingList.updateTradesInTradeList(transaction, changes);
-          tradingList.updateCommonStatistics();
-
-          break;
-        }
+        case EActions.get('tradeCreated'): tradeCreatedHandler(instrumentDoc, result); break;
+        case EActions.get('tradeFinished'): tradeFinishedHandler(instrumentDoc, result); break;
+        case EActions.get('transactionFinished'): transactionFinishedHandler(instrumentDoc, result); break;
 
         default: {
           alert('Unknown action');
@@ -534,7 +430,40 @@ $(document).ready(async () => {
       } else if (e.keyCode === 69) {
         // E
         $chartsContainer.find(`.chart-periods .${AVAILABLE_PERIODS.get('1d')}`).click();
-        // */
+      } else if (e.keyCode === 68) {
+        // D
+        if (!choosenInstrumentId) {
+          return true;
+        }
+
+        const activeTransaction = trading.getActiveTransaction(choosenInstrumentId);
+
+        if (!activeTransaction) {
+          return true;
+        }
+
+        const numberTrades = activeTransaction.trades.filter(t => t.isActive).length;
+
+        if (numberTrades === 0) {
+          return true;
+        }
+
+        const originalData = {
+          isLong: trading.isLong,
+          numberTrades: trading.numberTrades,
+        };
+
+        trading.numberTrades = numberTrades;
+        trading.isLong = activeTransaction.isLong;
+
+        if (trading.isLong) {
+          trading.$tradingForm.find('.action-block .sell button').click();
+        } else {
+          trading.$tradingForm.find('.action-block .buy button').click();
+        }
+
+        trading.isLong = originalData.isLong;
+        trading.numberTrades = originalData.numberTrades;
       } else if (e.keyCode === 190) {
         // >
 
@@ -543,8 +472,7 @@ $(document).ready(async () => {
         }
 
         let execFunc;
-        const activeTransaction = trading.transactions
-          .find(t => t.isActive && t.instrumentId === choosenInstrumentId);
+        const activeTransaction = trading.getActiveTransaction(choosenInstrumentId);
 
         if (activeTransaction) {
           return moveTo.moveToFinishTransaction(activeTransaction);
@@ -561,6 +489,7 @@ $(document).ready(async () => {
             case AVAILABLE_NEXT_EVENTS.get('increasedVolume'): execFunc = moveTo.moveToNextIncreasedVolume; break;
             case AVAILABLE_NEXT_EVENTS.get('lifetimeMovingAverage'): execFunc = moveTo.moveToNextLifetimeMovingAverage; break;
             case AVAILABLE_NEXT_EVENTS.get('movingAveragesCrossed'): execFunc = moveTo.moveToNextMovingAveragesCrossed; break;
+            case AVAILABLE_NEXT_EVENTS.get('longMovingAverageTouched'): execFunc = moveTo.moveToNextLongAverageTouched; break;
             case AVAILABLE_NEXT_EVENTS.get('sluggishPrice'): break;
             default: alert('No function for this event');
           }
@@ -676,9 +605,8 @@ $(document).ready(async () => {
               seriesId: choosedFigureShape.seriesId,
             });
           } else if (choosedFigureShape.isLimitOrder) {
-            // todo:
-            // const limitOrder = trading.limitOrders.find(o => o.id === choosedFigureShape.seriesId);
-            // trading.removeLimitOrder(instrumentDoc, limitOrder, choosenPeriods);
+            const limitOrder = trading.limitOrders.find(o => o.id === choosedFigureShape.seriesId);
+            trading.removeLimitOrder(limitOrder);
           }
 
           choosenPeriods.forEach(period => {
@@ -711,7 +639,11 @@ const reloadCharts = async (instrumentId) => {
   const figureLinesData = getFigureLinesFromLocalStorage({ instrumentId });
   drawFigureLines({ instrumentId }, figureLinesData);
 
-  // todo: add trades
+  const activeTransaction = trading.getActiveTransaction(choosenInstrumentId);
+  activeTransaction && drawTrades({ instrumentId }, activeTransaction);
+
+  const activeLimitOrders = trading.limitOrders.filter(o => o.instrumentId === choosenInstrumentId);
+  activeLimitOrders.length && drawLimitOrders({ instrumentId }, activeLimitOrders);
 };
 
 const clearInstrumentData = ({ instrumentId }) => {
@@ -998,42 +930,22 @@ const updateCandlesForNextTick = async (instrumentDoc, period, newCandles = []) 
   });
 
   if (!isChangeable || !isFinished) {
-    const activeTransaction = trading.transactions
-      .find(t => t.isActive && t.instrumentId === choosenInstrumentId);
+    const validTime = ChartCandles.getValidTime(originalTimeUnix, period);
+    const activeTransaction = trading.getActiveTransaction(choosenInstrumentId);
+    const activeLimitOrders = trading.limitOrders.filter(o => o.instrumentId === choosenInstrumentId);
 
     if (activeTransaction) {
       const targetSeries = chartCandles.extraSeries
-        .filter(s => s.isTrade && s.id.includes(activeTransaction.id));
+        .filter(s => s.isTrade && s.id.toString().includes(activeTransaction.id));
 
-      const validTime = ChartCandles.getValidTime(originalTimeUnix, period);
       targetSeries.forEach(s => chartCandles.drawSeries(s, { value: s.price, time: validTime }));
     }
 
-    // todo:
-    /*
-    const activeTrade = trading.trades.reverse().find(t => t.isActive);
-
-    trading.limitOrders.forEach(order => {
-      const targetSeries = chartCandles.extraSeries.filter(
-        s => s.isLimitOrder && s.id.includes(order.id),
-      );
-
-      let validTime = originalTimeUnix;
-
-      if (period === AVAILABLE_PERIODS.get('1h')) {
-        validTime -= validTime % 3600;
-      } else if (period === AVAILABLE_PERIODS.get('1d')) {
-        validTime -= validTime % 86400;
-      }
-
-      targetSeries.forEach(s => {
-        chartCandles.drawSeries(s, {
-          value: s.value,
-          time: validTime,
-        });
-      });
+    activeLimitOrders.forEach(order => {
+      const targetSeries = chartCandles.extraSeries
+        .find(s => s.isLimitOrder && s.id === order.id);
+      targetSeries && chartCandles.drawSeries(targetSeries, { value: order.limitPrice, time: validTime });
     });
-    */
   }
 
   return preparedData;
@@ -1123,56 +1035,48 @@ const nextTick = async () => {
   const lastCandle = newCandles[newCandles.length - 1];
   instrumentDoc.price = lastCandle.close;
 
-  const result = trading.nextTick(instrumentDoc, lastCandle);
+  const resultCheck = trading.checkLimitOrders(instrumentDoc, lastCandle);
+
+  if (resultCheck) {
+    const { results, changes } = resultCheck;
+
+    results.forEach(result => {
+      switch (result.action) {
+        case EActions.get('transactionCreated'): {
+          removeTemporaryStopLossSeries(instrumentDoc);
+          transactionCreatedHandler(instrumentDoc, result);
+          break;
+        }
+
+        case EActions.get('tradeCreated'): tradeCreatedHandler(instrumentDoc, result); break;
+
+        default: {
+          alert('Unknown action');
+          return false;
+        }
+      }
+    });
+
+    changes.forEach(order => {
+      choosenPeriods.forEach(period => {
+        const chartCandles = instrumentDoc[`chart_candles_${period}`];
+        const targetSeries = chartCandles.extraSeries
+          .find(s => s.isLimitOrder && s.id === order.id);
+        targetSeries && chartCandles.removeSeries(targetSeries);
+      });
+    });
+
+    tradingList.setTransactions(trading.transactions);
+  }
+
+  const result = trading.nextTick(instrumentDoc, lastCandle, Boolean(resultCheck));
 
   if (result) {
     const { action, transaction, changes } = result;
 
     switch (action) {
-      case EActions.get('tradeFinished'): {
-        const values = transaction.trades
-          .filter(trade => !trade.isActive)
-          .map(trade => trade.takeProfitPrice);
-
-        choosenPeriods.forEach(period => {
-          const chartCandles = instrumentDoc[`chart_candles_${period}`];
-          const targetSeries = chartCandles.extraSeries
-            .filter(s => s.id.includes('takeprofit') && values.includes(s.price));
-
-          targetSeries.forEach(tS => {
-            tS.applyOptions({
-              lineType: LightweightCharts.LineType.Simple,
-              lineStyle: LightweightCharts.LineStyle.LargeDashed,
-            });
-
-            chartCandles.extraSeries = chartCandles.extraSeries
-              .filter(s => s.id !== tS.id && s.price !== tS.price);
-          });
-        });
-
-        break;
-      }
-
-      case EActions.get('transactionFinished'): {
-        choosenPeriods.forEach(period => {
-          const chartCandles = instrumentDoc[`chart_candles_${period}`];
-          const targetSeries = chartCandles.extraSeries.filter(s => s.id.includes(transaction.id));
-
-          targetSeries.forEach(tS => {
-            tS.applyOptions({
-              lineType: LightweightCharts.LineType.Simple,
-              lineStyle: LightweightCharts.LineStyle.LargeDashed,
-            });
-
-            chartCandles.extraSeries = chartCandles.extraSeries
-              .filter(s => !s.id.includes(transaction.id));
-          });
-        });
-
-        tradingList.updateCommonStatistics();
-
-        break;
-      }
+      case EActions.get('tradeFinished'): tradeFinishedHandler(instrumentDoc, result); break;
+      case EActions.get('transactionFinished'): transactionFinishedHandler(instrumentDoc, result); break;
 
       default: {
         alert('Unknown action');
@@ -1183,11 +1087,6 @@ const nextTick = async () => {
     tradingList.setTransactions(trading.transactions);
     tradingList.updateTradesInTradeList(transaction, changes);
   }
-
-  /* todo:
-  const wasTrade = trading.checkLimitOrders(instrumentDoc, lastCandle, choosenPeriods);
-  trading.nextTick(instrumentDoc, lastCandle, choosenPeriods, wasTrade);
-  */
 
   if (isActiveInstrumentChoosing) {
     const lastCandles = await getLastCandles();
@@ -1424,31 +1323,39 @@ const loadCharts = ({
           instrumentPrice: chartCandles.getInstrumentPrice(),
         });
 
+        const activeTransaction = trading.getActiveTransaction(instrumentId);
+
+        if (activeTransaction) {
+          resetTransactionStopLossPrice(activeTransaction, {
+            stopLossPercent: trading.stopLossPercent,
+          });
+        } else {
+          createTemporaryStopLossSeries(instrumentDoc, {
+            price: coordinateToPrice,
+          });
+        }
+
         trading.isActiveStopLossChoice = false;
       }
 
-      /* todo:
       if (trading.isActiveLimitOrderChoice) {
-        const limitOrder = trading.addLimitOrder(instrumentDoc, {
-          startTime: paramTime,
+        const limitOrder = trading.createLimitOrder(instrumentDoc, {
           limitPrice: coordinateToPrice,
           instrumentPrice: chartCandles.getInstrumentPrice(),
+          stopLossPercent: trading.stopLossPercent,
+          numberTrades: trading.numberTrades,
         });
 
-        choosenPeriods.forEach(period => {
-          TradingDemo.makeLimitOrderSeries(instrumentDoc, limitOrder, period);
-        });
+        drawLimitOrders({ instrumentId }, [limitOrder]);
 
         choosedFigureShape = {
           instrumentId,
           isLimitOrder: true,
           seriesId: limitOrder.id,
-          time: limitOrder.startAt,
         };
 
         trading.isActiveLimitOrderChoice = false;
       }
-      */
     });
 
     const $ruler = $chartContainer.find('span.ruler');
@@ -1757,6 +1664,103 @@ const changeFinishDatePoint = (newValue) => {
   $finishDatePoint.parent().find('span').text(newDate.format('DD.MM.YYYY HH:mm'));
 };
 
+const transactionCreatedHandler = (instrumentDoc, { transaction }) => {
+  choosenPeriods.forEach(period => {
+    const chartCandles = instrumentDoc[`chart_candles_${period}`];
+    const transactionSeries = TradingDemo.createTransactionChartSeries(chartCandles, transaction);
+    const stopLossSeries = TradingDemo.createStopLossChartSeries(chartCandles, transaction);
+    const takeProfitSeries = transaction.trades
+      .map(trade => TradingDemo.createTakeProfitChartSeries(chartCandles, transaction, trade));
+
+    const lastCandle = chartCandles.originalData[chartCandles.originalData.length - 1];
+    const validTime = ChartCandles.getValidTime(lastCandle.originalTimeUnix, period);
+
+    [transactionSeries, stopLossSeries, ...takeProfitSeries].forEach(
+      series => chartCandles.drawSeries(series, [{ value: series.price, time: validTime }]),
+    );
+  });
+
+  tradingList.addTradesToTradeList(transaction, transaction.trades);
+};
+
+const tradeCreatedHandler = (instrumentDoc, { transaction, changes }) => {
+  choosenPeriods.forEach(period => {
+    const chartCandles = instrumentDoc[`chart_candles_${period}`];
+    const lastCandle = chartCandles.originalData[chartCandles.originalData.length - 1];
+    const validTime = ChartCandles.getValidTime(lastCandle.originalTimeUnix, period);
+
+    chartCandles.extraSeries
+      .filter(s => s.isTrade && s.id.toString().includes(transaction.id))
+      .forEach(series => chartCandles.removeSeries(series));
+
+    const transactionSeries = TradingDemo.createTransactionChartSeries(chartCandles, transaction);
+    const stopLossSeries = TradingDemo.createStopLossChartSeries(chartCandles, transaction);
+    const takeProfitSeries = transaction.trades
+      .filter(trade => trade.isActive)
+      .map(trade => TradingDemo.createTakeProfitChartSeries(chartCandles, transaction, trade));
+
+    [transactionSeries, stopLossSeries, ...takeProfitSeries].forEach(series => {
+      const values = [{
+        value: series.price,
+        time: ChartCandles.getValidTime(series.time, period),
+      }];
+
+      if (series.time !== validTime) {
+        values.push({ value: series.price, time: validTime });
+      }
+
+      chartCandles.drawSeries(series, values);
+    });
+  });
+
+  tradingList.addTradesToTradeList(transaction, changes);
+};
+
+const tradeFinishedHandler = (instrumentDoc, { transaction, changes }) => {
+  const values = transaction.trades
+    .filter(trade => !trade.isActive)
+    .map(trade => trade.takeProfitPrice);
+
+  choosenPeriods.forEach(period => {
+    const chartCandles = instrumentDoc[`chart_candles_${period}`];
+    const targetSeries = chartCandles.extraSeries
+      .filter(s => s.isTrade && s.id.includes('takeprofit') && values.includes(s.price));
+
+    targetSeries.forEach(tS => {
+      tS.applyOptions({
+        lineType: LightweightCharts.LineType.Simple,
+        lineStyle: LightweightCharts.LineStyle.LargeDashed,
+      });
+
+      chartCandles.extraSeries = chartCandles.extraSeries
+        .filter(s => s.id !== tS.id && s.price !== tS.price);
+    });
+  });
+
+  tradingList.updateTradesInTradeList(transaction, changes);
+};
+
+const transactionFinishedHandler = (instrumentDoc, { transaction, changes }) => {
+  choosenPeriods.forEach(period => {
+    const chartCandles = instrumentDoc[`chart_candles_${period}`];
+
+    chartCandles.extraSeries
+      .filter(s => s.isTrade && s.id.toString().includes(transaction.id))
+      .forEach(tS => {
+        tS.applyOptions({
+          lineType: LightweightCharts.LineType.Simple,
+          lineStyle: LightweightCharts.LineStyle.LargeDashed,
+        });
+      });
+
+    chartCandles.extraSeries = chartCandles.extraSeries
+      .filter(s => !s.id.toString().includes(transaction.id));
+  });
+
+  tradingList.updateTradesInTradeList(transaction, changes);
+  tradingList.updateCommonStatistics();
+};
+
 const drawFigureLines = ({ instrumentId }, figureLinesData = [], periods = choosenPeriods) => {
   if (!figureLinesData.length) return;
 
@@ -1940,44 +1944,24 @@ const drawTrades = ({ instrumentId }, transaction, periods = []) => {
   });
 };
 
-// todo:
-const drawLimitOrders = ({ instrumentId }, limitOrder, periods = []) => {
-  if (!periods.length) {
-    periods = choosenPeriods;
-  }
-
+const drawLimitOrders = ({ instrumentId }, limitOrders = []) => {
   const instrumentDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
 
-  periods.forEach(period => {
-    const series = TradingDemo.makeLimitOrderSeries(instrumentDoc, limitOrder, period);
+  limitOrders.forEach(limitOrder => {
+    choosenPeriods.forEach(period => {
+      const chartCandles = instrumentDoc[`chart_candles_${period}`];
 
-    if (!series.length) return;
+      const newSeries = TradingDemo.createLimitOrderChartSeries(chartCandles, limitOrder);
+      const lastCandle = chartCandles.originalData[chartCandles.originalData.length - 1];
+      const prevCandle = chartCandles.originalData[chartCandles.originalData.length - 20];
 
-    const chartCandles = instrumentDoc[`chart_candles_${period}`];
-    const candlesData = chartCandles.originalData;
-    const lCandles = candlesData.length;
-
-    if (!lCandles) return;
-
-    let startAt = limitOrder.startAt;
-
-    if (period === AVAILABLE_PERIODS.get('1h')) {
-      startAt -= startAt % 3600;
-    } else if (period === AVAILABLE_PERIODS.get('1d')) {
-      startAt -= startAt % 86400;
-    }
-
-    series.forEach(s => {
-      chartCandles.drawSeries(
-        s,
-        [{
-          value: s.value,
-          time: startAt,
-        }, {
-          value: s.value,
-          time: candlesData[lCandles - 1].originalTimeUnix,
-        }],
-      );
+      chartCandles.drawSeries(newSeries, [{
+        value: limitOrder.limitPrice,
+        time: ChartCandles.getValidTime(prevCandle.originalTimeUnix, period),
+      }, {
+        value: limitOrder.limitPrice,
+        time: ChartCandles.getValidTime(lastCandle.originalTimeUnix, period),
+      }]);
     });
   });
 };
@@ -2393,6 +2377,94 @@ const sortListInstruments = () => {
     const $instrument = $(`#instrument-${doc._id}`);
     $instrument.css('order', index);
     doc.index = index;
+  });
+};
+
+const createTemporaryStopLossSeries = (instrumentDoc, {
+  price,
+}) => {
+  removeTemporaryStopLossSeries(instrumentDoc);
+
+  choosenPeriods.forEach(period => {
+    const chartCandles = instrumentDoc[`chart_candles_${period}`];
+
+    const newSeries = chartCandles.addExtraSeries({
+      color: constants.RED_COLOR,
+      lastValueVisible: false,
+    }, {
+      id: 'stoploss-temporary',
+    });
+
+    const lastCandle = chartCandles.originalData[chartCandles.originalData.length - 1];
+    const prevCandle = chartCandles.originalData[chartCandles.originalData.length - 20];
+
+    chartCandles.drawSeries(newSeries, [{
+      value: price,
+      time: ChartCandles.getValidTime(prevCandle.originalTimeUnix, period),
+    }, {
+      value: price,
+      time: ChartCandles.getValidTime(lastCandle.originalTimeUnix, period),
+    }]);
+  });
+};
+
+const removeTemporaryStopLossSeries = (instrumentDoc) => {
+  choosenPeriods.forEach(period => {
+    const chartCandles = instrumentDoc[`chart_candles_${period}`];
+    const targetSeries = chartCandles.extraSeries.find(s => s.id === 'stoploss-temporary');
+    targetSeries && chartCandles.removeSeries(targetSeries);
+  });
+};
+
+const resetTransactionStopLossPrice = (transaction, {
+  stopLossPercent,
+}) => {
+  if (!transaction.isActive) {
+    return false;
+  }
+
+  const instrumentDoc = instrumentsDocs.find(doc => doc._id === transaction.instrumentId);
+  const instrumentPrice = instrumentDoc[`chart_candles_${activePeriod}`].getInstrumentPrice();
+
+  const tickSizePrecision = TradingDemo.getPrecision(instrumentDoc.tick_size); // 0.001
+  const newStopLossPrice = parseFloat(trading.calculateStopLossPrice({
+    instrumentPrice,
+    stopLossPercent,
+    isLong: transaction.isLong,
+  }).toFixed(tickSizePrecision));
+
+  if ((transaction.isLong && newStopLossPrice < transaction.stopLossPrice)
+    || (!transaction.isLong && newStopLossPrice > transaction.stopLossPrice)) {
+    alert('It\'s not allowed to set stopLossPercent greater than previous one');
+    return true;
+  }
+
+  transaction.stopLossPercent = stopLossPercent;
+  transaction.stopLossPrice = newStopLossPrice;
+
+  tradingList.setTransactions(trading.transactions);
+
+  choosenPeriods.forEach(period => {
+    const chartCandles = instrumentDoc[`chart_candles_${period}`];
+
+    const targetSeries = chartCandles.extraSeries
+      .find(s => s.id.toString().includes(`stoploss-${transaction.id}`));
+    targetSeries && chartCandles.removeSeries(targetSeries);
+
+    const lastCandle = chartCandles.originalData[chartCandles.originalData.length - 1];
+    const validTime = ChartCandles.getValidTime(lastCandle.originalTimeUnix, period);
+    const stopLossSeries = TradingDemo.createStopLossChartSeries(chartCandles, transaction);
+
+    const values = [{
+      value: stopLossSeries.price,
+      time: ChartCandles.getValidTime(stopLossSeries.time, period),
+    }];
+
+    if (stopLossSeries.time !== validTime) {
+      values.push({ value: stopLossSeries.price, time: validTime });
+    }
+
+    chartCandles.drawSeries(stopLossSeries, values);
   });
 };
 

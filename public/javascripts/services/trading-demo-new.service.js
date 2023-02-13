@@ -23,6 +23,10 @@ const EActions = new Map([
   ['transactionFinished', 'transactionFinished'],
 ]);
 
+const ELimitOrderActions = new Map([
+  ['completed', 'completed'],
+]);
+
 class TradingDemo {
   constructor() {
     this.$tradingForm = $('.trading-form');
@@ -41,6 +45,10 @@ class TradingDemo {
 
   init() {
     this.loadTradingFormHandlers();
+  }
+
+  getActiveTransaction(instrumentId) {
+    return this.transactions.find(t => t.isActive && t.instrumentId === instrumentId);
   }
 
   changeTypeAction(typeAction) {
@@ -112,6 +120,11 @@ class TradingDemo {
     this.changeStopLossPercent(parseFloat(percentPerPrice.toFixed(2)));
   }
 
+  calculateStopLossPrice({ instrumentPrice, stopLossPercent, isLong }) {
+    const percentPerPrice = instrumentPrice * (stopLossPercent / 100);
+    return isLong ? instrumentPrice - percentPerPrice : instrumentPrice + percentPerPrice;
+  }
+
   createTransaction(instrumentDoc, candleData, isManual = false) {
     let action;
     const changes = [];
@@ -139,6 +152,7 @@ class TradingDemo {
         stopLossPrice: 0,
         stopLossPercent: 0,
         originalStopLossPrice: 0,
+        originalStopLossPercent: 0,
 
         trades: [],
 
@@ -151,10 +165,11 @@ class TradingDemo {
       const stopLossPercent = this.stopLossPercent; // || TRADING_CONSTANTS.LOSS_PERCENT_PER_DEPOSIT
 
       let quantity = sumTransaction / instrumentPrice;
-      const percentPerPrice = instrumentPrice * (stopLossPercent / 100);
-      const stopLossPrice = parseFloat((
-        this.isLong ? instrumentPrice - percentPerPrice : instrumentPrice + percentPerPrice
-      ).toFixed(tickSizePrecision));
+      const stopLossPrice = parseFloat(this.calculateStopLossPrice({
+        stopLossPercent,
+        instrumentPrice,
+        isLong: newTransaction.isLong,
+      }).toFixed(tickSizePrecision));
 
       const profit = Math.abs(((stopLossPrice - instrumentPrice) * quantity));
       const coefficient = profit / allowedSumLoss;
@@ -198,8 +213,9 @@ class TradingDemo {
       }
 
       newTransaction.stopLossPrice = stopLossPrice;
-      newTransaction.originalStopLossPrice = newTransaction.stopLossPrice;
       newTransaction.stopLossPercent = stopLossPercent;
+      newTransaction.originalStopLossPrice = newTransaction.stopLossPrice;
+      newTransaction.originalStopLossPercent = newTransaction.stopLossPercent;
       newTransaction.quantity = parseFloat((quantity).toFixed(stepSizePrecision));
 
       for (let i = 0; i < numberTrades; i += 1) {
@@ -224,12 +240,14 @@ class TradingDemo {
       changes.push(...newTransaction.trades);
       action = EActions.get('transactionCreated');
     } else if ((targetTransaction.isLong && this.isLong) || (!targetTransaction.isLong && !this.isLong)) {
+      /*
       const doesExistNotActive = targetTransaction.trades.some(t => !t.isActive);
 
       if (doesExistNotActive) {
         alert('Not allowed buy more after worked out trade');
         return false;
       }
+      */
 
       const lActiveTrades = targetTransaction.trades.filter(t => t.isActive).length;
 
@@ -253,21 +271,34 @@ class TradingDemo {
       }
 
       const averagePrice = TradingDemo.getAveragePrice(targetTransaction);
-      const percentPerPrice = averagePrice * (targetTransaction.stopLossPercent / 100);
+      const percentPerPrice = averagePrice * (targetTransaction.originalStopLossPercent / 100);
 
       targetTransaction.stopLossPrice = parseFloat((
         this.isLong ? averagePrice - percentPerPrice : averagePrice + percentPerPrice
       ).toFixed(tickSizePrecision));
 
       targetTransaction.trades
-        .filter(trade => trade.isActive)
+        .filter(trade => trade.isActive && !trade.takeProfitPrice)
         .forEach((trade, index) => {
           trade.takeProfitPrice = TradingDemo.calculateTakeProfitForTrade(targetTransaction, {
+            instrumentPrice,
             tickSizePrecision,
             incrementValue: index,
-            instrumentPrice: averagePrice,
           });
         });
+
+      /*
+      targetTransaction.trades
+        .forEach((trade, index) => {
+          if (trade.isActive && !trade.takeProfitPrice) {
+            trade.takeProfitPrice = TradingDemo.calculateTakeProfitForTrade(targetTransaction, {
+              tickSizePrecision,
+              incrementValue: index,
+              instrumentPrice,
+            });
+          }
+        });
+      */
 
       action = EActions.get('tradeCreated');
     } else {
@@ -346,12 +377,10 @@ class TradingDemo {
     instrumentPrice,
     tickSizePrecision,
   }) {
-    const percentPerPrice = Math.abs(transaction.stopLossPrice - instrumentPrice);
+    const takeProfitPercent = transaction.stopLossPercent * (TRADING_CONSTANTS.DEFAULT_TAKEPROFIT_RELATION + incrementValue);
+    const sumProfit = (transaction.stopLossPrice / 100) * takeProfitPercent;
 
-    const takeProfitPrice = transaction.isLong
-      ? instrumentPrice + (percentPerPrice * (TRADING_CONSTANTS.DEFAULT_TAKEPROFIT_RELATION + incrementValue))
-      : instrumentPrice - (percentPerPrice * (TRADING_CONSTANTS.DEFAULT_TAKEPROFIT_RELATION + incrementValue));
-
+    const takeProfitPrice = transaction.isLong ? instrumentPrice + sumProfit : instrumentPrice - sumProfit;
     return parseFloat((takeProfitPrice).toFixed(tickSizePrecision));
   }
 
@@ -380,9 +409,86 @@ class TradingDemo {
     transaction.endedAtUnix = endedAtUnix;
   }
 
-  nextTick(instrumentDoc, candleData) {
-    const activeTransaction = this.transactions
-      .find(t => t.isActive && t.instrumentId === instrumentDoc._id);
+  createLimitOrder(instrumentDoc, {
+    limitPrice,
+    instrumentPrice,
+    stopLossPercent,
+    numberTrades,
+  }) {
+    const isLong = limitPrice > instrumentPrice;
+    const tickSizePrecision = TradingDemo.getPrecision(instrumentDoc.tick_size);
+
+    limitPrice = parseFloat(limitPrice.toFixed(tickSizePrecision));
+    const sumStopLoss = (instrumentPrice / 100) * stopLossPercent;
+    const stopLossPrice = !isLong ? instrumentPrice + sumStopLoss : instrumentPrice - sumStopLoss;
+
+    const newLimitOrder = {
+      id: uuidv4(),
+      instrumentId: instrumentDoc._id,
+      isLong,
+      stopLossPrice,
+      numberTrades,
+      limitPrice,
+    };
+
+    this.limitOrders.push(newLimitOrder);
+    return newLimitOrder;
+  }
+
+  removeLimitOrder(limitOrder) {
+    this.limitOrders = this.limitOrders.filter(o => o.id !== limitOrder.id);
+  }
+
+  checkLimitOrders(instrumentDoc, candleData) {
+    const activeLimitOrders = this.limitOrders.filter(o => o.instrumentId === instrumentDoc._id);
+
+    if (!activeLimitOrders.length) {
+      return false;
+    }
+
+    const results = [];
+    const changes = [];
+
+    activeLimitOrders.forEach(limitOrder => {
+      if ((limitOrder.isLong && candleData.high >= limitOrder.limitPrice)
+        || (!limitOrder.isLong && candleData.low <= limitOrder.limitPrice)) {
+        this.isLong = limitOrder.isLong;
+        this.numberTrades = limitOrder.numberTrades;
+
+        this.calculateStopLossPercent({
+          instrumentPrice: limitOrder.limitPrice,
+          stopLossPrice: limitOrder.stopLossPrice,
+        });
+
+        console.log(limitOrder.stopLossPrice, limitOrder.limitPrice, this.stopLossPercent);
+
+        const result = this.createTransaction(instrumentDoc, {
+          ...candleData,
+          close: limitOrder.limitPrice,
+        });
+
+        if (result) {
+          results.push(result);
+        }
+
+        this.removeLimitOrder(limitOrder);
+        changes.push(limitOrder);
+      }
+    });
+
+    if (!changes.length) {
+      return false;
+    }
+
+    return {
+      action: ELimitOrderActions.get('completed'),
+      results,
+      changes,
+    };
+  }
+
+  nextTick(instrumentDoc, candleData, isActivatedLimitOrder = false) {
+    const activeTransaction = this.getActiveTransaction(instrumentDoc._id);
 
     if (!activeTransaction) {
       return false;
@@ -423,7 +529,8 @@ class TradingDemo {
     }
 
     if (activeTransaction.isLong) {
-      if (candleData.low <= activeTransaction.stopLossPrice) {
+      if ((isActivatedLimitOrder && candleData.close <= activeTransaction.stopLossPrice)
+        || (!isActivatedLimitOrder && candleData.low <= activeTransaction.stopLossPrice)) {
         activeTrades.forEach(trade => {
           TradingDemo.finishTrade(activeTransaction, trade, {
             instrumentPrice: activeTransaction.stopLossPrice,
@@ -439,7 +546,8 @@ class TradingDemo {
         action = EActions.get('transactionFinished');
       }
     } else {
-      if (candleData.high >= activeTransaction.stopLossPrice) {
+      if ((isActivatedLimitOrder && candleData.close >= activeTransaction.stopLossPrice)
+        || (!isActivatedLimitOrder && candleData.high >= activeTransaction.stopLossPrice)) {
         activeTrades.forEach(trade => {
           TradingDemo.finishTrade(activeTransaction, trade, {
             instrumentPrice: activeTransaction.stopLossPrice,
@@ -520,11 +628,9 @@ class TradingDemo {
   }
 
   static calculateTransactionProfit(transaction) {
-    const values = transaction.trades
-      // .filter(trade => !trade.isActive)
-      .map(trade => TradingDemo.calculateTradeProfit(trade));
-
-    return values.reduce((o, r) => o + r, 0);
+    return transaction.trades
+      .map(trade => TradingDemo.calculateTradeProfit(trade))
+      .reduce((o, r) => o + r, 0);
   }
 
   static calculateTradeProfit(trade) {
@@ -617,8 +723,19 @@ class TradingDemo {
     return chartCandles.addExtraSeries(options, {
       isTrade: true,
       time: trade.startedAtUnix,
-      id: `takeprofit-${transaction.id}-${trade.takeProfitPrice}`,
+      id: `takeprofit-${transaction.id}-${trade.id}`,
       price: trade.takeProfitPrice,
+    });
+  }
+
+  static createLimitOrderChartSeries(chartCandles, limitOrder) {
+    return chartCandles.addExtraSeries({
+      color: constants.ORANGE_COLOR,
+      lastValueVisible: false,
+    }, {
+      id: limitOrder.id,
+      isLimitOrder: true,
+      value: limitOrder.limitPrice,
     });
   }
 
