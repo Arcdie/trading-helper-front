@@ -1605,9 +1605,11 @@ button#settings {
         display: flex;
         align-items: center;
         border-top: none; }
+    .demo .charts-container .legend p.values:first-child {
+      margin-bottom: 10px; }
     .demo .charts-container .legend p.values span {
       color: #000FFF;
-      margin-left: 2px;
+      margin-left: 5px;
       margin-right: 5px; }
     .demo .charts-container .ruler {
       position: absolute;

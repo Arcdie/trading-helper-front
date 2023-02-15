@@ -43,6 +43,8 @@ const AVAILABLE_NEXT_EVENTS = new Map([
 
 /* Variables */
 
+let choosenNextEvent = AVAILABLE_NEXT_EVENTS.get('figureLevel');
+
 let linePoints = [];
 let isLoading = false;
 let isSinglePeriod = false;
@@ -104,8 +106,6 @@ let choosenSortSettings = {
   isLong: true,
 };
 
-let choosenNextEvent = AVAILABLE_NEXT_EVENTS.get('priceJump');
-
 const trading = new TradingDemo();
 const tradingList = new TradingDemoList(PAGE_KEY);
 
@@ -137,8 +137,8 @@ $(document).ready(async () => {
 
   setHistoryMoment();
 
-  // removeFigureLinesFromLocalStorage({});
-  // removeFigureLevelsFromLocalStorage({});
+  removeFigureLinesFromLocalStorage({});
+  removeFigureLevelsFromLocalStorage({});
 
   $instrumentsContainer
     .css({ maxHeight: windowHeight });
@@ -629,9 +629,19 @@ $(document).ready(async () => {
 /* Functions */
 
 const reloadCharts = async (instrumentId) => {
+  const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
+
   await loadCandles({ instrumentId }, choosenPeriods);
 
   loadCharts({ instrumentId });
+
+  choosenPeriods.forEach(period => {
+    const chartCandles = instrumentDoc[`chart_candles_${period}`];
+
+    $chartsContainer
+      .find(`.period_${period} .percent-average`)
+      .text(`${chartCandles.calculateAveragePercent().toFixed(2)}%`);
+  });
 
   const figureLevelsData = getFigureLevelsFromLocalStorage({ instrumentId });
   drawFigureLevels({ instrumentId }, figureLevelsData);
@@ -946,6 +956,10 @@ const updateCandlesForNextTick = async (instrumentDoc, period, newCandles = []) 
         .find(s => s.isLimitOrder && s.id === order.id);
       targetSeries && chartCandles.drawSeries(targetSeries, { value: order.limitPrice, time: validTime });
     });
+
+    $chartsContainer
+      .find(`.period_${period} .percent-average`)
+      .text(`${chartCandles.calculateAveragePercent().toFixed(2)}%`);
   }
 
   return preparedData;
@@ -1109,7 +1123,8 @@ const loadCharts = ({
     appendStr += `<div class="chart-container period_${period}" style="width: ${choosenPeriods.length === 2 ? '50' : '100'}%">
       <div class="charts-nav">
         <div class="legend">
-          <p class="values">ОТКР<span class="open">0</span>МАКС<span class="high">0</span>МИН<span class="low">0</span>ЗАКР<span class="close">0</span><span class="percent">0%</span><span class="percent-level">0%</span></p>
+          <p class="values">ОТКР<span class="open">0</span>МАКС<span class="high">0</span>МИН<span class="low">0</span>ЗАКР<span class="close">0</span><span class="percent">0%</span></p>
+          <p class="values">СРЕД<span class="percent-average">0%</span><span class="percent-level">0%</span></p>
         </div>
 
         <div class="row">
@@ -1339,10 +1354,27 @@ const loadCharts = ({
       }
 
       if (trading.isActiveLimitOrderChoice) {
+        let stopLossPrice = 0;
+        const instrumentPrice = chartCandles.getInstrumentPrice();
+
+        if (!trading.getActiveTransaction(instrumentId)) {
+          const temporaryStopLossSeries = chartCandles.extraSeries.find(s => s.id === 'stoploss-temporary');
+
+          if (!temporaryStopLossSeries) {
+            stopLossPrice = trading.calculateStopLossPrice({
+              instrumentPrice: coordinateToPrice,
+              stopLossPercent: this.stopLossPercent,
+              isLong: instrumentPrice < coordinateToPrice,
+            });
+          } else {
+            stopLossPrice = temporaryStopLossSeries.value;
+          }
+        }
+
         const limitOrder = trading.createLimitOrder(instrumentDoc, {
+          stopLossPrice,
+          instrumentPrice,
           limitPrice: coordinateToPrice,
-          instrumentPrice: chartCandles.getInstrumentPrice(),
-          stopLossPercent: trading.stopLossPercent,
           numberTrades: trading.numberTrades,
         });
 
@@ -2393,6 +2425,7 @@ const createTemporaryStopLossSeries = (instrumentDoc, {
       lastValueVisible: false,
     }, {
       id: 'stoploss-temporary',
+      value: price,
     });
 
     const lastCandle = chartCandles.originalData[chartCandles.originalData.length - 1];

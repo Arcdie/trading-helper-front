@@ -239,6 +239,27 @@ class ChartCandles {
     });
   }
 
+  calculateAveragePercent() {
+    if (!this.originalData.length) {
+      return 0;
+    }
+
+    let averagePercent = 0;
+    const lOriginalData = this.originalData.length;
+    const targetCandlesPeriod = this.originalData.slice(lOriginalData - 36, lOriginalData);
+
+    targetCandlesPeriod.forEach(c => {
+      const isLong = c.close > c.open;
+
+      const differenceBetweenPrices = isLong ? c.high - c.open : c.open - c.low;
+      const percentPerPrice = 100 / (c.open / differenceBetweenPrices);
+
+      averagePercent += percentPerPrice;
+    });
+
+    return averagePercent / 36;
+  }
+
   prepareNewData(instrumentData, doesConsiderTimezone = true) {
     const isUnixTime = ['1m', '5m', '1h', '4h'].includes(this.period);
 

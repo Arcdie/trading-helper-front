@@ -5,9 +5,11 @@ classes, LightweightCharts,
 */
 
 const TRADING_CONSTANTS = {
-  DEFAULT_NUMBER_TRADES: 5,
+  DEFAULT_NUMBER_TRADES: 3,
   DEFAULT_STOPLOSS_PERCENT: 0.5,
   DEFAULT_TAKEPROFIT_RELATION: 3,
+
+  MAX_NUMBER_TRADES: 5,
 
   LOSS_PERCENT_PER_DEPOSIT: 0.5,
   MIN_WORK_AMOUNT: 20,
@@ -75,7 +77,7 @@ class TradingDemo {
 
     const $numberTrades = this.$tradingForm.find('.number-trades-block input[type="text"]');
 
-    if (Number.isNaN(newValue) || newValue <= 0) {
+    if (Number.isNaN(newValue) || newValue <= 0 || newValue > TRADING_CONSTANTS.MAX_NUMBER_TRADES) {
       this.numberTrades = TRADING_CONSTANTS.DEFAULT_NUMBER_TRADES;
       $numberTrades.val(this.numberTrades);
       return;
@@ -174,8 +176,10 @@ class TradingDemo {
       const profit = Math.abs(((stopLossPrice - instrumentPrice) * quantity));
       const coefficient = profit / allowedSumLoss;
 
-      if (coefficient > 0) {
-        quantity /= coefficient;
+      if (coefficient >= 0) {
+        if (coefficient > 0) {
+          quantity /= coefficient;
+        }
       } else {
         alert(`coefficient = ${coefficient}`);
         return false;
@@ -251,8 +255,8 @@ class TradingDemo {
 
       const lActiveTrades = targetTransaction.trades.filter(t => t.isActive).length;
 
-      if ((lActiveTrades + numberTrades) > TRADING_CONSTANTS.DEFAULT_NUMBER_TRADES) {
-        numberTrades = TRADING_CONSTANTS.DEFAULT_NUMBER_TRADES - lActiveTrades;
+      if ((lActiveTrades + numberTrades) > TRADING_CONSTANTS.MAX_NUMBER_TRADES) {
+        numberTrades = TRADING_CONSTANTS.MAX_NUMBER_TRADES - lActiveTrades;
       }
 
       if (numberTrades === 0) {
@@ -412,15 +416,13 @@ class TradingDemo {
   createLimitOrder(instrumentDoc, {
     limitPrice,
     instrumentPrice,
-    stopLossPercent,
+    stopLossPrice,
     numberTrades,
   }) {
     const isLong = limitPrice > instrumentPrice;
     const tickSizePrecision = TradingDemo.getPrecision(instrumentDoc.tick_size);
 
     limitPrice = parseFloat(limitPrice.toFixed(tickSizePrecision));
-    const sumStopLoss = (instrumentPrice / 100) * stopLossPercent;
-    const stopLossPrice = !isLong ? instrumentPrice + sumStopLoss : instrumentPrice - sumStopLoss;
 
     const newLimitOrder = {
       id: uuidv4(),
@@ -455,12 +457,12 @@ class TradingDemo {
         this.isLong = limitOrder.isLong;
         this.numberTrades = limitOrder.numberTrades;
 
-        this.calculateStopLossPercent({
-          instrumentPrice: limitOrder.limitPrice,
-          stopLossPrice: limitOrder.stopLossPrice,
-        });
-
-        console.log(limitOrder.stopLossPrice, limitOrder.limitPrice, this.stopLossPercent);
+        if (limitOrder.stopLossPrice !== 0) {
+          this.calculateStopLossPercent({
+            instrumentPrice: limitOrder.limitPrice,
+            stopLossPrice: limitOrder.stopLossPrice,
+          });
+        }
 
         const result = this.createTransaction(instrumentDoc, {
           ...candleData,

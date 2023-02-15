@@ -221,6 +221,27 @@ class TradingDemoList {
         _this.updateCommonStatistics();
       });
 
+    this.$tradingList
+      .on('click', '.trade .profit', function () {
+        const $parent = $(this).parent();
+        const transactionId = $parent.data('transactionid');
+        const transaction = _this.trading.transactions.find(t => t.id === transactionId);
+
+        const transactionProfit = TradingDemo.calculateTransactionProfit(transaction);
+
+        let returnMessage = `${transactionProfit.toFixed(2)}$`;
+        const sumLoss = transaction.trades.reduce((a, v) => {
+          const key = transaction.isLong ? 'buyPrice' : 'sellPrice';
+          return a + Math.abs((v[key] - transaction.stopLossPrice) * v.quantity);
+        }, 0);
+
+        if (transactionProfit > sumLoss) {
+          returnMessage += `(${(transactionProfit / sumLoss).toFixed(2)})`;
+        }
+
+        alert(returnMessage);
+      });
+
     // this.$tradingList
     //   .on('click', '.trade .profit', function () {
     //     const $trade = $(this).closest('.trade');
