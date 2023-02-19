@@ -34,7 +34,9 @@ const AVAILABLE_NEXT_EVENTS = new Map([
   ['increasedVolume', 'increasedVolume'],
   ['priceJump', 'priceJump'],
   ['absorption', 'absorption'],
-  ['sluggishPrice', 'sluggishPrice'],
+  ['obedientPrice', 'obedientPrice'],
+  ['sluggishedPrice', 'sluggishedPrice'],
+  ['repeatedCandles', 'repeatedCandles'],
 
   ['lifetimeMovingAverage', 'lifetimeMovingAverage'],
   ['movingAveragesCrossed', 'movingAveragesCrossed'],
@@ -43,7 +45,7 @@ const AVAILABLE_NEXT_EVENTS = new Map([
 
 /* Variables */
 
-let choosenNextEvent = AVAILABLE_NEXT_EVENTS.get('figureLevel');
+let choosenNextEvent = AVAILABLE_NEXT_EVENTS.get('increasedVolume');
 
 let linePoints = [];
 let isLoading = false;
@@ -137,8 +139,8 @@ $(document).ready(async () => {
 
   setHistoryMoment();
 
-  removeFigureLinesFromLocalStorage({});
-  removeFigureLevelsFromLocalStorage({});
+  // removeFigureLinesFromLocalStorage({});
+  // removeFigureLevelsFromLocalStorage({});
 
   $instrumentsContainer
     .css({ maxHeight: windowHeight });
@@ -421,6 +423,29 @@ $(document).ready(async () => {
       // 1, 2, 3, 4, 5
       if ([49, 50, 51, 52, 53].includes(e.keyCode)) {
         trading.changeNumberTrades(e.keyCode - 48);
+      } else if (e.keyCode === 192) {
+        // § (before 1)
+        if (!choosenInstrumentId) {
+          return true;
+        }
+
+        const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
+        const limitOrders = trading.limitOrders.filter(o => o.instrumentId === choosenInstrumentId);
+
+        if (!limitOrders.length) {
+          return true;
+        }
+
+        choosenPeriods.forEach(period => {
+          const chartCandles = instrumentDoc[`chart_candles_${period}`];
+
+          limitOrders.forEach(limitOrder => {
+            const targetSeries = chartCandles.extraSeries.find(s => s.id === limitOrder.id);
+            targetSeries && chartCandles.removeSeries(targetSeries);
+          });
+        });
+
+        limitOrders.forEach(limitOrder => trading.removeLimitOrder(limitOrder));
       } else if (e.keyCode === 81) {
         // Q
         $chartsContainer.find(`.chart-periods .${AVAILABLE_PERIODS.get('5m')}`).click();
@@ -490,7 +515,9 @@ $(document).ready(async () => {
             case AVAILABLE_NEXT_EVENTS.get('lifetimeMovingAverage'): execFunc = moveTo.moveToNextLifetimeMovingAverage; break;
             case AVAILABLE_NEXT_EVENTS.get('movingAveragesCrossed'): execFunc = moveTo.moveToNextMovingAveragesCrossed; break;
             case AVAILABLE_NEXT_EVENTS.get('longMovingAverageTouched'): execFunc = moveTo.moveToNextLongAverageTouched; break;
-            case AVAILABLE_NEXT_EVENTS.get('sluggishPrice'): break;
+            case AVAILABLE_NEXT_EVENTS.get('obedientPrice'): execFunc = moveTo.moveToNextObedientPrice; break;
+            case AVAILABLE_NEXT_EVENTS.get('repeatedCandles'): execFunc = moveTo.moveToNextRepeatedCandles; break;
+            case AVAILABLE_NEXT_EVENTS.get('sluggishedPrice'): execFunc = moveTo.moveToNextSluggishedPrice; break;
             default: alert('No function for this event');
           }
         }
@@ -500,6 +527,7 @@ $(document).ready(async () => {
         }
 
         await execFunc();
+        changeFinishDatePoint(finishDatePointUnix);
       } else if (e.keyCode === 82) {
         // R
         if (choosenInstrumentId) {

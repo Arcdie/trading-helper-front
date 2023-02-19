@@ -645,6 +645,7 @@ const moveTo = {
 
     let isSuccess = false;
     const startFinishDatePointUnix = finishDatePointUnix;
+    const factor = activePeriod === AVAILABLE_PERIODS.get('1h') ? 3 : 5;
 
     const originalData = JSON.parse(JSON.stringify(chartCandles.originalData));
     let lCandles = originalData.length;
@@ -679,7 +680,337 @@ const moveTo = {
           const calculatedData = indicatorVolumeAverage.calculateData(targetCandlesPeriod);
           const lastValue = calculatedData[calculatedData.length - 1].value;
 
-          if ((candle.volume / lastValue) >= 5) {
+          if ((candle.volume / lastValue) >= factor) {
+            isSuccess = true;
+            finishDatePointUnix = getUnix(candle.time) + incrementValue;
+            return false;
+          }
+
+          return true;
+        });
+
+        if (isSuccess) {
+          break;
+        }
+      }
+    })();
+
+    document.title = document.previousTitle;
+
+    if (isSuccess) {
+      const difference = finishDatePointUnix - startFinishDatePointUnix;
+
+      const days = parseInt(difference / 86400, 10);
+      const hours = parseInt((difference % 86400) / 3600, 10);
+      alert(`d: ${days}; h: ${hours}`);
+
+      await reloadCharts(choosenInstrumentId);
+    }
+  },
+
+  async moveToNextObedientPrice() {
+    const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
+
+    const chartCandles = instrumentDoc[`chart_candles_${activePeriod}`];
+    const indicatorMovingAverageShort = instrumentDoc[`indicator_moving_average_short_${activePeriod}`];
+    const indicatorMovingAverageMedium = instrumentDoc[`indicator_moving_average_medium_${activePeriod}`];
+    const indicatorMovingAverageLong = instrumentDoc[`indicator_moving_average_long_${activePeriod}`];
+
+    document.previousTitle = document.title;
+    document.title = `${instrumentDoc.name} ...`;
+
+    const lastCandle = instrumentDoc[`candles_data_${activePeriod}`][0];
+    let lastCandleTimeUnix = getUnix(lastCandle.time);
+
+    let incrementValue = 300;
+    if (activePeriod === AVAILABLE_PERIODS.get('1h')) {
+      incrementValue = 3600;
+    } else if (activePeriod === AVAILABLE_PERIODS.get('1d')) {
+      incrementValue = 86400;
+    }
+
+    let isSuccess = false;
+    const startFinishDatePointUnix = finishDatePointUnix;
+
+    const originalData = JSON.parse(JSON.stringify(chartCandles.originalData));
+    let lCandles = originalData.length;
+
+    await (async () => {
+      while (1) {
+        const incrementTime = lastCandleTimeUnix + (incrementValue * 500);
+
+        const getCandlesOptions = {
+          period: activePeriod,
+          instrumentId: instrumentDoc._id,
+
+          startTime: moment.unix(lastCandleTimeUnix),
+          endTime: moment.unix(incrementTime),
+        };
+
+        let candles = await getCandlesData(getCandlesOptions);
+        if (!candles.length) break;
+
+        lastCandleTimeUnix = getUnix(candles[0].time);
+        candles = candles.reverse();
+
+        let counterLong = 0;
+        let counterShort = 0;
+
+        candles.every(candle => {
+          const preparedData = chartCandles.prepareNewData([candle], false)[0];
+          originalData.push(preparedData);
+          lCandles += 1;
+
+          const isLong = preparedData.close > preparedData.open;
+          let targetCandlesPeriod = originalData.slice(lCandles - (settings.periodForLongMA * 2), lCandles);
+
+          let calculatedData = indicatorMovingAverageShort.calculateData(targetCandlesPeriod);
+          const lastValueShortMovingAverage = calculatedData[calculatedData.length - 1].value;
+
+          calculatedData = indicatorMovingAverageMedium.calculateData(targetCandlesPeriod);
+          const lastValueMediumMovingAverage = calculatedData[calculatedData.length - 1].value;
+
+          calculatedData = indicatorMovingAverageLong.calculateData(targetCandlesPeriod);
+          const lastValueLongMovingAverage = calculatedData[calculatedData.length - 1].value;
+
+          const isLongCurrentRound = (lastValueShortMovingAverage && lastValueMediumMovingAverage)
+            > lastValueLongMovingAverage;
+
+          const isShortCurrentRound = (lastValueShortMovingAverage && lastValueMediumMovingAverage)
+            < lastValueLongMovingAverage;
+
+          if (preparedData.close > lastValueShortMovingAverage) {
+            counterLong += 1;
+          } else {
+            counterLong = 0;
+          }
+
+          if (preparedData.close < lastValueShortMovingAverage) {
+            counterShort += 1;
+          } else {
+            counterShort = 0;
+          }
+
+          /*
+          if ((!isLong
+            && isLongCurrentRound
+            && counterLong >= 30
+            && preparedData.close > lastValueShortMovingAverage
+            && lastValueShortMovingAverage > lastValueMediumMovingAverage)
+            || (isLong
+            && isShortCurrentRound
+            && counterShort >= 30
+            && preparedData.close < lastValueShortMovingAverage
+            && lastValueShortMovingAverage < lastValueMediumMovingAverage)) {
+          */
+
+          if ((isLong
+            && isShortCurrentRound
+            && counterShort >= 30
+            && preparedData.close < lastValueShortMovingAverage
+            && lastValueShortMovingAverage < lastValueMediumMovingAverage)) {
+            const difference = Math.abs(lastValueShortMovingAverage - preparedData.close);
+            const percentPerPrice = 100 / (lastValueShortMovingAverage / difference);
+
+            if (percentPerPrice <= 0.2) {
+              isSuccess = true;
+              finishDatePointUnix = getUnix(candle.time) + incrementValue;
+              return false;
+            }
+          }
+
+          return true;
+        });
+
+        if (isSuccess) {
+          break;
+        }
+      }
+    })();
+
+    document.title = document.previousTitle;
+
+    if (isSuccess) {
+      const difference = finishDatePointUnix - startFinishDatePointUnix;
+
+      const days = parseInt(difference / 86400, 10);
+      const hours = parseInt((difference % 86400) / 3600, 10);
+      alert(`d: ${days}; h: ${hours}`);
+
+      await reloadCharts(choosenInstrumentId);
+    }
+  },
+
+  async moveToNextRepeatedCandles() {
+    const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
+    const chartCandles = instrumentDoc[`chart_candles_${activePeriod}`];
+
+    document.previousTitle = document.title;
+    document.title = `${instrumentDoc.name} ...`;
+
+    const lastCandle = instrumentDoc[`candles_data_${activePeriod}`][0];
+    let lastCandleTimeUnix = getUnix(lastCandle.time);
+
+    let incrementValue = 300;
+    if (activePeriod === AVAILABLE_PERIODS.get('1h')) {
+      incrementValue = 3600;
+    } else if (activePeriod === AVAILABLE_PERIODS.get('1d')) {
+      incrementValue = 86400;
+    }
+
+    let isSuccess = false;
+    const startFinishDatePointUnix = finishDatePointUnix;
+
+    const originalData = JSON.parse(JSON.stringify(chartCandles.originalData));
+    let lCandles = originalData.length;
+
+    averagePercent = 0;
+
+    await (async () => {
+      while (1) {
+        const incrementTime = lastCandleTimeUnix + (incrementValue * 500);
+
+        const getCandlesOptions = {
+          period: activePeriod,
+          instrumentId: instrumentDoc._id,
+
+          startTime: moment.unix(lastCandleTimeUnix),
+          endTime: moment.unix(incrementTime),
+        };
+
+        let candles = await getCandlesData(getCandlesOptions);
+        if (!candles.length) break;
+
+        lastCandleTimeUnix = getUnix(candles[0].time);
+        candles = candles.reverse();
+
+        let counterLong = 0;
+        let counterShort = 0;
+
+        let counterLongPercent = 0;
+        let counterShortPercent = 0;
+
+        candles.every(candle => {
+          const preparedData = chartCandles.prepareNewData([candle], false)[0];
+          originalData.push(preparedData);
+          lCandles += 1;
+
+          const isLong = preparedData.close > preparedData.open;
+          let targetCandlesPeriod = originalData.slice(lCandles - 36, lCandles);
+
+          targetCandlesPeriod.forEach(c => {
+            const isLong = c.close > c.open;
+
+            const differenceBetweenPrices = isLong ? c.high - c.open : c.open - c.low;
+            const percentPerPrice = 100 / (c.open / differenceBetweenPrices);
+
+            averagePercent += percentPerPrice;
+          });
+
+          averagePercent = parseFloat((averagePercent / 36).toFixed(2));
+          const percentPerPrice = 100 / (preparedData.open / Math.abs(preparedData.open - preparedData.close));
+
+          if (isLong) {
+            counterLong += 1;
+            counterShort = 0;
+          } else {
+            counterShort += 1;
+            counterLong = 0;
+          }
+
+          if (percentPerPrice >= averagePercent) {
+            if (isLong) {
+              counterLongPercent += 1;
+              counterShortPercent = 0;
+            } else {
+              counterShortPercent += 1;
+              counterLongPercent = 0;
+            }
+          } else {
+            counterLongPercent = 0;
+            counterShortPercent = 0;
+          }
+
+          if (counterShortPercent >= 3) {
+            isSuccess = true;
+            finishDatePointUnix = getUnix(candle.time) + incrementValue;
+            return false;
+          }
+
+          return true;
+        });
+
+        if (isSuccess) {
+          break;
+        }
+      }
+    })();
+
+    document.title = document.previousTitle;
+
+    if (isSuccess) {
+      const difference = finishDatePointUnix - startFinishDatePointUnix;
+
+      const days = parseInt(difference / 86400, 10);
+      const hours = parseInt((difference % 86400) / 3600, 10);
+      alert(`d: ${days}; h: ${hours}`);
+
+      await reloadCharts(choosenInstrumentId);
+    }
+  },
+
+  async moveToNextSluggishedPrice() {
+    const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
+
+    const chartCandles = instrumentDoc[`chart_candles_${activePeriod}`];
+
+    document.previousTitle = document.title;
+    document.title = `${instrumentDoc.name} ...`;
+
+    const lastCandle = instrumentDoc[`candles_data_${activePeriod}`][0];
+    let lastCandleTimeUnix = getUnix(lastCandle.time);
+
+    let incrementValue = 300;
+    if (activePeriod === AVAILABLE_PERIODS.get('1h')) {
+      incrementValue = 3600;
+    } else if (activePeriod === AVAILABLE_PERIODS.get('1d')) {
+      incrementValue = 86400;
+    }
+
+    let isSuccess = false;
+    const startFinishDatePointUnix = finishDatePointUnix;
+
+    const originalData = JSON.parse(JSON.stringify(chartCandles.originalData));
+    let lCandles = originalData.length;
+
+    await (async () => {
+      while (1) {
+        const incrementTime = lastCandleTimeUnix + (incrementValue * 500);
+
+        const getCandlesOptions = {
+          period: activePeriod,
+          instrumentId: instrumentDoc._id,
+
+          startTime: moment.unix(lastCandleTimeUnix),
+          endTime: moment.unix(incrementTime),
+        };
+
+        let candles = await getCandlesData(getCandlesOptions);
+        if (!candles.length) break;
+
+        lastCandleTimeUnix = getUnix(candles[0].time);
+        candles = candles.reverse();
+
+        candles.every(candle => {
+          const lastCandle = chartCandles.prepareNewData([candle], false)[0];
+          originalData.push(lastCandle);
+          lCandles += 1;
+
+          const differenceBetweenLowAndHigh = Math.abs(lastCandle.high - lastCandle.low);
+          const differenceBetweenOpenAndClose = Math.abs(lastCandle.open - lastCandle.close);
+          const result = differenceBetweenLowAndHigh / differenceBetweenOpenAndClose;
+
+          if (result >= 3) {
             isSuccess = true;
             finishDatePointUnix = getUnix(candle.time) + incrementValue;
             return false;
@@ -797,7 +1128,7 @@ const moveTo = {
             }
           }
 
-          if (counter >= limits[activePeriod]) {
+          if (counter >= limits[activePeriod] && isShortCurrentRound) {
             isSuccess = true;
             finishDatePointUnix = getUnix(candle.time) + incrementValue;
             return false;
