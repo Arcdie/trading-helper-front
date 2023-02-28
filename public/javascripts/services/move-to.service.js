@@ -147,7 +147,7 @@ const moveTo = {
       return true;
     }
 
-    const figureLevels = getFigureLevelsFromLocalStorage({ instrumentId: choosenInstrumentId });
+    let figureLevels = [];
 
     const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
     const chartCandles = instrumentDoc[`chart_candles_${activePeriod}`];
@@ -176,7 +176,7 @@ const moveTo = {
 
     candles1h = chartCandles.prepareNewData(candles1h, false);
     const startFinishDatePointUnix = finishDatePointUnix;
-    const factor = activePeriod === AVAILABLE_PERIODS.get('1h') ? 3 : 5;
+    const factor = activePeriod === AVAILABLE_PERIODS.get('1h') ? 6 : 10;
 
     let averagePercent = 0;
     const originalData = JSON.parse(JSON.stringify(chartCandles.originalData));
@@ -216,8 +216,8 @@ const moveTo = {
             candles1h.push(...chartCandles.prepareNewData(newCandles1h));
 
             const calculatedFigureLevels = calculateNewFigureLevels(candles1h);
-            const newFigureLevels = calculatedFigureLevels
-              .filter(cL => !figureLevels.some(fL => fL.value === cL.levelPrice))
+            figureLevels = calculatedFigureLevels
+              // .filter(cL => !figureLevels.some(fL => fL.value === cL.levelPrice))
               .map(fL => ({
                 instrumentId: instrumentDoc._id,
                 timeframe: AVAILABLE_PERIODS.get('1h'),
@@ -227,12 +227,6 @@ const moveTo = {
                 value: fL.levelPrice,
                 time: fL.startOfLevelUnix,
               }));
-
-            if (newFigureLevels.length) {
-              figureLevels.push(...newFigureLevels);
-              saveFigureLevelsToLocalStorage(newFigureLevels);
-              drawFigureLevels({ instrumentId: instrumentDoc._id }, newFigureLevels);
-            }
           }
 
           const preparedData = chartCandles.prepareNewData([candle], false)[0];
@@ -285,6 +279,21 @@ const moveTo = {
       const days = parseInt(difference / 86400, 10);
       const hours = parseInt((difference % 86400) / 3600, 10);
       alert(`d: ${days}; h: ${hours}`);
+
+      const shortLevels = figureLevels
+        .filter(fL => !fL.isLong)
+        .sort((a, b) => a.value < b.value ? 1 : -1)
+        .slice(0, 3);
+
+      const longLevels = figureLevels
+        .filter(fL => fL.isLong)
+        .sort((a, b) => a.value > b.value ? 1 : -1)
+        .slice(0, 3);
+
+      const levels = [...shortLevels, ...longLevels];
+
+      localStorage.setItem(`trading-helper:${PAGE_KEY}:figure-levels`, JSON.stringify(levels));
+      drawFigureLevels({ instrumentId: instrumentDoc._id }, levels);
 
       await reloadCharts(choosenInstrumentId);
 
@@ -505,7 +514,7 @@ const moveTo = {
           const differenceBetweenPrices = Math.abs(preparedData.open - preparedData.close);
           const percentPerPrice = 100 / (preparedData.open / differenceBetweenPrices);
 
-          if (percentPerPrice > (averagePercent * factor)) {
+          if (percentPerPrice > (averagePercent * factor) && isLong) {
             isSuccess = true;
             finishDatePointUnix = getUnix(candle.time) + incrementValue;
             return false;
@@ -931,7 +940,8 @@ const moveTo = {
             counterShortPercent = 0;
           }
 
-          if (counterShortPercent >= 3) {
+          // if ((counterLongPercent >= 2)) {
+          if ((counterShortPercent >= 3)) {
             isSuccess = true;
             finishDatePointUnix = getUnix(candle.time) + incrementValue;
             return false;
@@ -1011,6 +1021,151 @@ const moveTo = {
           const result = differenceBetweenLowAndHigh / differenceBetweenOpenAndClose;
 
           if (result >= 3) {
+            isSuccess = true;
+            finishDatePointUnix = getUnix(candle.time) + incrementValue;
+            return false;
+          }
+
+          return true;
+        });
+
+        if (isSuccess) {
+          break;
+        }
+      }
+    })();
+
+    document.title = document.previousTitle;
+
+    if (isSuccess) {
+      const difference = finishDatePointUnix - startFinishDatePointUnix;
+
+      const days = parseInt(difference / 86400, 10);
+      const hours = parseInt((difference % 86400) / 3600, 10);
+      alert(`d: ${days}; h: ${hours}`);
+
+      await reloadCharts(choosenInstrumentId);
+    }
+  },
+
+  async moveToNextMovingAveragesTrend() {
+    const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
+
+    const chartCandles = instrumentDoc[`chart_candles_${activePeriod}`];
+    const indicatorMovingAverageShort = instrumentDoc[`indicator_moving_average_short_${activePeriod}`];
+    const indicatorMovingAverageMedium = instrumentDoc[`indicator_moving_average_medium_${activePeriod}`];
+    const indicatorMovingAverageLong = instrumentDoc[`indicator_moving_average_long_${activePeriod}`];
+
+    document.previousTitle = document.title;
+    document.title = `${instrumentDoc.name} ...`;
+
+    const lastCandle = instrumentDoc[`candles_data_${activePeriod}`][0];
+    let lastCandleTimeUnix = getUnix(lastCandle.time);
+
+    let incrementValue = 300;
+    if (activePeriod === AVAILABLE_PERIODS.get('1h')) {
+      incrementValue = 3600;
+    } else if (activePeriod === AVAILABLE_PERIODS.get('1d')) {
+      incrementValue = 86400;
+    }
+
+    let isSuccess = false;
+    const startFinishDatePointUnix = finishDatePointUnix;
+
+    const originalData = JSON.parse(JSON.stringify(chartCandles.originalData));
+    let lCandles = originalData.length;
+
+    let counter = 0;
+    let isLong = true;
+
+    const limits = {
+      [AVAILABLE_PERIODS.get('5m')]: 50, // half of a day
+      [AVAILABLE_PERIODS.get('1h')]: 12, // 4 days
+      [AVAILABLE_PERIODS.get('1d')]: 12, // 5 days
+    };
+
+    await (async () => {
+      while (1) {
+        const incrementTime = lastCandleTimeUnix + (incrementValue * 500);
+
+        const getCandlesOptions = {
+          period: activePeriod,
+          instrumentId: instrumentDoc._id,
+
+          startTime: moment.unix(lastCandleTimeUnix),
+          endTime: moment.unix(incrementTime),
+        };
+
+        let candles = await getCandlesData(getCandlesOptions);
+        if (!candles.length) break;
+
+        lastCandleTimeUnix = getUnix(candles[0].time);
+        candles = candles.reverse();
+
+        candles.every(candle => {
+          const lastCandle = chartCandles.prepareNewData([candle], false)[0];
+          originalData.push(lastCandle);
+          lCandles += 1;
+
+          const targetCandlesPeriod = originalData.slice(
+            lCandles - (settings.periodForLongMA * 2), lCandles,
+          );
+
+          let calculatedData = indicatorMovingAverageShort.calculateData(targetCandlesPeriod);
+          const lastValueShortMovingAverage = calculatedData[calculatedData.length - 1].value;
+
+          calculatedData = indicatorMovingAverageMedium.calculateData(targetCandlesPeriod);
+          const lastValueMediumMovingAverage = calculatedData[calculatedData.length - 1].value;
+
+          calculatedData = indicatorMovingAverageLong.calculateData(targetCandlesPeriod);
+          const lastValueLongMovingAverage = calculatedData[calculatedData.length - 1].value;
+
+          /*
+          const isShortCurrentRound = (lastValueShortMovingAverage < lastValueMediumMovingAverage);
+
+          if (isShortCurrentRound) {
+            if (lastCandle.close > lastValueMediumMovingAverage) {
+              counter = 0;
+            } else {
+              counter += 1;
+            }
+          } else {
+            counter = 0;
+          }
+          */
+
+          // /*
+          const isLongCurrentRound = (lastValueMediumMovingAverage > lastValueLongMovingAverage && lastValueShortMovingAverage > lastValueMediumMovingAverage);
+
+          const isShortCurrentRound = (lastValueMediumMovingAverage < lastValueLongMovingAverage && lastValueShortMovingAverage < lastValueMediumMovingAverage);
+
+          if (isLongCurrentRound) {
+            counter = 0;
+            // if (!isLong) {
+            //   counter = 0;
+            //   isLong = true;
+            // }
+            //
+            // if (lastCandle.close < lastValueMediumMovingAverage) {
+            //   counter = 0;
+            // } else {
+            //   counter += 1;
+            // }
+          } else if (isShortCurrentRound) {
+            if (isLong) {
+              counter = 0;
+              isLong = false;
+            }
+
+            if (lastCandle.close > lastValueMediumMovingAverage) {
+              counter = 0;
+            } else {
+              counter += 1;
+            }
+          }
+          // */
+
+          if (counter >= limits[activePeriod]) {
             isSuccess = true;
             finishDatePointUnix = getUnix(candle.time) + incrementValue;
             return false;
@@ -1128,7 +1283,7 @@ const moveTo = {
             }
           }
 
-          if (counter >= limits[activePeriod] && isShortCurrentRound) {
+          if (counter >= limits[activePeriod] && !isLong) {
             isSuccess = true;
             finishDatePointUnix = getUnix(candle.time) + incrementValue;
             return false;
@@ -1229,9 +1384,13 @@ const moveTo = {
           }
 
           if (lastPositionType !== currentPositionType) {
-            isSuccess = true;
-            finishDatePointUnix = getUnix(candle.time) + incrementValue;
-            return false;
+            lastPositionType = currentPositionType;
+
+            if (!currentPositionType) {
+              isSuccess = true;
+              finishDatePointUnix = getUnix(candle.time) + incrementValue;
+              return false;
+            }
           }
 
           return true;

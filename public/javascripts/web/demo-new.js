@@ -38,6 +38,7 @@ const AVAILABLE_NEXT_EVENTS = new Map([
   ['sluggishedPrice', 'sluggishedPrice'],
   ['repeatedCandles', 'repeatedCandles'],
 
+  ['movingAveragesTrend', 'movingAveragesTrend'],
   ['lifetimeMovingAverage', 'lifetimeMovingAverage'],
   ['movingAveragesCrossed', 'movingAveragesCrossed'],
   ['longMovingAverageTouched', 'longMovingAverageTouched'],
@@ -45,7 +46,7 @@ const AVAILABLE_NEXT_EVENTS = new Map([
 
 /* Variables */
 
-let choosenNextEvent = AVAILABLE_NEXT_EVENTS.get('increasedVolume');
+let choosenNextEvent = AVAILABLE_NEXT_EVENTS.get('figureLevel');
 
 let linePoints = [];
 let isLoading = false;
@@ -342,7 +343,7 @@ $(document).ready(async () => {
     });
 
   $finishDatePoint
-    .on('change', function () {
+    .on('change', async function () {
       let value = $(this).val();
 
       // format 03.07.2021 12:20
@@ -350,7 +351,11 @@ $(document).ready(async () => {
         value = moment.utc(value, 'DD.MM.YYYY HH:mm').unix();
       }
 
-      changeFinishDatePoint(value);
+      changeFinishDatePoint(value, true);
+
+      if (choosenInstrumentId) {
+        await reloadCharts(choosenInstrumentId);
+      }
     });
 
   if (params.symbol) {
@@ -408,7 +413,10 @@ $(document).ready(async () => {
 
       if (e.keyCode === 93) {
         // ]
-        nextTick();
+        await nextTick();
+      } else if (e.keyCode === 92) {
+        // \ (left from enter)
+        await prevTick();
       } else if (e.keyCode === 27) {
         // ESC
         trading.$tradingForm.removeClass('is_active');
@@ -512,6 +520,7 @@ $(document).ready(async () => {
             case AVAILABLE_NEXT_EVENTS.get('absorption'): execFunc = moveTo.moveToNextAbsorption; break;
             case AVAILABLE_NEXT_EVENTS.get('figureLevel'): execFunc = moveTo.moveToNextFigureLevel; break;
             case AVAILABLE_NEXT_EVENTS.get('increasedVolume'): execFunc = moveTo.moveToNextIncreasedVolume; break;
+            case AVAILABLE_NEXT_EVENTS.get('movingAveragesTrend'): execFunc = moveTo.moveToNextMovingAveragesTrend; break;
             case AVAILABLE_NEXT_EVENTS.get('lifetimeMovingAverage'): execFunc = moveTo.moveToNextLifetimeMovingAverage; break;
             case AVAILABLE_NEXT_EVENTS.get('movingAveragesCrossed'): execFunc = moveTo.moveToNextMovingAveragesCrossed; break;
             case AVAILABLE_NEXT_EVENTS.get('longMovingAverageTouched'): execFunc = moveTo.moveToNextLongAverageTouched; break;
@@ -527,7 +536,7 @@ $(document).ready(async () => {
         }
 
         await execFunc();
-        changeFinishDatePoint(finishDatePointUnix);
+        changeFinishDatePoint(finishDatePointUnix, true);
       } else if (e.keyCode === 82) {
         // R
         if (choosenInstrumentId) {
@@ -596,7 +605,7 @@ $(document).ready(async () => {
         if (isActiveInstrumentChoosing) {
           const lastCandles = await getLastCandles();
           calculateFigureLevelsPercents(lastCandles);
-          // calculatePriceLeaders(activePeriod, lastCandles);
+          calculatePriceLeaders(activePeriod, lastCandles);
           sortListInstruments();
         }
       } else if (e.keyCode === 83) {
@@ -795,7 +804,7 @@ const setHistoryMoment = async () => {
   const settings = getSettingsFromLocalStorage();
 
   if (settings.finishDatePointUnix) {
-    changeFinishDatePoint(settings.finishDatePointUnix);
+    changeFinishDatePoint(settings.finishDatePointUnix, true);
 
     if (activePeriod !== AVAILABLE_PERIODS.get('5m')) {
       const divider = activePeriod === AVAILABLE_PERIODS.get('1h') ? 3600 : 86400;
@@ -807,7 +816,7 @@ const setHistoryMoment = async () => {
     }
   } else {
     const dateUnix = moment({ day: 1, month: 2, year: 2022 }).unix();
-    changeFinishDatePoint(dateUnix);
+    changeFinishDatePoint(dateUnix, true);
   }
 
   if (choosenInstrumentId) {
@@ -993,6 +1002,27 @@ const updateCandlesForNextTick = async (instrumentDoc, period, newCandles = []) 
   return preparedData;
 };
 
+const prevTick = async () => {
+  if (isLoading || !choosenInstrumentId) {
+    return;
+  }
+
+  isLoading = true;
+  let decrementValue = 300;
+
+  if (activePeriod === AVAILABLE_PERIODS.get('1h')) {
+    decrementValue = 3600;
+  } else if (activePeriod === AVAILABLE_PERIODS.get('1d')) {
+    decrementValue = 86400;
+  }
+
+  finishDatePointUnix -= decrementValue;
+  changeFinishDatePoint(finishDatePointUnix, !isSingleDateCounter);
+
+  await reloadCharts(choosenInstrumentId);
+  isLoading = false;
+};
+
 const nextTick = async () => {
   if (isLoading) {
     return;
@@ -1010,10 +1040,7 @@ const nextTick = async () => {
   }
 
   finishDatePointUnix += incrementValue;
-
-  if (!isSingleDateCounter) {
-    changeFinishDatePoint(finishDatePointUnix);
-  }
+  changeFinishDatePoint(finishDatePointUnix, !isSingleDateCounter);
 
   const newCandles = await updateCandlesForNextTick(instrumentDoc, activePeriod);
 
@@ -1133,8 +1160,11 @@ const nextTick = async () => {
   if (isActiveInstrumentChoosing) {
     const lastCandles = await getLastCandles();
     calculateFigureLevelsPercents(lastCandles);
-    // calculatePriceLeaders(activePeriod, lastCandles);
-    sortListInstruments();
+
+    if (!isSingleDateCounter) {
+      calculatePriceLeaders(activePeriod, lastCandles);
+      sortListInstruments();
+    }
   }
 };
 
@@ -1701,7 +1731,7 @@ const changeSortSettings = (type, isLong) => {
   return true;
 };
 
-const changeFinishDatePoint = (newValue) => {
+const changeFinishDatePoint = (newValue, doUpdateLocalStorage) => {
   let newDate;
 
   if (Number.isInteger(parseInt(newValue, 10))) {
@@ -1719,9 +1749,10 @@ const changeFinishDatePoint = (newValue) => {
 
   finishDatePointUnix = newDate.unix();
   originalFinishDatePointUnix = finishDatePointUnix;
-  saveSettingsToLocalStorage({ finishDatePointUnix });
   $finishDatePoint.val(finishDatePointUnix);
   $finishDatePoint.parent().find('span').text(newDate.format('DD.MM.YYYY HH:mm'));
+
+  doUpdateLocalStorage && saveSettingsToLocalStorage({ finishDatePointUnix });
 };
 
 const transactionCreatedHandler = (instrumentDoc, { transaction }) => {
@@ -1783,10 +1814,10 @@ const tradeFinishedHandler = (instrumentDoc, { transaction, changes }) => {
 
   choosenPeriods.forEach(period => {
     const chartCandles = instrumentDoc[`chart_candles_${period}`];
-    const targetSeries = chartCandles.extraSeries
+    const targetTakeProfitSeries = chartCandles.extraSeries
       .filter(s => s.isTrade && s.id.includes('takeprofit') && values.includes(s.price));
 
-    targetSeries.forEach(tS => {
+    targetTakeProfitSeries.forEach(tS => {
       tS.applyOptions({
         lineType: LightweightCharts.LineType.Simple,
         lineStyle: LightweightCharts.LineStyle.LargeDashed,
@@ -1794,6 +1825,29 @@ const tradeFinishedHandler = (instrumentDoc, { transaction, changes }) => {
 
       chartCandles.extraSeries = chartCandles.extraSeries
         .filter(s => s.id !== tS.id && s.price !== tS.price);
+    });
+
+    chartCandles.extraSeries
+      .filter(s => s.isTrade && s.id.toString().includes(transaction.id))
+      .filter(s => s.id.toString().includes('stoploss') || s.id.toString().includes('transaction'))
+      .forEach(series => chartCandles.removeSeries(series));
+
+    const transactionSeries = TradingDemo.createTransactionChartSeries(chartCandles, transaction);
+    const stopLossSeries = TradingDemo.createStopLossChartSeries(chartCandles, transaction);
+    const lastCandle = chartCandles.originalData[chartCandles.originalData.length - 1];
+    const validTime = ChartCandles.getValidTime(lastCandle.originalTimeUnix, period);
+
+    [transactionSeries, stopLossSeries].forEach(series => {
+      const values = [{
+        value: series.price,
+        time: ChartCandles.getValidTime(series.time, period),
+      }];
+
+      if (series.time !== validTime) {
+        values.push({ value: series.price, time: validTime });
+      }
+
+      chartCandles.drawSeries(series, values);
     });
   });
 
@@ -2181,7 +2235,7 @@ const setStartSettings = () => {
   }
 
   if (settings.finishDatePointUnix) {
-    changeFinishDatePoint(settings.finishDatePointUnix);
+    changeFinishDatePoint(settings.finishDatePointUnix, false);
   }
 
   if (settings.isSinglePeriod !== undefined) {
@@ -2631,20 +2685,23 @@ const calculateNewFigureLevels = (candles = []) => {
     return [];
   }
 
+  const highLevels = [];
+  /*
   const highLevels = getHighLevels({
     candles,
     distanceFromLeftSide: settings.figureLevels.distanceFromLeftSide,
     distanceFromRightSide: settings.figureLevels.distanceFromRightSide,
   });
+  */
 
-  const lowLevels = [];
-  /*
+  // const lowLevels = [];
+  // /*
   const lowLevels = getLowLevels({
     candles,
     distanceFromLeftSide: settings.figureLevels.distanceFromLeftSide,
     distanceFromRightSide: settings.figureLevels.distanceFromRightSide,
   });
-  */
+  // */
 
   if ((!highLevels || !highLevels.length)
     && (!lowLevels || !lowLevels.length)) {

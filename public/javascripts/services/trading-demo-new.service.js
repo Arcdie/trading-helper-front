@@ -275,11 +275,15 @@ class TradingDemo {
       }
 
       const averagePrice = TradingDemo.getAveragePrice(targetTransaction);
+      // targetTransaction.stopLossPrice = parseFloat((averagePrice).toFixed(tickSizePrecision));
+
+      // /*
       const percentPerPrice = averagePrice * (targetTransaction.originalStopLossPercent / 100);
 
       targetTransaction.stopLossPrice = parseFloat((
         this.isLong ? averagePrice - percentPerPrice : averagePrice + percentPerPrice
       ).toFixed(tickSizePrecision));
+      // */
 
       targetTransaction.trades
         .filter(trade => trade.isActive && !trade.takeProfitPrice)
@@ -306,13 +310,21 @@ class TradingDemo {
 
       action = EActions.get('tradeCreated');
     } else {
-      const targetTrades = targetTransaction.trades.filter(t => t.isActive);
+      const targetTrades = targetTransaction
+        .trades.filter(t => t.isActive)
+        .sort((a, b) => {
+          if (targetTransaction.isLong) {
+            return a.takeProfitPrice < b.takeProfitPrice ? 1 : -1;
+          }
+
+          return a.takeProfitPrice > b.takeProfitPrice ? 1 : -1;
+        });
 
       if (numberTrades > targetTrades.length) {
         numberTrades = targetTrades.length;
       }
 
-      for (let i = 0; i < numberTrades; i += 1) {
+      [...Array(numberTrades).keys()].reverse().forEach(i => {
         const targetTrade = targetTrades[i];
 
         TradingDemo.finishTrade(targetTransaction, targetTrade, {
@@ -321,7 +333,7 @@ class TradingDemo {
         });
 
         changes.push(targetTrade);
-      }
+      });
 
       action = EActions.get('tradeFinished');
       const doesExistActiveTrade = targetTrades.some(t => t.isActive);
@@ -333,6 +345,15 @@ class TradingDemo {
         });
 
         action = EActions.get('transactionFinished');
+      } else {
+        const averagePrice = TradingDemo.getAveragePrice(targetTransaction);
+        // targetTransaction.stopLossPrice = parseFloat((averagePrice).toFixed(tickSizePrecision));
+
+        const percentPerPrice = averagePrice * (targetTransaction.originalStopLossPercent / 100);
+
+        targetTransaction.stopLossPrice = parseFloat((
+          this.isLong ? averagePrice + percentPerPrice : averagePrice - percentPerPrice
+        ).toFixed(tickSizePrecision));
       }
     }
 

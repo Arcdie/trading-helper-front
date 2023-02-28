@@ -141,7 +141,11 @@ class TradingDemoList {
           minProfit = profit;
         }
 
-        if (transaction.isManuallyFinished || transactionProfit === 0) {
+        const doesExistSuccessTrade = transaction.trades
+          .some(t => t.buyPrice === t.takeProfitPrice || t.sellPrice === t.takeProfitPrice);
+
+        if ((transactionProfit > 0 && !doesExistSuccessTrade) || transactionProfit === 0) {
+        // if (transaction.isManuallyFinished || transactionProfit === 0) {
           return true;
         }
 
@@ -234,7 +238,6 @@ class TradingDemoList {
         const sortedTrades = transaction.trades.filter((a, b) => a.startedAtUnix < b.startedAtUnix ? 1 : -1);
         const sumLoss = Math.abs((transaction.originalStopLossPrice - sortedTrades[0][key]) * sortedTrades[0].quantity);
         const tradesWithTheSameStartTime = sortedTrades.filter(t => t.startedAtUnix === sortedTrades[0].startedAtUnix);
-        console.log('sumLoss', sumLoss);
 
         if (transactionProfit > sumLoss) {
           returnMessage += `(${(transactionProfit / (sumLoss * tradesWithTheSameStartTime.length)).toFixed(2)})`;
