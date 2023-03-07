@@ -1,0 +1,9 @@
+class TradingList {
+  constructor() {
+
+  }
+
+  init() {
+    
+  }
+}

@@ -26,28 +26,36 @@ block content
 
 						.list
 
-				include ../includes/services/trading-form
+				include ../includes/services/trading-form-new
 				
 		.row
 			.settings
+				.single-date-counter
+					input(type="checkbox")
+				
+				.finish-date-point
+					input(type="text")
+					span
 
-		include ../includes/services/trades
+		include ../includes/services/transactions
 
 block scripts
 	script(src='/libs/moment.min.js')
 	script(src='/libs/file-saver.min.js')
 	script(src='/libs/trading-view-charts.min.js')
 	script(src='/libs/technical-indicators.min.js')
+	script(type='module').
+		import { v4 as uuidv4 } from 'https://jspm.dev/uuid';
+		window.uuidv4 = uuidv4;
 
-	script(src='/javascripts/websocket.js')
 	script(src='/javascripts/chart-functions/chart-candles.js')
 	script(src='/javascripts/chart-functions/indicators/volume.js')
 	script(src='/javascripts/chart-functions/indicators/volume-average.js')
 	script(src='/javascripts/chart-functions/indicators/moving-average.js')
 
 	//- Services
-	script(src='/javascripts/services/trading-demo.service.js')
-	script(src='/javascripts/services/trading-demo-online.service.js')
+	script(src='/javascripts/services/trading-online.service.js')
+	script(src='/javascripts/services/trading-list.service.js')
 	script(src='/javascripts/services/list-instruments.service.js')
 
-	script(src='/javascripts/web/demo-online.js')
+	script(src='/javascripts/web/trading-online.js')

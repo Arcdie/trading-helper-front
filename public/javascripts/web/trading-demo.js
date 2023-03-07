@@ -8,7 +8,8 @@ classes, LightweightCharts, ChartCandles, IndicatorVolume, IndicatorMovingAverag
 
 /* Constants */
 
-const PAGE_KEY = 'demo';
+const splitedPathname = location.pathname.split('/');
+const PAGE_KEY = splitedPathname[splitedPathname.length - 1];
 const URL_GET_CANDLES = '/api/candles';
 const URL_GET_ACTIVE_INSTRUMENTS = '/api/instruments/active';
 const URL_GET_USER_FIGURE_LEVEL_BOUNDS = '/api/user-figure-level-bounds';
@@ -46,7 +47,7 @@ const AVAILABLE_NEXT_EVENTS = new Map([
 
 /* Variables */
 
-let choosenNextEvent = AVAILABLE_NEXT_EVENTS.get('figureLevel');
+let choosenNextEvent = AVAILABLE_NEXT_EVENTS.get('repeatedCandles');
 
 let linePoints = [];
 let isLoading = false;
