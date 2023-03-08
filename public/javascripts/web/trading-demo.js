@@ -1,6 +1,6 @@
 /* global
 functions, makeRequest, getUnix, getRandomNumber, getPrecision, formatNumberToPretty, toRGB, saveAs,
-objects, user, moment, constants, moveTo, EActions,
+objects, user, moment, constants, moveTo, EActions, wsClient,
 classes, LightweightCharts, ChartCandles, IndicatorVolume, IndicatorMovingAverage, IndicatorVolumeAverage, TradingDemo, TradingDemoList,
 */
 
@@ -11,6 +11,7 @@ classes, LightweightCharts, ChartCandles, IndicatorVolume, IndicatorMovingAverag
 const splitedPathname = location.pathname.split('/');
 const PAGE_KEY = splitedPathname[splitedPathname.length - 1];
 const URL_GET_CANDLES = '/api/candles';
+const URL_DO_NEXT_TICK = '/api/candles/next-tick';
 const URL_GET_ACTIVE_INSTRUMENTS = '/api/instruments/active';
 const URL_GET_USER_FIGURE_LEVEL_BOUNDS = '/api/user-figure-level-bounds';
 const URL_REMOVE_USER_FIGURE_LEVEL_BOUNDS = '/api/user-figure-level-bounds/remove';
@@ -47,7 +48,7 @@ const AVAILABLE_NEXT_EVENTS = new Map([
 
 /* Variables */
 
-let choosenNextEvent = AVAILABLE_NEXT_EVENTS.get('repeatedCandles');
+let choosenNextEvent = AVAILABLE_NEXT_EVENTS.get('movingAveragesTrend');
 
 let linePoints = [];
 let isLoading = false;
@@ -116,6 +117,39 @@ const tradingList = new TradingDemoList(PAGE_KEY);
 const urlSearchParams = new URLSearchParams(window.location.search);
 const params = Object.fromEntries(urlSearchParams.entries());
 
+wsClient.onmessage = async data => {
+  const parsedData = JSON.parse(data.data);
+
+  if (parsedData.actionName) {
+    switch (parsedData.actionName) {
+      case 'nextTick': {
+        const {
+          timeUnix,
+          instrumentId,
+        } = parsedData.data;
+
+        if (instrumentId !== choosenInstrumentId || timeUnix === finishDatePointUnix) {
+          break;
+        }
+
+        const beforeTimeUnix = finishDatePointUnix;
+        finishDatePointUnix = parsedData.data.timeUnix;
+        changeFinishDatePoint(finishDatePointUnix, !isSingleDateCounter);
+
+        if (beforeTimeUnix > finishDatePointUnix
+          || Math.abs(beforeTimeUnix - finishDatePointUnix) > 3600) {
+          await reloadCharts(choosenInstrumentId);
+        } else {
+          await nextTick();
+        }
+
+        break;
+      }
+      default: break;
+    }
+  }
+};
+
 /* JQuery */
 const $settings = $('.settings');
 const $finishDatePoint = $settings.find('.finish-date-point input[type="text"]');
@@ -146,6 +180,13 @@ $(document).ready(async () => {
 
   $instrumentsContainer
     .css({ maxHeight: windowHeight });
+
+  // wsClient.onopen = () => {
+  wsClient.send(JSON.stringify({
+    actionName: 'subscribe',
+    data: { subscriptionName: 'nextTick' },
+  }));
+  // };
 
   // loading data
   const resultGetInstruments = await makeRequest({
@@ -228,9 +269,7 @@ $(document).ready(async () => {
   $instrumentsHeadlines.find('span')
     .on('click', function () {
       const type = $(this).data('type');
-      const isLong = $(this).hasClass('is_long');
-
-      const result = changeSortSettings(type, !isLong);
+      const result = changeSortSettings(type);
 
       if (result) {
         $(this).toggleClass('is_long');
@@ -414,7 +453,19 @@ $(document).ready(async () => {
 
       if (e.keyCode === 93) {
         // ]
-        await nextTick();
+
+        let incrementValue = 300;
+
+        if (activePeriod === AVAILABLE_PERIODS.get('1h')) {
+          incrementValue = 3600;
+        } else if (activePeriod === AVAILABLE_PERIODS.get('1d')) {
+          incrementValue = 86400;
+        }
+
+        await doNextTick({
+          instrumentId: choosenInstrumentId,
+          timeUnix: finishDatePointUnix + incrementValue,
+        });
       } else if (e.keyCode === 92) {
         // \ (left from enter)
         await prevTick();
@@ -538,6 +589,11 @@ $(document).ready(async () => {
 
         await execFunc();
         changeFinishDatePoint(finishDatePointUnix, true);
+
+        await doNextTick({
+          instrumentId: choosenInstrumentId,
+          timeUnix: finishDatePointUnix,
+        });
       } else if (e.keyCode === 82) {
         // R
         if (choosenInstrumentId) {
@@ -1032,17 +1088,6 @@ const nextTick = async () => {
   isLoading = true;
 
   const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
-  let incrementValue = 300;
-
-  if (activePeriod === AVAILABLE_PERIODS.get('1h')) {
-    incrementValue = 3600;
-  } else if (activePeriod === AVAILABLE_PERIODS.get('1d')) {
-    incrementValue = 86400;
-  }
-
-  finishDatePointUnix += incrementValue;
-  changeFinishDatePoint(finishDatePointUnix, !isSingleDateCounter);
-
   const newCandles = await updateCandlesForNextTick(instrumentDoc, activePeriod);
 
   if (activePeriod === AVAILABLE_PERIODS.get('5m')) {
@@ -1708,11 +1753,7 @@ const renderListInstruments = (instrumentsDocs) => {
     .append(appendInstrumentsStr);
 };
 
-const changeSortSettings = (type, isLong) => {
-  if (choosenSortSettings.type === type && choosenSortSettings.isLong === isLong) {
-    return false;
-  }
-
+const changeSortSettings = (type) => {
   if (type.includes('priceChange_')) {
     const timeframe = type.split('_')[1];
     if (timeframe !== activePeriod) {
@@ -1726,7 +1767,7 @@ const changeSortSettings = (type, isLong) => {
   }
 
   choosenSortSettings.type = type;
-  choosenSortSettings.isLong = isLong;
+  choosenSortSettings.isLong = !choosenSortSettings.isLong;
 
   saveSettingsToLocalStorage({ choosenSortSettings });
   return true;
@@ -2267,6 +2308,27 @@ const setStartSettings = () => {
   if (settings.favoriteInstruments && settings.favoriteInstruments.length) {
     favoriteInstruments = settings.favoriteInstruments;
   }
+};
+
+const doNextTick = async ({
+  timeUnix,
+  instrumentId,
+}) => {
+  const resultDoNextTick = await makeRequest({
+    method: 'POST',
+    url: URL_DO_NEXT_TICK,
+    body: {
+      timeUnix,
+      instrumentId,
+    },
+  });
+
+  if (!resultDoNextTick || !resultDoNextTick.status) {
+    alert(resultDoNextTick.message || 'Cant makeRequest URL_DO_NEXT_TICK');
+    return false;
+  }
+
+  return true;
 };
 
 const getAndSaveUserFigureLevels = async () => {

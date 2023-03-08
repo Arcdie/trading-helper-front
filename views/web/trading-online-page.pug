@@ -2,7 +2,7 @@ extends ../app
 
 block variables
 	-
-		const pageTitle = 'Demo Online';
+		const pageTitle = 'Trading';
 
 block content
 	.page.demo
@@ -30,12 +30,6 @@ block content
 				
 		.row
 			.settings
-				.single-date-counter
-					input(type="checkbox")
-				
-				.finish-date-point
-					input(type="text")
-					span
 
 		include ../includes/services/transactions
 
@@ -48,6 +42,7 @@ block scripts
 		import { v4 as uuidv4 } from 'https://jspm.dev/uuid';
 		window.uuidv4 = uuidv4;
 
+	script(src='/javascripts/websocket.js')
 	script(src='/javascripts/chart-functions/chart-candles.js')
 	script(src='/javascripts/chart-functions/indicators/volume.js')
 	script(src='/javascripts/chart-functions/indicators/volume-average.js')

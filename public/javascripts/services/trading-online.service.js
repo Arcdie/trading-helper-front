@@ -1,4 +1,8 @@
 class TradingOnline {
+  init() {
+    
+  }
+
   changeNumberTrades() {
 
   }
@@ -8,6 +12,6 @@ class TradingOnline {
   }
 
   calculateStopLossPercent() {
-    
+
   }
 }

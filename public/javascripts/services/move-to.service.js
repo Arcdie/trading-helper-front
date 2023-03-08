@@ -548,6 +548,7 @@ const moveTo = {
 
   async moveToNextAbsorption() {
     const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
+    const chartCandles = instrumentDoc[`chart_candles_${activePeriod}`];
 
     document.previousTitle = document.title;
     document.title = `${instrumentDoc.name} ...`;
@@ -563,7 +564,11 @@ const moveTo = {
     }
 
     let isSuccess = false;
+    let averagePercent = 0;
     const startFinishDatePointUnix = finishDatePointUnix;
+
+    const originalData = JSON.parse(JSON.stringify(chartCandles.originalData));
+    let lCandles = originalData.length;
 
     await (async () => {
       while (1) {
@@ -590,24 +595,40 @@ const moveTo = {
             return true;
           }
 
+          const preparedData = chartCandles.prepareNewData([candle], false)[0];
+          originalData.push(preparedData);
+          lCandles += 1;
+
+          averagePercent = 0;
+          const targetCandlesPeriod = originalData.slice(lCandles - 36, lCandles);
+
+          targetCandlesPeriod.forEach(c => {
+            const isLong = c.close > c.open;
+
+            const differenceBetweenPrices = isLong ? c.high - c.open : c.open - c.low;
+            const percentPerPrice = 100 / (c.open / differenceBetweenPrices);
+
+            averagePercent += percentPerPrice;
+          });
+
+          averagePercent = parseFloat((averagePercent / 36).toFixed(2));
+
           let [open, close] = prevCandle.data;
           const isLongPrevCandle = close > open;
-          let difference = Math.abs(open - close);
-          const percentPerPricePrevCandle = 100 / (open / difference);
+          const differencePrevCandle = Math.abs(open - close);
+          const percentPerPricePrevCandle = 100 / (open / differencePrevCandle);
 
-          if (percentPerPricePrevCandle >= 3) {
-            [open, close] = candle.data;
-            const isLong = close > open;
+          [open, close] = candle.data;
+          const isLong = close > open;
 
-            if (isLongPrevCandle !== isLong) {
-              difference = Math.abs(open - close);
-              const percentPerPrice = 100 / (open / difference);
+          if (isLongPrevCandle !== isLong) {
+            const difference = Math.abs(open - close);
+            const percentPerPrice = 100 / (open / difference);
 
-              if (percentPerPrice >= percentPerPricePrevCandle) {
-                isSuccess = true;
-                finishDatePointUnix = getUnix(candle.time) + incrementValue;
-                return false;
-              }
+            if ((percentPerPricePrevCandle >= averagePercent && percentPerPrice >= averagePercent) && difference >= differencePrevCandle && isLong) {
+              isSuccess = true;
+              finishDatePointUnix = getUnix(candle.time) + incrementValue;
+              return false;
             }
           }
 
