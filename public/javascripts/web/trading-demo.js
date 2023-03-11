@@ -1,5 +1,5 @@
 /* global
-functions, makeRequest, getUnix, getRandomNumber, getPrecision, formatNumberToPretty, toRGB, saveAs,
+functions, makeRequest, getUnix, getRandomNumber, getPrecision, formatNumberToPretty, toRGB, saveAs, sleep,
 objects, user, moment, constants, moveTo, EActions, wsClient,
 classes, LightweightCharts, ChartCandles, IndicatorVolume, IndicatorMovingAverage, IndicatorVolumeAverage, TradingDemo, TradingDemoList,
 */
@@ -695,20 +695,27 @@ const runRobotTrading = async () => {
     return true;
   }
 
-  // isActiveRobotTrading = true;
+  isActiveRobotTrading = false;
 
   const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
   const numberIterations = [...Array(100).keys()];
+  trading.changeNumberTrades(3);
 
   for await (const i of numberIterations) {
     await doMoveTo();
+
+    // if (!confirm('Go?')) {
+    //   finishDatePointUnix += (300 * 20);
+    //   await reloadCharts(choosenInstrumentId);
+    //   await sleep(3000);
+    //   continue;
+    // }
 
     // start strategy
     const chartCandles = instrumentDoc[`chart_candles_${activePeriod}`];
 
     const lCandles = chartCandles.originalData.length;
 
-    /*
     let averagePercent = 0;
     const targetCandlesPeriod = chartCandles.originalData.slice(lCandles - 36, lCandles);
 
@@ -722,21 +729,23 @@ const runRobotTrading = async () => {
     });
 
     averagePercent = parseFloat((averagePercent / 36).toFixed(2));
-    */
+    const averagePercentX2 = averagePercent * 2;
+
     const lastCandle = chartCandles.originalData[lCandles - 1];
 
     const difference = Math.abs(lastCandle.open - lastCandle.close);
     const percentPerOpen = 100 / (lastCandle.open / difference);
 
-    const stopLossPercent = percentPerOpen / 2;
+    const stopLossPercent = percentPerOpen > averagePercentX2 ? averagePercentX2 : percentPerOpen;
     trading.changeStopLossPercent(stopLossPercent);
 
-    trading.$tradingForm.find('.action-block .sell button').click();
+    trading.$tradingForm.find('.action-block .buy button').click();
 
     await doMoveTo();
   }
 
   alert('Finished');
+  isActiveRobotTrading = false;
 };
 
 const doMoveTo = async () => {
@@ -783,8 +792,6 @@ const doMoveTo = async () => {
     instrumentId: choosenInstrumentId,
     timeUnix: finishDatePointUnix,
   });
-
-  isActiveRobotTrading = false;
 };
 
 const reloadCharts = async (instrumentId) => {

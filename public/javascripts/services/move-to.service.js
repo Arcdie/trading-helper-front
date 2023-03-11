@@ -1076,11 +1076,12 @@ const moveTo = {
     document.title = document.previousTitle;
 
     if (isSuccess) {
-      const difference = finishDatePointUnix - startFinishDatePointUnix;
-
-      const days = parseInt(difference / 86400, 10);
-      const hours = parseInt((difference % 86400) / 3600, 10);
-      alert(`d: ${days}; h: ${hours}`);
+      if (!isActiveRobotTrading) {
+        const difference = finishDatePointUnix - startFinishDatePointUnix;
+        const days = parseInt(difference / 86400, 10);
+        const hours = parseInt((difference % 86400) / 3600, 10);
+        // alert(`d: ${days}; h: ${hours}`);
+      }
 
       await reloadCharts(choosenInstrumentId);
     }
