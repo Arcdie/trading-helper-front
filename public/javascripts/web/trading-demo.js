@@ -40,6 +40,8 @@ const AVAILABLE_NEXT_EVENTS = new Map([
   ['sluggishedPrice', 'sluggishedPrice'],
   ['repeatedCandles', 'repeatedCandles'],
 
+  ['largeCandle', 'largeCandle'],
+
   ['movingAveragesTrend', 'movingAveragesTrend'],
   ['lifetimeMovingAverage', 'lifetimeMovingAverage'],
   ['movingAveragesCrossed', 'movingAveragesCrossed'],
@@ -48,7 +50,7 @@ const AVAILABLE_NEXT_EVENTS = new Map([
 
 /* Variables */
 
-let choosenNextEvent = AVAILABLE_NEXT_EVENTS.get('movingAveragesTrend');
+let choosenNextEvent = AVAILABLE_NEXT_EVENTS.get('absorption');
 
 let linePoints = [];
 let isLoading = false;
@@ -59,6 +61,8 @@ let isActiveLineDrawing = false;
 let isActiveLevelDrawing = false;
 let isActiveCrosshairMoving = false;
 let isActiveSearching = false;
+let isActiveRobotTrading = false;
+let isActiveCandleChoosing = false;
 let isActiveInstrumentChoosing = false;
 let lastVisibleLogicalRange = false;
 let temporaryLineSeriesId;
@@ -549,51 +553,15 @@ $(document).ready(async () => {
 
         trading.isLong = originalData.isLong;
         trading.numberTrades = originalData.numberTrades;
+      } else if (e.keyCode === 78) {
+        // N
+        isActiveCandleChoosing = !isActiveCandleChoosing;
       } else if (e.keyCode === 190) {
         // >
-
-        if (!choosenInstrumentId) {
-          return true;
-        }
-
-        let execFunc;
-        const activeTransaction = trading.getActiveTransaction(choosenInstrumentId);
-
-        if (activeTransaction) {
-          return moveTo.moveToFinishTransaction(activeTransaction);
-        } else {
-          switch (choosenNextEvent) {
-            case AVAILABLE_NEXT_EVENTS.get('priceJump'): {
-              execFunc = moveTo.moveToNextPriceJump;
-              // execFunc = moveTo.moveToNextPriceJumpPlusFigureLevels;
-              break;
-            }
-
-            case AVAILABLE_NEXT_EVENTS.get('absorption'): execFunc = moveTo.moveToNextAbsorption; break;
-            case AVAILABLE_NEXT_EVENTS.get('figureLevel'): execFunc = moveTo.moveToNextFigureLevel; break;
-            case AVAILABLE_NEXT_EVENTS.get('increasedVolume'): execFunc = moveTo.moveToNextIncreasedVolume; break;
-            case AVAILABLE_NEXT_EVENTS.get('movingAveragesTrend'): execFunc = moveTo.moveToNextMovingAveragesTrend; break;
-            case AVAILABLE_NEXT_EVENTS.get('lifetimeMovingAverage'): execFunc = moveTo.moveToNextLifetimeMovingAverage; break;
-            case AVAILABLE_NEXT_EVENTS.get('movingAveragesCrossed'): execFunc = moveTo.moveToNextMovingAveragesCrossed; break;
-            case AVAILABLE_NEXT_EVENTS.get('longMovingAverageTouched'): execFunc = moveTo.moveToNextLongAverageTouched; break;
-            case AVAILABLE_NEXT_EVENTS.get('obedientPrice'): execFunc = moveTo.moveToNextObedientPrice; break;
-            case AVAILABLE_NEXT_EVENTS.get('repeatedCandles'): execFunc = moveTo.moveToNextRepeatedCandles; break;
-            case AVAILABLE_NEXT_EVENTS.get('sluggishedPrice'): execFunc = moveTo.moveToNextSluggishedPrice; break;
-            default: alert('No function for this event');
-          }
-        }
-
-        if (!execFunc) {
-          return true;
-        }
-
-        await execFunc();
-        changeFinishDatePoint(finishDatePointUnix, true);
-
-        await doNextTick({
-          instrumentId: choosenInstrumentId,
-          timeUnix: finishDatePointUnix,
-        });
+        await doMoveTo();
+      } else if (e.keyCode === 191) {
+        // /
+        await runRobotTrading();
       } else if (e.keyCode === 82) {
         // R
         if (choosenInstrumentId) {
@@ -721,6 +689,103 @@ $(document).ready(async () => {
 });
 
 /* Functions */
+
+const runRobotTrading = async () => {
+  if (!choosenInstrumentId) {
+    return true;
+  }
+
+  // isActiveRobotTrading = true;
+
+  const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
+  const numberIterations = [...Array(100).keys()];
+
+  for await (const i of numberIterations) {
+    await doMoveTo();
+
+    // start strategy
+    const chartCandles = instrumentDoc[`chart_candles_${activePeriod}`];
+
+    const lCandles = chartCandles.originalData.length;
+
+    /*
+    let averagePercent = 0;
+    const targetCandlesPeriod = chartCandles.originalData.slice(lCandles - 36, lCandles);
+
+    targetCandlesPeriod.forEach(c => {
+      const isLong = c.close > c.open;
+
+      const differenceBetweenPrices = isLong ? c.high - c.open : c.open - c.low;
+      const percentPerPrice = 100 / (c.open / differenceBetweenPrices);
+
+      averagePercent += percentPerPrice;
+    });
+
+    averagePercent = parseFloat((averagePercent / 36).toFixed(2));
+    */
+    const lastCandle = chartCandles.originalData[lCandles - 1];
+
+    const difference = Math.abs(lastCandle.open - lastCandle.close);
+    const percentPerOpen = 100 / (lastCandle.open / difference);
+
+    const stopLossPercent = percentPerOpen / 2;
+    trading.changeStopLossPercent(stopLossPercent);
+
+    trading.$tradingForm.find('.action-block .sell button').click();
+
+    await doMoveTo();
+  }
+
+  alert('Finished');
+};
+
+const doMoveTo = async () => {
+  if (!choosenInstrumentId) {
+    return true;
+  }
+
+  let execFunc;
+  const activeTransaction = trading.getActiveTransaction(choosenInstrumentId);
+
+  if (activeTransaction) {
+    return moveTo.moveToFinishTransaction(activeTransaction);
+  } else {
+    switch (choosenNextEvent) {
+      case AVAILABLE_NEXT_EVENTS.get('priceJump'): {
+        execFunc = moveTo.moveToNextPriceJump;
+        // execFunc = moveTo.moveToNextPriceJumpPlusFigureLevels;
+        break;
+      }
+
+      case AVAILABLE_NEXT_EVENTS.get('largeCandle'): execFunc = moveTo.moveToNextLargeCandle; break;
+      case AVAILABLE_NEXT_EVENTS.get('absorption'): execFunc = moveTo.moveToNextAbsorption; break;
+      case AVAILABLE_NEXT_EVENTS.get('figureLevel'): execFunc = moveTo.moveToNextFigureLevel; break;
+      case AVAILABLE_NEXT_EVENTS.get('increasedVolume'): execFunc = moveTo.moveToNextIncreasedVolume; break;
+      case AVAILABLE_NEXT_EVENTS.get('movingAveragesTrend'): execFunc = moveTo.moveToNextMovingAveragesTrend; break;
+      case AVAILABLE_NEXT_EVENTS.get('lifetimeMovingAverage'): execFunc = moveTo.moveToNextLifetimeMovingAverage; break;
+      case AVAILABLE_NEXT_EVENTS.get('movingAveragesCrossed'): execFunc = moveTo.moveToNextMovingAveragesCrossed; break;
+      case AVAILABLE_NEXT_EVENTS.get('longMovingAverageTouched'): execFunc = moveTo.moveToNextLongAverageTouched; break;
+      case AVAILABLE_NEXT_EVENTS.get('obedientPrice'): execFunc = moveTo.moveToNextObedientPrice; break;
+      case AVAILABLE_NEXT_EVENTS.get('repeatedCandles'): execFunc = moveTo.moveToNextRepeatedCandles; break;
+      case AVAILABLE_NEXT_EVENTS.get('sluggishedPrice'): execFunc = moveTo.moveToNextSluggishedPrice; break;
+      default: alert('No function for this event');
+    }
+  }
+
+  if (!execFunc) {
+    return true;
+  }
+
+  await execFunc();
+  changeFinishDatePoint(finishDatePointUnix, true);
+
+  await doNextTick({
+    instrumentId: choosenInstrumentId,
+    timeUnix: finishDatePointUnix,
+  });
+
+  isActiveRobotTrading = false;
+};
 
 const reloadCharts = async (instrumentId) => {
   const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
@@ -1434,6 +1499,12 @@ const loadCharts = ({
           time: paramTime,
           isFigureLevel: true,
         };
+      }
+
+      if (isActiveCandleChoosing) {
+        changeFinishDatePoint(paramTime, true);
+        reloadCharts(instrumentId);
+        isActiveCandleChoosing = false;
       }
 
       if (trading.isActiveStopLossChoice) {

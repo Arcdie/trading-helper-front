@@ -1,6 +1,102 @@
 /* eslint-disable */
 
 const moveTo = {
+  async moveToNextLargeCandle() {
+    if (activePeriod !== AVAILABLE_PERIODS.get('5m')) {
+      return true;
+    }
+
+    const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
+    const chartCandles = instrumentDoc[`chart_candles_${activePeriod}`];
+
+    document.previousTitle = document.title;
+    document.title = `${instrumentDoc.name} ...`;
+
+    const getAveragePercentFor1hCandles = async (endTimeUnix) => {
+      const startOfHourUnix = endTimeUnix - (endTimeUnix % 3600);
+      const startTimeUnix = startOfHourUnix - (36 * 3600);
+
+      const getCandlesOptions = {
+        period: AVAILABLE_PERIODS.get('1h'),
+        instrumentId: instrumentDoc._id,
+
+        startTime: moment.unix(startTimeUnix),
+        endTime: moment.unix(startOfHourUnix),
+      };
+
+      const rawCandles1h = await getCandlesData(getCandlesOptions);
+      const candles = chartCandles.prepareNewData(rawCandles1h);
+
+      let averagePercent = 0;
+
+      candles.forEach(c => {
+        const isLong = c.close > c.open;
+        const differenceBetweenPrices = isLong ? c.high - c.open : c.open - c.low;
+        const percentPerPrice = 100 / (c.open / differenceBetweenPrices);
+
+        averagePercent += percentPerPrice;
+      });
+
+      return parseFloat((averagePercent / 36).toFixed(2));
+    };
+
+    let isSuccess = false;
+    const lastCandle = instrumentDoc[`candles_data_${activePeriod}`][0];
+    const lastCandleTimeUnix = getUnix(lastCandle.time);
+    const startFinishDatePointUnix = finishDatePointUnix;
+    let startOfNextHourUnix = (lastCandleTimeUnix - (lastCandleTimeUnix % 3600) + 3599);
+
+    await (async () => {
+      while (1) {
+        const averagePercent = await getAveragePercentFor1hCandles(startOfNextHourUnix);
+
+        const getCandlesOptions = {
+          period: activePeriod,
+          instrumentId: instrumentDoc._id,
+
+          startTime: moment.unix(startOfNextHourUnix),
+          endTime: moment.unix(startOfNextHourUnix + 3600),
+        };
+
+        startOfNextHourUnix += 3600;
+
+        let candles = await getCandlesData(getCandlesOptions);
+        if (!candles.length) break;
+
+        candles = candles.reverse();
+        const preparedData = chartCandles.prepareNewData(candles, false);
+        const majorOpen = preparedData[0].open;
+
+        preparedData.every(candle => {
+          const difference = Math.abs(candle.close - majorOpen);
+          const percentPerOpen = 100 / (majorOpen / difference);
+
+          if (percentPerOpen >= (averagePercent * 2) && majorOpen > candle.close) {
+            isSuccess = true;
+            finishDatePointUnix = candle.originalTimeUnix + 300;
+            return false;
+          }
+
+          return true;
+        });
+
+        if (isSuccess) {
+          const difference = finishDatePointUnix - startFinishDatePointUnix;
+          document.title = document.previousTitle;
+
+          if (!isActiveRobotTrading) {
+            const days = parseInt(difference / 86400, 10);
+            const hours = parseInt((difference % 86400) / 3600, 10);
+            alert(`d: ${days}; h: ${hours}`);
+            await reloadCharts(choosenInstrumentId);
+          }
+
+          break;
+        }
+      }
+    })();
+  },
+
   async moveToNextLongAverageTouched() {
     const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
     const chartCandles = instrumentDoc[`chart_candles_${activePeriod}`];
@@ -128,13 +224,13 @@ const moveTo = {
     document.title = document.previousTitle;
 
     if (isSuccess) {
-      const difference = finishDatePointUnix - startFinishDatePointUnix;
-
-      const days = parseInt(difference / 86400, 10);
-      const hours = parseInt((difference % 86400) / 3600, 10);
-      alert(`d: ${days}; h: ${hours}`);
-
-      await reloadCharts(choosenInstrumentId);
+      if (!isActiveRobotTrading) {
+        const difference = finishDatePointUnix - startFinishDatePointUnix;
+        const days = parseInt(difference / 86400, 10);
+        const hours = parseInt((difference % 86400) / 3600, 10);
+        alert(`d: ${days}; h: ${hours}`);
+        await reloadCharts(choosenInstrumentId);
+      }
 
       $chartsContainer
         .find(`.period_${activePeriod} .percent-average`)
@@ -644,13 +740,13 @@ const moveTo = {
     document.title = document.previousTitle;
 
     if (isSuccess) {
-      const difference = finishDatePointUnix - startFinishDatePointUnix;
-
-      const days = parseInt(difference / 86400, 10);
-      const hours = parseInt((difference % 86400) / 3600, 10);
-      alert(`d: ${days}; h: ${hours}`);
-
-      await reloadCharts(choosenInstrumentId);
+      if (!isActiveRobotTrading) {
+        const difference = finishDatePointUnix - startFinishDatePointUnix;
+        const days = parseInt(difference / 86400, 10);
+        const hours = parseInt((difference % 86400) / 3600, 10);
+        // alert(`d: ${days}; h: ${hours}`);
+        await reloadCharts(choosenInstrumentId);
+      }
     }
   },
 
@@ -1483,7 +1579,7 @@ const moveTo = {
           const preparedData = chartCandles.prepareNewData([candle], false)[0];
           originalData.push(preparedData);
 
-          const result = trading.nextTick(instrumentDoc, preparedData, choosenPeriods, false);
+          const result = trading.nextTick(instrumentDoc, preparedData, false);
 
           if (result) {
             tradingList.updateTradesInTradeList(result.transaction, result.changes);
@@ -1510,14 +1606,16 @@ const moveTo = {
       tradingList.setTransactions(trading.transactions);
       tradingList.updateCommonStatistics();
 
-      const difference = finishDatePointUnix - startFinishDatePointUnix;
+      if (!isActiveRobotTrading) {
+        const difference = finishDatePointUnix - startFinishDatePointUnix;
 
-      const days = parseInt(difference / 86400, 10);
-      const hours = parseInt((difference % 86400) / 3600, 10);
-      alert(`d: ${days}; h: ${hours}`);
+        const days = parseInt(difference / 86400, 10);
+        const hours = parseInt((difference % 86400) / 3600, 10);
+        // alert(`d: ${days}; h: ${hours}`);
 
-      await reloadCharts(choosenInstrumentId);
-      drawTrades({ instrumentId: instrumentDoc._id, }, activeTransaction, choosenPeriods);
+        await reloadCharts(choosenInstrumentId);
+        drawTrades({ instrumentId: instrumentDoc._id, }, activeTransaction, choosenPeriods);
+      }
     }
   },
 };
