@@ -87,7 +87,7 @@ const moveTo = {
           if (!isActiveRobotTrading) {
             const days = parseInt(difference / 86400, 10);
             const hours = parseInt((difference % 86400) / 3600, 10);
-            alert(`d: ${days}; h: ${hours}`);
+            // alert(`d: ${days}; h: ${hours}`);
             await reloadCharts(choosenInstrumentId);
           }
 
@@ -1108,6 +1108,7 @@ const moveTo = {
     let isSuccess = false;
     const startFinishDatePointUnix = finishDatePointUnix;
 
+    let counter = 0;
     const originalData = JSON.parse(JSON.stringify(chartCandles.originalData));
     let lCandles = originalData.length;
 
@@ -1139,6 +1140,12 @@ const moveTo = {
           const result = differenceBetweenLowAndHigh / differenceBetweenOpenAndClose;
 
           if (result >= 3) {
+            counter += 1;
+          } else {
+            counter = 0;
+          }
+
+          if (counter >= 3) {
             isSuccess = true;
             finishDatePointUnix = getUnix(candle.time) + incrementValue;
             return false;
@@ -1533,6 +1540,84 @@ const moveTo = {
     }
   },
 
+  async moveToNearesNotification(notifications) {
+    if (!notifications || !notifications.length) {
+      return true;
+    }
+
+    const price = notifications[0];
+
+    const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
+    const chartCandles = instrumentDoc[`chart_candles_${activePeriod}`];
+
+    document.previousTitle = document.title;
+    document.title = `${instrumentDoc.name} ...`;
+
+    const lastCandle = instrumentDoc[`candles_data_${activePeriod}`][0];
+    let lastCandleTimeUnix = getUnix(lastCandle.time);
+
+    let incrementValue = 300;
+    if (activePeriod === AVAILABLE_PERIODS.get('1h')) {
+      incrementValue = 3600;
+    } else if (activePeriod === AVAILABLE_PERIODS.get('1d')) {
+      incrementValue = 86400;
+    }
+
+    let isSuccess = false;
+    const isLong = price > lastCandle.data[0];
+    const startFinishDatePointUnix = finishDatePointUnix;
+
+    await (async () => {
+      while (1) {
+        const incrementTime = lastCandleTimeUnix + (incrementValue * 500);
+
+        const getCandlesOptions = {
+          period: activePeriod,
+          instrumentId: instrumentDoc._id,
+
+          startTime: moment.unix(lastCandleTimeUnix),
+          endTime: moment.unix(incrementTime),
+        };
+
+        let candles = await getCandlesData(getCandlesOptions);
+        if (!candles.length) break;
+
+        lastCandleTimeUnix = getUnix(candles[0].time);
+        candles = candles.reverse();
+
+        candles.every(candle => {
+          const preparedData = chartCandles.prepareNewData([candle], false)[0];
+
+          if ((isLong && preparedData.close > price)
+            || (!isLong && preparedData.close < price)) {
+            isSuccess = true;
+            finishDatePointUnix = getUnix(candle.time) + incrementValue;
+            notifications = notifications.filter(n => n !== price);
+            return false;
+          }
+
+          return true;
+        });
+
+        if (isSuccess) {
+          break;
+        }
+      }
+    })();
+
+    document.title = document.previousTitle;
+
+    if (isSuccess) {
+      const difference = finishDatePointUnix - startFinishDatePointUnix;
+
+      const days = parseInt(difference / 86400, 10);
+      const hours = parseInt((difference % 86400) / 3600, 10);
+      alert(`d: ${days}; h: ${hours}`);
+
+      await reloadCharts(choosenInstrumentId);
+    }
+  },
+
   async moveToFinishTransaction(activeTransaction) {
     if (!activeTransaction || !activeTransaction.isActive) {
       return true;
@@ -1556,7 +1641,6 @@ const moveTo = {
 
     let isSuccess = false;
     const startFinishDatePointUnix = finishDatePointUnix;
-    const originalData = JSON.parse(JSON.stringify(chartCandles.originalData));
 
     await (async () => {
       while (1) {
@@ -1578,8 +1662,6 @@ const moveTo = {
 
         candles.every(candle => {
           const preparedData = chartCandles.prepareNewData([candle], false)[0];
-          originalData.push(preparedData);
-
           const result = trading.nextTick(instrumentDoc, preparedData, false);
 
           if (result) {

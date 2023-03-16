@@ -50,7 +50,7 @@ const AVAILABLE_NEXT_EVENTS = new Map([
 
 /* Variables */
 
-let choosenNextEvent = AVAILABLE_NEXT_EVENTS.get('absorption');
+let choosenNextEvent = AVAILABLE_NEXT_EVENTS.get('largeCandle');
 
 let linePoints = [];
 let isLoading = false;
@@ -58,6 +58,7 @@ let isSinglePeriod = false;
 let isSingleDateCounter = false;
 let choosedFigureShape = false;
 let isActiveLineDrawing = false;
+let isActiveSetNotification = false;
 let isActiveLevelDrawing = false;
 let isActiveCrosshairMoving = false;
 let isActiveSearching = false;
@@ -69,6 +70,7 @@ let temporaryLineSeriesId;
 let previousCrosshairMove;
 let choosenInstrumentId;
 
+let notifications = [];
 let instrumentsDocs = [];
 let favoriteInstruments = [];
 const lastViewedInstruments = [];
@@ -553,9 +555,12 @@ $(document).ready(async () => {
 
         trading.isLong = originalData.isLong;
         trading.numberTrades = originalData.numberTrades;
+      } else if (e.keyCode === 66) {
+        // B
+        isActiveCandleChoosing = !isActiveCandleChoosing;
       } else if (e.keyCode === 78) {
         // N
-        isActiveCandleChoosing = !isActiveCandleChoosing;
+        isActiveSetNotification = !isActiveSetNotification;
       } else if (e.keyCode === 190) {
         // >
         await doMoveTo();
@@ -669,6 +674,9 @@ $(document).ready(async () => {
           } else if (choosedFigureShape.isLimitOrder) {
             const limitOrder = trading.limitOrders.find(o => o.id === choosedFigureShape.seriesId);
             trading.removeLimitOrder(limitOrder);
+          } else if (choosedFigureShape.isNotification) {
+            const price = choosedFigureShape.seriesId.split('-')[1];
+            notifications = notifications.filter(n => n !== price);
           }
 
           choosenPeriods.forEach(period => {
@@ -699,7 +707,7 @@ const runRobotTrading = async () => {
 
   const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
   const numberIterations = [...Array(100).keys()];
-  trading.changeNumberTrades(3);
+  trading.changeNumberTrades(5);
 
   for await (const i of numberIterations) {
     await doMoveTo();
@@ -712,8 +720,8 @@ const runRobotTrading = async () => {
     // }
 
     // start strategy
+    /*
     const chartCandles = instrumentDoc[`chart_candles_${activePeriod}`];
-
     const lCandles = chartCandles.originalData.length;
 
     let averagePercent = 0;
@@ -735,8 +743,9 @@ const runRobotTrading = async () => {
 
     const difference = Math.abs(lastCandle.open - lastCandle.close);
     const percentPerOpen = 100 / (lastCandle.open / difference);
+    */
 
-    const stopLossPercent = percentPerOpen > averagePercentX2 ? averagePercentX2 : percentPerOpen;
+    const stopLossPercent = 0.1;
     trading.changeStopLossPercent(stopLossPercent);
 
     trading.$tradingForm.find('.action-block .buy button').click();
@@ -756,7 +765,9 @@ const doMoveTo = async () => {
   let execFunc;
   const activeTransaction = trading.getActiveTransaction(choosenInstrumentId);
 
-  if (activeTransaction) {
+  if (notifications.length) {
+    return moveTo.moveToNearesNotification(notifications);
+  } else if (activeTransaction) {
     return moveTo.moveToFinishTransaction(activeTransaction);
   } else {
     switch (choosenNextEvent) {
@@ -820,6 +831,8 @@ const reloadCharts = async (instrumentId) => {
 
   const activeLimitOrders = trading.limitOrders.filter(o => o.instrumentId === choosenInstrumentId);
   activeLimitOrders.length && drawLimitOrders({ instrumentId }, activeLimitOrders);
+
+  notifications.lengtg && drawNotifications(notifications);
 };
 
 const clearInstrumentData = ({ instrumentId }) => {
@@ -838,9 +851,11 @@ const clearInstrumentData = ({ instrumentId }) => {
   });
 
   linePoints = [];
+  notifications = [];
   choosedFigureShape = false;
   isActiveLineDrawing = false;
   isActiveLevelDrawing = false;
+  isActiveSetNotification = false;
   temporaryLineSeriesId = false;
   lastVisibleLogicalRange = false;
 
@@ -1408,12 +1423,23 @@ const loadCharts = ({
         );
 
         if (!existedSeries) {
-          const priceMarkup = ((coordinateToPrice / 100) * 3);
+          const longSeries = chartCandles.extraSeries
+            .filter(series => series.value >= coordinateToPrice)
+            .sort((a, b) => a.value > b.value ? 1 : -1)[0];
 
-          existedSeries = chartCandles.extraSeries.find(series => {
-            return (coordinateToPrice < series.value + priceMarkup)
-              && (coordinateToPrice > series.value - priceMarkup);
-          });
+          const shortSeries = chartCandles.extraSeries
+            .filter(series => series.value < coordinateToPrice)
+            .sort((a, b) => a.value < b.value ? 1 : -1)[0];
+
+          if (longSeries && !shortSeries) {
+            existedSeries = longSeries;
+          } else if (shortSeries && !shortSeries) {
+            existedSeries = shortSeries;
+          } else if (longSeries && shortSeries) {
+            const difLong = Math.abs(longSeries.value - coordinateToPrice);
+            const difShort = Math.abs(shortSeries.value - coordinateToPrice);
+            existedSeries = difLong < difShort ? longSeries : shortSeries;
+          }
         }
 
         if (existedSeries) {
@@ -1512,6 +1538,20 @@ const loadCharts = ({
         changeFinishDatePoint(paramTime, true);
         reloadCharts(instrumentId);
         isActiveCandleChoosing = false;
+      }
+
+      if (isActiveSetNotification) {
+        const newNotification = coordinateToPrice;
+        notifications.push(newNotification);
+        drawNotifications([newNotification]);
+        isActiveSetNotification = false;
+
+        choosedFigureShape = {
+          seriesId: `notification-${coordinateToPrice}`,
+          instrumentId,
+          time: paramTime,
+          isNotification: true,
+        };
       }
 
       if (trading.isActiveStopLossChoice) {
@@ -2142,6 +2182,40 @@ const drawFigureLevels = ({ instrumentId }, figureLevelsData = []) => {
           time: candlesData[lCandles - 1].originalTimeUnix,
         }],
       );
+    });
+  });
+};
+
+const drawNotifications = (targetNotifications = []) => {
+  if (!choosenInstrumentId) {
+    return true;
+  }
+
+  const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
+
+  targetNotifications.forEach(price => {
+    choosenPeriods.forEach(period => {
+      const chartCandles = instrumentDoc[`chart_candles_${period}`];
+
+      const newSeries = chartCandles.addExtraSeries({
+        color: constants.GREEN_COLOR,
+        lastValueVisible: false,
+      }, {
+        id: `notification-${price}`,
+        isNotification: true,
+        value: price,
+      });
+
+      const lastCandle = chartCandles.originalData[chartCandles.originalData.length - 1];
+      const prevCandle = chartCandles.originalData[chartCandles.originalData.length - 20];
+
+      chartCandles.drawSeries(newSeries, [{
+        value: price,
+        time: ChartCandles.getValidTime(prevCandle.originalTimeUnix, period),
+      }, {
+        value: price,
+        time: ChartCandles.getValidTime(lastCandle.originalTimeUnix, period),
+      }]);
     });
   });
 };
@@ -2826,17 +2900,17 @@ const calculateNewFigureLevels = (candles = []) => {
     return [];
   }
 
-  const highLevels = [];
-  /*
+  // const highLevels = [];
+  // /*
   const highLevels = getHighLevels({
     candles,
     distanceFromLeftSide: settings.figureLevels.distanceFromLeftSide,
     distanceFromRightSide: settings.figureLevels.distanceFromRightSide,
   });
-  */
+  // */
 
-  // const lowLevels = [];
-  // /*
+  const lowLevels = [];
+  /*
   const lowLevels = getLowLevels({
     candles,
     distanceFromLeftSide: settings.figureLevels.distanceFromLeftSide,

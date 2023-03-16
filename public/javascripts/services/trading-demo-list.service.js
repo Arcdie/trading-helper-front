@@ -49,7 +49,7 @@ class TradingDemoList {
     saveAs(file);
   }
 
-  import() {}
+  import() { }
 
   addTradesToTradeList(transaction, trades = []) {
     let appendStr = '';
@@ -145,7 +145,7 @@ class TradingDemoList {
           .some(t => t.buyPrice === t.takeProfitPrice || t.sellPrice === t.takeProfitPrice);
 
         if ((transactionProfit > 0 && !doesExistSuccessTrade) || transactionProfit === 0) {
-        // if (transaction.isManuallyFinished || transactionProfit === 0) {
+          // if (transaction.isManuallyFinished || transactionProfit === 0) {
           return true;
         }
 
