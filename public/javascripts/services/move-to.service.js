@@ -610,7 +610,7 @@ const moveTo = {
           const differenceBetweenPrices = Math.abs(preparedData.open - preparedData.close);
           const percentPerPrice = 100 / (preparedData.open / differenceBetweenPrices);
 
-          if (percentPerPrice > (averagePercent * factor) && isLong) {
+          if (percentPerPrice > (averagePercent * factor) && !isLong) {
             isSuccess = true;
             finishDatePointUnix = getUnix(candle.time) + incrementValue;
             return false;
@@ -1540,7 +1540,7 @@ const moveTo = {
     }
   },
 
-  async moveToNearesNotification(notifications) {
+  async moveToNearesNotification() {
     if (!notifications || !notifications.length) {
       return true;
     }
@@ -1569,6 +1569,13 @@ const moveTo = {
 
     await (async () => {
       while (1) {
+        if (lastCandleTimeUnix - startFinishDatePointUnix >= 259200) { // 3 days
+          if (!confirm('>3 days, continue?')) {
+            notifications = notifications.filter(n => n !== price);
+            break;
+          }
+        }
+
         const incrementTime = lastCandleTimeUnix + (incrementValue * 500);
 
         const getCandlesOptions = {
@@ -1600,6 +1607,8 @@ const moveTo = {
         });
 
         if (isSuccess) {
+          const activeTransaction = trading.getActiveTransaction(choosenInstrumentId);
+          activeTransaction && drawTrades({ instrumentId: instrumentDoc._id, }, activeTransaction, choosenPeriods);
           break;
         }
       }
@@ -1615,6 +1624,8 @@ const moveTo = {
       alert(`d: ${days}; h: ${hours}`);
 
       await reloadCharts(choosenInstrumentId);
+    } else {
+      alert('>10 days');
     }
   },
 
@@ -1694,7 +1705,7 @@ const moveTo = {
 
         const days = parseInt(difference / 86400, 10);
         const hours = parseInt((difference % 86400) / 3600, 10);
-        // alert(`d: ${days}; h: ${hours}`);
+        alert(`d: ${days}; h: ${hours}`);
 
         await reloadCharts(choosenInstrumentId);
         drawTrades({ instrumentId: instrumentDoc._id, }, activeTransaction, choosenPeriods);

@@ -417,13 +417,51 @@ $(document).ready(async () => {
   }
 
   trading.$tradingForm.find('.action-block button')
-    .on('click', function () {
+    .on('click', async function () {
       const typeAction = $(this).parent().attr('class');
       trading.changeTypeAction(typeAction);
 
       const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
       const { originalData } = instrumentDoc[`chart_candles_${activePeriod}`];
       const firstCandle = originalData[originalData.length - 1];
+
+      if (!trading.getActiveTransaction(choosenInstrumentId)) {
+        const averagePercent = await calculateAveragePercent(AVAILABLE_PERIODS.get('1h'), firstCandle.originalTimeUnix);
+        const stopLossPercent = averagePercent * 2;
+        trading.changeStopLossPercent(stopLossPercent);
+
+        const savePrice = (firstCandle.close / 100) * averagePercent;
+        const topSavePrice = firstCandle.close + savePrice;
+        const bottomSavePrice = firstCandle.close - savePrice;
+
+        saveFigureLevelsToLocalStorage([{
+          seriesId: uuidv4(),
+          instrumentId: instrumentDoc._id,
+          time: firstCandle.originalTimeUnix - 300,
+          timeframe: activePeriod,
+          value: topSavePrice,
+          isLong: true,
+        }, {
+          seriesId: uuidv4(),
+          instrumentId: instrumentDoc._id,
+          time: firstCandle.originalTimeUnix - 300,
+          timeframe: activePeriod,
+          value: bottomSavePrice,
+          isLong: false,
+        }]);
+
+        drawFigureLevels({ instrumentId: instrumentDoc._id }, [{
+          seriesId: uuidv4(),
+          time: firstCandle.originalTimeUnix - 300,
+          timeframe: activePeriod,
+          value: topSavePrice,
+        }, {
+          seriesId: uuidv4(),
+          time: firstCandle.originalTimeUnix - 300,
+          timeframe: activePeriod,
+          value: bottomSavePrice,
+        }]);
+      }
 
       const result = trading.createTransaction(instrumentDoc, firstCandle, true);
 
@@ -766,7 +804,7 @@ const doMoveTo = async () => {
   const activeTransaction = trading.getActiveTransaction(choosenInstrumentId);
 
   if (notifications.length) {
-    return moveTo.moveToNearesNotification(notifications);
+    return moveTo.moveToNearesNotification();
   } else if (activeTransaction) {
     return moveTo.moveToFinishTransaction(activeTransaction);
   } else {
@@ -1299,6 +1337,37 @@ const nextTick = async () => {
       sortListInstruments();
     }
   }
+};
+
+const calculateAveragePercent = async (period, endTimeUnix) => {
+  const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
+  const chartCandles = instrumentDoc[`chart_candles_${activePeriod}`];
+
+  const startOfHourUnix = endTimeUnix - (endTimeUnix % 3600);
+  const startTimeUnix = startOfHourUnix - (36 * 3600);
+
+  const getCandlesOptions = {
+    period,
+    instrumentId: choosenInstrumentId,
+
+    startTime: moment.unix(startTimeUnix),
+    endTime: moment.unix(startOfHourUnix),
+  };
+
+  const rawCandles = await getCandlesData(getCandlesOptions);
+  const candles = chartCandles.prepareNewData(rawCandles);
+
+  let averagePercent = 0;
+
+  candles.forEach(c => {
+    const isLong = c.close > c.open;
+    const differenceBetweenPrices = isLong ? c.high - c.open : c.open - c.low;
+    const percentPerPrice = 100 / (c.open / differenceBetweenPrices);
+
+    averagePercent += percentPerPrice;
+  });
+
+  return parseFloat((averagePercent / 36).toFixed(2));
 };
 
 const loadCharts = ({

@@ -5,19 +5,20 @@ classes, LightweightCharts,
 */
 
 const TRADING_CONSTANTS = {
-  DEFAULT_NUMBER_TRADES: 5,
+  DEFAULT_NUMBER_TRADES: 4,
   DEFAULT_STOPLOSS_PERCENT: 0.5,
-  DEFAULT_TAKEPROFIT_RELATION: 3,
+  DEFAULT_TAKEPROFIT_RELATION: 1,
 
-  MAX_NUMBER_TRADES: 100,
+  MAX_NUMBER_TRADES: 4,
 
-  LOSS_PERCENT_PER_DEPOSIT: 0.5,
-  MIN_WORK_AMOUNT: 20,
+  LOSS_PERCENT_PER_DEPOSIT: 1,
+
+  get MIN_WORK_AMOUNT() {
+    return 100 / this.DEFAULT_NUMBER_TRADES;
+  },
 
   // MAKER_COMMISSION_PERCENT: 0.02 / 100,
   // TAKER_COMMISSION_PERCENT: 0.04 / 100,
-  // MAKER_COMMISSION_PERCENT: (0.0180 - 0.0045) / 100,
-  // TAKER_COMMISSION_PERCENT: (0.0360 - 0.009) / 100,
   MAKER_COMMISSION_PERCENT: (0.0180 - 0.0045) / 100,
   TAKER_COMMISSION_PERCENT: (0.0360 - 0.009) / 100,
 };
@@ -168,7 +169,7 @@ class TradingDemo {
 
       const sumTransaction = this.workAmount * numberTrades;
       const allowedSumLoss = sumTransaction * (TRADING_CONSTANTS.LOSS_PERCENT_PER_DEPOSIT / 100);
-      const stopLossPercent = 0.1; // this.stopLossPercent; // || TRADING_CONSTANTS.LOSS_PERCENT_PER_DEPOSIT
+      const stopLossPercent = this.stopLossPercent; // || TRADING_CONSTANTS.LOSS_PERCENT_PER_DEPOSIT
 
       let quantity = sumTransaction / instrumentPrice;
       const stopLossPrice = parseFloat(this.calculateStopLossPrice({
@@ -241,15 +242,6 @@ class TradingDemo {
 
         newTransaction.trades.push(newTrade);
       }
-
-      // /*
-      newTransaction.stopLossPercent = stopLossPercent * 20;
-      newTransaction.stopLossPrice = parseFloat(this.calculateStopLossPrice({
-        stopLossPercent: newTransaction.stopLossPercent,
-        instrumentPrice,
-        isLong: newTransaction.isLong,
-      }).toFixed(tickSizePrecision));
-      // */
 
       targetTransaction = newTransaction;
       this.transactions.push(newTransaction);
@@ -535,7 +527,6 @@ class TradingDemo {
   }
 
   nextTick(instrumentDoc, candleData, isActivatedLimitOrder = false) {
-    return false;
     const activeTransaction = this.getActiveTransaction(instrumentDoc._id);
 
     if (!activeTransaction) {
@@ -546,7 +537,7 @@ class TradingDemo {
     const changes = [];
     const activeTrades = activeTransaction.trades.filter(t => t.isActive);
 
-    /*
+    // /*
     if (activeTransaction.isLong) {
       if ((isActivatedLimitOrder && candleData.close <= activeTransaction.stopLossPrice)
         || (!isActivatedLimitOrder && candleData.low <= activeTransaction.stopLossPrice)) {
@@ -594,7 +585,6 @@ class TradingDemo {
         };
       }
     }
-    // */
 
     const targetTrades = activeTransaction.isLong
       ? activeTrades.filter(trade => trade.takeProfitPrice <= candleData.high)
@@ -819,7 +809,8 @@ class TradingDemo {
     }
 
     const key = TradingDemo.getKey(transaction);
-    const values = transaction.trades.filter(t => t.isActive).map(t => t[key]);
+    const targetTrades = !transaction.isActive ? transaction.trades : transaction.trades.filter(t => t.isActive);
+    const values = targetTrades.map(t => t[key]);
     const sum = values.reduce((a, b) => a + b, 0);
     return sum / values.length;
   }
