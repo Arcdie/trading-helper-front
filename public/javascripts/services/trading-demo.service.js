@@ -420,8 +420,9 @@ class TradingDemo {
   }) {
     const takeProfitPercent = transaction.stopLossPercent * (TRADING_CONSTANTS.DEFAULT_TAKEPROFIT_RELATION + incrementValue);
     const sumProfit = (transaction.stopLossPrice / 100) * takeProfitPercent;
+    // const halfSumProfit = sumProfit / 2;
 
-    const takeProfitPrice = transaction.isLong ? instrumentPrice + sumProfit : instrumentPrice - sumProfit;
+    const takeProfitPrice = transaction.isLong ? instrumentPrice + (sumProfit * 5) : instrumentPrice - (sumProfit * 5);
     return parseFloat((takeProfitPrice).toFixed(tickSizePrecision));
   }
 
@@ -527,6 +528,7 @@ class TradingDemo {
   }
 
   nextTick(instrumentDoc, candleData, isActivatedLimitOrder = false) {
+    return false;
     const activeTransaction = this.getActiveTransaction(instrumentDoc._id);
 
     if (!activeTransaction) {

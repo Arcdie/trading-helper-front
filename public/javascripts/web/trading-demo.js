@@ -1,5 +1,5 @@
 /* global
-functions, makeRequest, getUnix, getRandomNumber, getPrecision, formatNumberToPretty, toRGB, saveAs, sleep,
+functions, makeRequest, getUnix, getRandomNumber, getPrecision, formatNumberToPretty, toRGB, saveAs, sleep, uuidv4,
 objects, user, moment, constants, moveTo, EActions, wsClient,
 classes, LightweightCharts, ChartCandles, IndicatorVolume, IndicatorMovingAverage, IndicatorVolumeAverage, TradingDemo, TradingDemoList,
 */
@@ -417,8 +417,8 @@ $(document).ready(async () => {
   }
 
   trading.$tradingForm.find('.action-block button')
-    .on('click', async function () {
-      const typeAction = $(this).parent().attr('class');
+    .on('click', async function (action) {
+      const typeAction = action.type ? $(this).parent().attr('class') : action;
       trading.changeTypeAction(typeAction);
 
       const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
@@ -427,40 +427,43 @@ $(document).ready(async () => {
 
       if (!trading.getActiveTransaction(choosenInstrumentId)) {
         const averagePercent = await calculateAveragePercent(AVAILABLE_PERIODS.get('1h'), firstCandle.originalTimeUnix);
-        const stopLossPercent = averagePercent * 2;
+        // const stopLossPercent = averagePercent * 2;
+        const stopLossPercent = averagePercent;
         trading.changeStopLossPercent(stopLossPercent);
 
-        const savePrice = (firstCandle.close / 100) * averagePercent;
+        const savePrice = (firstCandle.close / 100) * (stopLossPercent);
         const topSavePrice = firstCandle.close + savePrice;
         const bottomSavePrice = firstCandle.close - savePrice;
 
-        saveFigureLevelsToLocalStorage([{
-          seriesId: uuidv4(),
-          instrumentId: instrumentDoc._id,
-          time: firstCandle.originalTimeUnix - 300,
-          timeframe: activePeriod,
-          value: topSavePrice,
-          isLong: true,
-        }, {
-          seriesId: uuidv4(),
-          instrumentId: instrumentDoc._id,
-          time: firstCandle.originalTimeUnix - 300,
-          timeframe: activePeriod,
-          value: bottomSavePrice,
-          isLong: false,
-        }]);
+        if (!isActiveRobotTrading) {
+          saveFigureLevelsToLocalStorage([{
+            seriesId: uuidv4(),
+            instrumentId: instrumentDoc._id,
+            time: firstCandle.originalTimeUnix - 300,
+            timeframe: activePeriod,
+            value: topSavePrice,
+            isLong: true,
+          }, {
+            seriesId: uuidv4(),
+            instrumentId: instrumentDoc._id,
+            time: firstCandle.originalTimeUnix - 300,
+            timeframe: activePeriod,
+            value: bottomSavePrice,
+            isLong: false,
+          }]);
 
-        drawFigureLevels({ instrumentId: instrumentDoc._id }, [{
-          seriesId: uuidv4(),
-          time: firstCandle.originalTimeUnix - 300,
-          timeframe: activePeriod,
-          value: topSavePrice,
-        }, {
-          seriesId: uuidv4(),
-          time: firstCandle.originalTimeUnix - 300,
-          timeframe: activePeriod,
-          value: bottomSavePrice,
-        }]);
+          drawFigureLevels({ instrumentId: instrumentDoc._id }, [{
+            seriesId: uuidv4(),
+            time: firstCandle.originalTimeUnix - 300,
+            timeframe: activePeriod,
+            value: topSavePrice,
+          }, {
+            seriesId: uuidv4(),
+            time: firstCandle.originalTimeUnix - 300,
+            timeframe: activePeriod,
+            value: bottomSavePrice,
+          }]);
+        }
       }
 
       const result = trading.createTransaction(instrumentDoc, firstCandle, true);
@@ -741,11 +744,11 @@ const runRobotTrading = async () => {
     return true;
   }
 
-  isActiveRobotTrading = false;
+  isActiveRobotTrading = true;
 
   const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
   const numberIterations = [...Array(100).keys()];
-  trading.changeNumberTrades(5);
+  trading.changeNumberTrades(4);
 
   for await (const i of numberIterations) {
     await doMoveTo();
@@ -783,16 +786,343 @@ const runRobotTrading = async () => {
     const percentPerOpen = 100 / (lastCandle.open / difference);
     */
 
-    const stopLossPercent = 0.1;
-    trading.changeStopLossPercent(stopLossPercent);
-
-    trading.$tradingForm.find('.action-block .buy button').click();
+    // /*
+    await $._data($(trading.$tradingForm.find('.action-block .buy button'))
+      .get(0), 'events').click[0]
+      .handler('buy');
 
     await doMoveTo();
+    // */
+
+    /*
+    await $._data($(trading.$tradingForm.find('.action-block .buy button'))
+      .get(0), 'events').click[0]
+      .handler('sell');
+
+    await doMoveTo();
+    // */
+
+    // break;
   }
 
   alert('Finished');
   isActiveRobotTrading = false;
+};
+
+let sumLoss = 0;
+let sumLossWaitDays = 0;
+let markers = [];
+const waitDays = [];
+
+const smartMoveToFinishTransaction = async (activeTransaction) => {
+  if (!activeTransaction || !activeTransaction.isActive) {
+    return false;
+  }
+
+  markers = [];
+
+  const instrumentDoc = instrumentsDocs.find(doc => doc._id === activeTransaction.instrumentId);
+  const chartCandles = instrumentDoc[`chart_candles_${activePeriod}`];
+  const { originalData } = chartCandles;
+
+  document.previousTitle = document.title;
+  document.title = `${instrumentDoc.name} ...`;
+
+  const incrementValue = 300;
+  let isActiveSaveTrade = true;
+  let isActiveSaveTradeInReverseTransaction = true;
+
+  let activeReverseTransaction = false;
+  const transactionPrice = TradingDemo.getAveragePrice(activeTransaction);
+  const quantity = activeTransaction.trades[0].quantity * activeTransaction.trades.length;
+  const lastCandle = originalData[originalData.length - 1];
+  const savePrice = (lastCandle.close / 100) * (activeTransaction.originalStopLossPercent);
+  const topSavePrice = lastCandle.close + savePrice;
+  const bottomSavePrice = lastCandle.close - savePrice;
+  let lastCandleTimeUnix = lastCandle.originalTimeUnix;
+
+  let commonLoss = 0;
+  let numberSavePriceHandled = 0;
+  let wasAsked = false;
+
+  while (1) {
+    let isSuccess = false;
+
+    if (!isActiveRobotTrading) {
+      if (!wasAsked && lastCandleTimeUnix - lastCandle.originalTimeUnix >= 432000) { // 5 days
+        if (!confirm('>5 days, continue?')) {
+          isSuccess = true;
+          break;
+        } else {
+          wasAsked = true;
+        }
+      }
+    }
+
+    /*
+    if (!wasAsked && lastCandleTimeUnix - lastCandle.originalTimeUnix >= 432000) { // 5 days
+      if (!confirm('>5 days, continue?')) {
+        /*
+        let price = transactionPrice;
+        const quantity = activeTransaction.trades[0].quantity * activeTransaction.trades.length;
+
+        if (activeTransaction.isLong) {
+          price -= (commonLoss / quantity);
+        } else {
+          price += (commonLoss / quantity);
+        }
+
+        activeTransaction.trades.forEach(trade => {
+          TradingDemo.finishTrade(activeTransaction, trade, {
+            instrumentPrice: price,
+            endedAtUnix: lastCandle.originalTimeUnix,
+          });
+        });
+
+        TradingDemo.finishTransaction(activeTransaction, {
+          endedAtUnix: lastCandle.originalTimeUnix,
+        });
+
+        activeTransaction.trades.forEach(trade => {
+          TradingDemo.finishTrade(activeTransaction, trade, {
+            instrumentPrice: transactionPrice,
+            endedAtUnix: lastCandle.originalTimeUnix,
+          });
+        });
+
+        TradingDemo.finishTransaction(activeTransaction, {
+          endedAtUnix: lastCandle.originalTimeUnix,
+        });
+
+        isSuccess = true;
+        numberWaitDays += 1;
+        sumLossWaitDays += commonLoss;
+        break;
+      } else {
+        wasAsked = true;
+      }
+    }
+    */
+
+    const incrementTime = lastCandleTimeUnix + (incrementValue * 1440); // 5 days
+
+    const getCandlesOptions = {
+      period: activePeriod,
+      instrumentId: instrumentDoc._id,
+
+      startTime: moment.unix(lastCandleTimeUnix),
+      endTime: moment.unix(incrementTime),
+    };
+
+    const rawCandles = await getCandlesData(getCandlesOptions);
+
+    if (!rawCandles.length) {
+      break;
+    }
+
+    const candles = chartCandles.prepareNewData(rawCandles, false);
+
+    if (candles[0].originalTimeUnix < lastCandleTimeUnix) {
+      break;
+    }
+
+    // console.log(new Date(candles[0].originalTimeUnix * 1000).toISOString(), new Date(lastCandleTimeUnix * 1000).toISOString(), candles[0].originalTimeUnix < lastCandleTimeUnix);
+
+    candles.every(candle => {
+      if (isActiveSaveTrade) {
+        if (activeTransaction.isLong && candle.close <= bottomSavePrice) {
+          const loss = (transactionPrice - candle.close) * quantity;
+          activeTransaction.trades.forEach(trade => {
+            trade.takeProfitPrice += (loss / quantity);
+          });
+
+          commonLoss += loss;
+          numberSavePriceHandled += 1;
+          isActiveSaveTrade = false;
+
+          markers.push({
+            shape: 'arrowDown',
+            color: constants.RED_COLOR,
+            time: candle.originalTimeUnix,
+          });
+
+          if (activeReverseTransaction) {
+            activeReverseTransaction.takeProfitPrice -= (loss / quantity);
+          }
+        } else if (!activeTransaction.isLong && candle.close >= topSavePrice) {
+          const loss = (candle.close - transactionPrice) * quantity;
+          activeTransaction.trades.forEach(trade => {
+            trade.takeProfitPrice -= (loss / quantity);
+          });
+
+          commonLoss += loss;
+          numberSavePriceHandled += 1;
+          isActiveSaveTrade = false;
+
+          markers.push({
+            shape: 'arrowDown',
+            color: constants.RED_COLOR,
+            time: candle.originalTimeUnix,
+          });
+
+          if (activeReverseTransaction) {
+            activeReverseTransaction.takeProfitPrice += (loss / quantity);
+          }
+        }
+      } else {
+        if ((activeTransaction.isLong && candle.high >= transactionPrice)
+          || (!activeTransaction.isLong && candle.low <= transactionPrice)) {
+          isActiveSaveTrade = true;
+        }
+      }
+
+      if (!activeReverseTransaction) {
+        const triggerPrice = activeTransaction.isLong
+          ? activeTransaction.originalStopLossPrice - (savePrice * 2) : activeTransaction.originalStopLossPrice + (savePrice * 2);
+
+        if ((activeTransaction.isLong && candle.low <= triggerPrice)
+          || (!activeTransaction.isLong && candle.high >= triggerPrice)) {
+          const newTransaction = {
+            isActive: true,
+            isLong: !activeTransaction.isLong,
+            quantity,
+
+            transactionPrice: triggerPrice,
+            topSavePrice: triggerPrice + savePrice,
+            bottomSavePrice: triggerPrice - savePrice,
+          };
+
+          const takeProfitPrice = Math.abs(activeTransaction.originalStopLossPrice - activeTransaction.trades[0].takeProfitPrice);
+
+          if (newTransaction.isLong) {
+            newTransaction.buyPrice = activeTransaction.originalStopLossPrice;
+            newTransaction.takeProfitPrice = newTransaction.buyPrice + takeProfitPrice;
+          } else {
+            newTransaction.sellPrice = activeTransaction.originalStopLossPrice;
+            newTransaction.takeProfitPrice = newTransaction.sellPrice - takeProfitPrice;
+          }
+
+          activeReverseTransaction = newTransaction;
+        }
+      } else {
+        if (isActiveSaveTradeInReverseTransaction) {
+          if (activeReverseTransaction.isLong && candle.close <= activeReverseTransaction.bottomSavePrice) {
+            const loss = (activeReverseTransaction.transactionPrice - candle.close) * quantity;
+            activeReverseTransaction.takeProfitPrice += (loss / quantity);
+            activeTransaction.trades.forEach(trade => {
+              trade.takeProfitPrice -= (loss / quantity);
+            });
+
+            commonLoss += loss;
+            numberSavePriceHandled += 1;
+            isActiveSaveTradeInReverseTransaction = false;
+
+            markers.push({
+              shape: 'arrowDown',
+              color: constants.RED_COLOR,
+              time: candle.originalTimeUnix,
+            });
+          } else if (!activeReverseTransaction.isLong && candle.close >= activeReverseTransaction.topSavePrice) {
+            const loss = (candle.close - activeReverseTransaction.transactionPrice) * quantity;
+            activeReverseTransaction.takeProfitPrice -= (loss / quantity);
+            activeTransaction.trades.forEach(trade => {
+              trade.takeProfitPrice += (loss / quantity);
+            });
+
+            commonLoss += loss;
+            numberSavePriceHandled += 1;
+            isActiveSaveTradeInReverseTransaction = false;
+
+            markers.push({
+              shape: 'arrowDown',
+              color: constants.RED_COLOR,
+              time: candle.originalTimeUnix,
+            });
+          }
+        } else {
+          if ((activeReverseTransaction.isLong && candle.high >= activeReverseTransaction.transactionPrice)
+            || (!activeReverseTransaction.isLong && candle.low <= activeReverseTransaction.transactionPrice)) {
+            isActiveSaveTradeInReverseTransaction = true;
+          }
+        }
+      }
+
+      lastCandleTimeUnix = candle.originalTimeUnix;
+
+      let targetTrades = activeTransaction.isLong
+        ? activeTransaction.trades.filter(trade => trade.takeProfitPrice <= candle.high)
+        : activeTransaction.trades.filter(trade => trade.takeProfitPrice >= candle.low);
+
+      if (activeReverseTransaction) {
+        if ((activeReverseTransaction.isLong && activeReverseTransaction.takeProfitPrice <= candle.high)
+          || (!activeReverseTransaction.isLong && activeReverseTransaction.takeProfitPrice >= candle.low)) {
+          targetTrades = activeTransaction.trades;
+        }
+      }
+
+      targetTrades.forEach(trade => {
+        TradingDemo.finishTrade(activeTransaction, trade, {
+          instrumentPrice: trade.takeProfitPrice,
+          endedAtUnix: candle.originalTimeUnix,
+        });
+      });
+
+      if (!activeTransaction.trades.some(trade => trade.isActive)) {
+        TradingDemo.finishTransaction(activeTransaction, {
+          endedAtUnix: candle.originalTimeUnix,
+        });
+
+        isSuccess = true;
+        return false;
+      }
+
+      return true;
+    });
+
+    if (isSuccess) {
+      break;
+    }
+  }
+
+  if (activeTransaction.isActive) {
+    alert(`!Success, n: ${numberSavePriceHandled}; l: ${commonLoss.toFixed(1)}`);
+
+    trading.transactions = trading.transactions.filter(t => t.id !== activeTransaction.id);
+    tradingList.setTransactions(trading.transactions);
+    tradingList.removeTradesFromTradeList([activeTransaction]);
+    tradingList.updateCommonStatistics();
+
+    return false;
+  }
+
+  sumLoss += commonLoss;
+
+  document.title = document.previousTitle;
+
+  tradingList.updateTradesInTradeList(activeTransaction, activeTransaction.trades);
+  tradingList.setTransactions(trading.transactions);
+  tradingList.updateCommonStatistics();
+
+  const difference = lastCandleTimeUnix - lastCandle.originalTimeUnix;
+
+  const days = parseInt(difference / 86400, 10);
+  const hours = parseInt((difference % 86400) / 3600, 10);
+
+  waitDays.push([difference, numberSavePriceHandled, commonLoss]);
+
+  if (!isActiveRobotTrading) {
+    alert(`d: ${days}; h: ${hours}; n: ${numberSavePriceHandled}; l: ${commonLoss.toFixed(1)}`);
+    finishDatePointUnix = lastCandleTimeUnix + incrementValue;
+    await reloadCharts(instrumentDoc._id);
+
+    const newChartCandles = instrumentDoc[`chart_candles_${activePeriod}`];
+    markers.forEach(m => newChartCandles.addMarker(m));
+    newChartCandles.drawMarkers();
+
+    drawTrades({ instrumentId: instrumentDoc._id }, activeTransaction, choosenPeriods);
+  }
+
+  return true;
 };
 
 const doMoveTo = async () => {
@@ -806,7 +1136,8 @@ const doMoveTo = async () => {
   if (notifications.length) {
     return moveTo.moveToNearesNotification();
   } else if (activeTransaction) {
-    return moveTo.moveToFinishTransaction(activeTransaction);
+    return smartMoveToFinishTransaction(activeTransaction);
+    // return moveTo.moveToFinishTransaction(activeTransaction);
   } else {
     switch (choosenNextEvent) {
       case AVAILABLE_NEXT_EVENTS.get('priceJump'): {
@@ -1480,6 +1811,7 @@ const loadCharts = ({
       isActiveSearching = false;
       activePeriod = chartCandles.period;
       const coordinateToPrice = chartCandles.mainSeries.coordinateToPrice(param.point.y);
+      console.log('coordinateToPrice', coordinateToPrice);
       let paramTime = param.time;
 
       if (param.time && chartCandles.period === AVAILABLE_PERIODS.get('1d')) {

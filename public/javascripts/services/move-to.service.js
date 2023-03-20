@@ -61,7 +61,12 @@ const moveTo = {
         startOfNextHourUnix += 3600;
 
         let candles = await getCandlesData(getCandlesOptions);
-        if (!candles.length) break;
+
+        if (!candles.length) {
+          alert('No candles');
+          startOfNextHourUnix += (3600 * 10);
+          continue;;
+        }
 
         candles = candles.reverse();
         const preparedData = chartCandles.prepareNewData(candles, false);
@@ -84,11 +89,12 @@ const moveTo = {
           const difference = finishDatePointUnix - startFinishDatePointUnix;
           document.title = document.previousTitle;
 
+          await reloadCharts(choosenInstrumentId);
+
           if (!isActiveRobotTrading) {
             const days = parseInt(difference / 86400, 10);
             const hours = parseInt((difference % 86400) / 3600, 10);
-            // alert(`d: ${days}; h: ${hours}`);
-            await reloadCharts(choosenInstrumentId);
+            alert(`d: ${days}; h: ${hours}`);
           }
 
           break;
@@ -610,7 +616,7 @@ const moveTo = {
           const differenceBetweenPrices = Math.abs(preparedData.open - preparedData.close);
           const percentPerPrice = 100 / (preparedData.open / differenceBetweenPrices);
 
-          if (percentPerPrice > (averagePercent * factor) && !isLong) {
+          if (percentPerPrice > (averagePercent * factor) && isLong) {
             isSuccess = true;
             finishDatePointUnix = getUnix(candle.time) + incrementValue;
             return false;
@@ -632,7 +638,7 @@ const moveTo = {
 
       const days = parseInt(difference / 86400, 10);
       const hours = parseInt((difference % 86400) / 3600, 10);
-      alert(`d: ${days}; h: ${hours}`);
+      // alert(`d: ${days}; h: ${hours}`);
 
       await reloadCharts(choosenInstrumentId);
 
