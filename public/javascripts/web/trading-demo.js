@@ -428,7 +428,7 @@ $(document).ready(async () => {
       if (!trading.getActiveTransaction(choosenInstrumentId)) {
         const averagePercent = await calculateAveragePercent(AVAILABLE_PERIODS.get('1h'), firstCandle.originalTimeUnix);
         // const stopLossPercent = averagePercent * 2;
-        const stopLossPercent = averagePercent;
+        const stopLossPercent = (averagePercent);
         trading.changeStopLossPercent(stopLossPercent);
 
         const savePrice = (firstCandle.close / 100) * (stopLossPercent);
@@ -529,7 +529,7 @@ $(document).ready(async () => {
 
       // 1, 2, 3, 4, 5
       if ([49, 50, 51, 52, 53].includes(e.keyCode)) {
-        trading.changeNumberTrades(e.keyCode - 48);
+        // trading.changeNumberTrades(e.keyCode - 48);
       } else if (e.keyCode === 192) {
         // § (before 1)
         if (!choosenInstrumentId) {
@@ -813,6 +813,7 @@ let sumLoss = 0;
 let sumLossWaitDays = 0;
 let markers = [];
 const waitDays = [];
+let isRiskMode = false;
 
 const smartMoveToFinishTransaction = async (activeTransaction) => {
   if (!activeTransaction || !activeTransaction.isActive) {
@@ -1045,6 +1046,16 @@ const smartMoveToFinishTransaction = async (activeTransaction) => {
             isActiveSaveTradeInReverseTransaction = true;
           }
         }
+      }
+
+      if (isRiskMode && numberSavePriceHandled >= 5) {
+        activeTransaction.trades.forEach(trade => {
+          if (activeTransaction.isLong) {
+            trade.takeProfitPrice = transactionPrice - (commonLoss / quantity);
+          } else {
+            trade.takeProfitPrice = transactionPrice + (commonLoss / quantity);
+          }
+        });
       }
 
       lastCandleTimeUnix = candle.originalTimeUnix;

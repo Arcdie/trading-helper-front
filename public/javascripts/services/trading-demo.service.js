@@ -9,7 +9,7 @@ const TRADING_CONSTANTS = {
   DEFAULT_STOPLOSS_PERCENT: 0.5,
   DEFAULT_TAKEPROFIT_RELATION: 1,
 
-  MAX_NUMBER_TRADES: 4,
+  MAX_NUMBER_TRADES: 400,
 
   LOSS_PERCENT_PER_DEPOSIT: 1,
 
@@ -422,7 +422,7 @@ class TradingDemo {
     const sumProfit = (transaction.stopLossPrice / 100) * takeProfitPercent;
     // const halfSumProfit = sumProfit / 2;
 
-    const takeProfitPrice = transaction.isLong ? instrumentPrice + (sumProfit * 5) : instrumentPrice - (sumProfit * 5);
+    const takeProfitPrice = transaction.isLong ? instrumentPrice + (sumProfit * 10) : instrumentPrice - (sumProfit * 10);
     return parseFloat((takeProfitPrice).toFixed(tickSizePrecision));
   }
 
