@@ -418,8 +418,8 @@ class TradingDemo {
     instrumentPrice,
     tickSizePrecision,
   }) {
-    const takeProfitPercent = transaction.stopLossPercent * (TRADING_CONSTANTS.DEFAULT_TAKEPROFIT_RELATION + incrementValue);
-    const sumProfit = (transaction.stopLossPrice / 100) * takeProfitPercent;
+    const takeProfitPercent = transaction.originalStopLossPercent * (TRADING_CONSTANTS.DEFAULT_TAKEPROFIT_RELATION + incrementValue);
+    const sumProfit = (transaction.originalStopLossPrice / 100) * takeProfitPercent;
     // const halfSumProfit = sumProfit / 2;
 
     const takeProfitPrice = transaction.isLong ? instrumentPrice + (sumProfit * 10) : instrumentPrice - (sumProfit * 10);
