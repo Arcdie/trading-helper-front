@@ -751,7 +751,7 @@ const runRobotTrading = async () => {
   trading.changeNumberTrades(4);
 
   for await (const i of numberIterations) {
-    await doMoveTo();
+    // await doMoveTo();
 
     // if (!confirm('Go?')) {
     //   finishDatePointUnix += (300 * 20);
@@ -786,7 +786,7 @@ const runRobotTrading = async () => {
     const percentPerOpen = 100 / (lastCandle.open / difference);
     */
 
-    // /*
+    /*
     await $._data($(trading.$tradingForm.find('.action-block .buy button'))
       .get(0), 'events').click[0]
       .handler('buy');
@@ -794,7 +794,7 @@ const runRobotTrading = async () => {
     await doMoveTo();
     // */
 
-    /*
+    // /*
     await $._data($(trading.$tradingForm.find('.action-block .buy button'))
       .get(0), 'events').click[0]
       .handler('sell');
@@ -809,12 +809,9 @@ const runRobotTrading = async () => {
   isActiveRobotTrading = false;
 };
 
-let sumLoss = 0;
-let sumLossWaitDays = 0;
+const report = [];
 let markers = [];
-const waitDays = [];
 let isRiskMode = false;
-const arrLoss = [];
 
 const smartMoveToFinishTransaction = async (activeTransaction) => {
   if (!activeTransaction || !activeTransaction.isActive) {
@@ -833,7 +830,6 @@ const smartMoveToFinishTransaction = async (activeTransaction) => {
   const incrementValue = 300;
 
   let saveTrade = false;
-  // let reversalSaveTrade = false;
 
   const transactionPrice = TradingDemo.getAveragePrice(activeTransaction);
   const { isLong } = activeTransaction;
@@ -849,6 +845,9 @@ const smartMoveToFinishTransaction = async (activeTransaction) => {
   let commonLoss = 0;
   let resultLoss = 0;
   let numberSaveTradeHandled = 0;
+
+  let maxResultLoss = 0;
+  let maxNumberSaveTradeHandlers = 0;
 
   const calculateTradePrice = (candle, triggerPrice, savePrice) => {
     const isLong = candle.open < triggerPrice;
@@ -898,7 +897,8 @@ const smartMoveToFinishTransaction = async (activeTransaction) => {
       break;
     }
 
-    let saveLoss = 0;
+    // const loss = (isLong ? (topSavePrice - transactionPrice) : (transactionPrice - bottomSavePrice)) * quantity;
+    // resultLoss += (loss * 3);
 
     candles.every(candle => {
       if (!saveTrade) {
@@ -912,21 +912,35 @@ const smartMoveToFinishTransaction = async (activeTransaction) => {
             || (!isLong && candle.close >= topSavePrice)) { // saving main trade
             saveTrade = {
               isLong: !isLong,
-              quantity: quantity * 2,
+              quantity,
               tradePrice: calculateTradePrice(candle, isLong ? topSavePrice : bottomSavePrice, savePrice),
             };
 
-            saveLoss = (isLong ? (transactionPrice - saveTrade.tradePrice) : (saveTrade.tradePrice - transactionPrice)) * quantity;
-            commonLoss += saveLoss;
-            resultLoss += saveLoss;
+            if (activeTransaction.trades.some(t => t.isActive)) {
+              activeTransaction.trades.forEach(trade => {
+                trade.takeProfitPrice = transactionPrice;
+                TradingDemo.finishTrade(activeTransaction, trade, {
+                  instrumentPrice: transactionPrice,
+                  endedAtUnix: candle.originalTimeUnix,
+                });
+              });
+
+              const loss = (isLong ? (transactionPrice - saveTrade.tradePrice) : (saveTrade.tradePrice - transactionPrice)) * quantity;
+              commonLoss += loss;
+              resultLoss += loss;
+
+              if (resultLoss > maxResultLoss) {
+                maxResultLoss = resultLoss;
+              }
+
+              markers.push({
+                shape: 'arrowDown',
+                color: constants.RED_COLOR,
+                time: candle.originalTimeUnix,
+              });
+            }
 
             saveTradeWorked = true;
-
-            markers.push({
-              shape: 'arrowDown',
-              color: constants.RED_COLOR,
-              time: candle.originalTimeUnix,
-            });
 
             markers.push({
               shape: 'arrowDown',
@@ -959,10 +973,12 @@ const smartMoveToFinishTransaction = async (activeTransaction) => {
           resultLoss += loss;
           numberSaveTradeHandled += parseInt(saveTrade.quantity / quantity, 10);
 
-          if ((activeTransaction.isLong && !saveTrade.isLong)
-            || (!activeTransaction.isLong && saveTrade.isLong)) {
-            commonLoss -= saveLoss;
-            resultLoss -= saveLoss;
+          if (maxNumberSaveTradeHandlers > numberSaveTradeHandled) {
+            maxNumberSaveTradeHandlers = numberSaveTradeHandled;
+          }
+
+          if (resultLoss > maxResultLoss) {
+            maxResultLoss = resultLoss;
           }
 
           console.log('saveTrade', saveTrade, resultLoss, numberSaveTradeHandled);
@@ -1042,15 +1058,6 @@ const smartMoveToFinishTransaction = async (activeTransaction) => {
             saveTrade = false;
             saveTradeWorked = true;
 
-            activeTransaction.trades.forEach(trade => {
-              trade.takeProfitPrice = transactionPrice;
-
-              TradingDemo.finishTrade(activeTransaction, trade, {
-                instrumentPrice: trade.takeProfitPrice,
-                endedAtUnix: candle.originalTimeUnix,
-              });
-            });
-
             markers.push({
               shape: 'arrowDown',
               color: constants.GREEN_COLOR,
@@ -1073,19 +1080,22 @@ const smartMoveToFinishTransaction = async (activeTransaction) => {
       */
 
       lastCandleTimeUnix = candle.originalTimeUnix;
+      const doesExistActiveTrade = activeTransaction.trades.some(t => t.isActive);
 
-      const targetTrades = activeTransaction.isLong
-        ? activeTransaction.trades.filter(trade => trade.takeProfitPrice <= candle.high)
-        : activeTransaction.trades.filter(trade => trade.takeProfitPrice >= candle.low);
+      if (doesExistActiveTrade) {
+        const targetTrades = activeTransaction.isLong
+          ? activeTransaction.trades.filter(trade => trade.takeProfitPrice <= candle.high)
+          : activeTransaction.trades.filter(trade => trade.takeProfitPrice >= candle.low);
 
-      targetTrades.forEach(trade => {
-        TradingDemo.finishTrade(activeTransaction, trade, {
-          instrumentPrice: trade.takeProfitPrice,
-          endedAtUnix: candle.originalTimeUnix,
+        targetTrades.forEach(trade => {
+          TradingDemo.finishTrade(activeTransaction, trade, {
+            instrumentPrice: trade.takeProfitPrice,
+            endedAtUnix: candle.originalTimeUnix,
+          });
         });
-      });
+      }
 
-      if (!activeTransaction.trades.some(trade => trade.isActive) && resultLoss === 0) {
+      if (!doesExistActiveTrade && resultLoss === 0) {
         TradingDemo.finishTransaction(activeTransaction, {
           endedAtUnix: candle.originalTimeUnix,
         });
@@ -1101,6 +1111,8 @@ const smartMoveToFinishTransaction = async (activeTransaction) => {
       break;
     }
   }
+
+  report.push([maxResultLoss, maxNumberSaveTradeHandlers, activeTransaction.startedAtUnix]);
 
   if (activeTransaction.isActive) {
     alert(`!Success, n: ${numberSaveTradeHandled}; l: ${commonLoss.toFixed(1)}`);
@@ -1124,19 +1136,12 @@ const smartMoveToFinishTransaction = async (activeTransaction) => {
   const days = parseInt(difference / 86400, 10);
   const hours = parseInt((difference % 86400) / 3600, 10);
 
-  waitDays.push([
-    difference,
-    numberSaveTradeHandled,
-    commonLoss,
-    resultLoss,
-    activeTransaction.additionalIncome || 0,
-  ]);
+  finishDatePointUnix = lastCandleTimeUnix + incrementValue;
+  await reloadCharts(instrumentDoc._id);
 
   if (!isActiveRobotTrading) {
     const additionalIncome = (activeTransaction.additionalIncome && activeTransaction.additionalIncome.toFixed(2)) || 0;
     alert(`d: ${days}; h: ${hours}; n: ${numberSaveTradeHandled}; l: ${commonLoss.toFixed(1)}; a: ${additionalIncome}`);
-    finishDatePointUnix = lastCandleTimeUnix + incrementValue;
-    await reloadCharts(instrumentDoc._id);
 
     const newChartCandles = instrumentDoc[`chart_candles_${activePeriod}`];
     markers.forEach(m => newChartCandles.addMarker(m));
