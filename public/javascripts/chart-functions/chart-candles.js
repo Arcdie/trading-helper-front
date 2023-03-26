@@ -239,25 +239,38 @@ class ChartCandles {
     });
   }
 
-  calculateAveragePercent() {
+  calculateAveragePercent(period = 36) {
     if (!this.originalData.length) {
       return 0;
     }
 
     let averagePercent = 0;
-    const lOriginalData = this.originalData.length;
-    const targetCandlesPeriod = this.originalData.slice(lOriginalData - 36, lOriginalData);
+    const targetCandlesPeriod = this.originalData.slice(-period);
 
     targetCandlesPeriod.forEach(c => {
-      const isLong = c.close > c.open;
-
-      const differenceBetweenPrices = isLong ? c.high - c.open : c.open - c.low;
-      const percentPerPrice = 100 / (c.open / differenceBetweenPrices);
+      const difference = Math.abs(c.close - c.open);
+      const percentPerPrice = 100 / (c.open / difference);
 
       averagePercent += percentPerPrice;
     });
 
-    return averagePercent / 36;
+    return averagePercent / period;
+  }
+
+  calculateExpotentialAveragePercent(period = 36) {
+    if (!this.originalData.length) {
+      return 0;
+    }
+
+    const targetCandlesPeriod = this.originalData.slice(-period);
+
+    return EMA.calculate({
+      period,
+      values: targetCandlesPeriod.map(candle => {
+        const difference = Math.abs(candle.close - candle.open);
+        return 100 / (candle.open / difference);
+      }),
+    })[0];
   }
 
   prepareNewData(instrumentData, doesConsiderTimezone = true) {
