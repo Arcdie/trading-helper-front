@@ -494,6 +494,7 @@ $(document).ready(async () => {
       }
 
       tradingList.setTransactions(trading.transactions);
+      window.myNextTick = smartNextTick(result.transaction);
     });
 
   $(document)
@@ -755,7 +756,7 @@ const runRobotTrading = async () => {
   trading.changeNumberTrades(4);
 
   for await (const i of numberIterations) {
-    await doMoveTo();
+    // await doMoveTo();
 
     // if (!confirm('Go?')) {
     //   finishDatePointUnix += (300 * 20);
@@ -790,7 +791,7 @@ const runRobotTrading = async () => {
     const percentPerOpen = 100 / (lastCandle.open / difference);
     */
 
-    // /*
+    /*
     await $._data($(trading.$tradingForm.find('.action-block .buy button'))
       .get(0), 'events').click[0]
       .handler('buy');
@@ -798,7 +799,7 @@ const runRobotTrading = async () => {
     await doMoveTo();
     // */
 
-    /*
+    // /*
     await $._data($(trading.$tradingForm.find('.action-block .buy button'))
       .get(0), 'events').click[0]
       .handler('sell');
@@ -816,6 +817,240 @@ const runRobotTrading = async () => {
 const report = [];
 let markers = [];
 let isRiskMode = false;
+
+const smartNextTick = (activeTransaction) => {
+  const instrumentDoc = instrumentsDocs.find(doc => doc._id === activeTransaction.instrumentId);
+  const chartCandles = instrumentDoc[`chart_candles_${activePeriod}`];
+  const { originalData } = chartCandles;
+
+  const instrumentId = instrumentDoc._id;
+  const transactionPrice = TradingDemo.getAveragePrice(activeTransaction);
+  const { isLong } = activeTransaction;
+  const quantity = activeTransaction.trades[0].quantity * activeTransaction.trades.length;
+
+  const lastCandle = originalData[originalData.length - 1];
+
+  let resultLoss = 0;
+  let numberSaveTradeHandled = 0;
+
+  let maxResultLoss = 0;
+  let maxNumberSaveTradeHandlers = 0;
+
+  const savePrice = (lastCandle.close / 100) * (activeTransaction.originalStopLossPercent);
+  const topSavePrice = lastCandle.close + savePrice;
+  const bottomSavePrice = lastCandle.close - savePrice;
+
+  let saveTrade = false;
+
+  return async function (candle) {
+    const averagePercent = chartCandles.calculateExpotentialAveragePercent(36);
+
+    if (saveTrade) {
+      if (saveTrade.isActive) {
+        const sum = resultLoss / saveTrade.quantity;
+        const saveTradeTakeProfitPrice = saveTrade.isLong ? saveTrade.tradePrice + sum : saveTrade.tradePrice - sum;
+
+        if ((saveTrade.isLong && candle.low <= saveTrade.stopLossPrice)
+          || (!saveTrade.isLong && candle.high >= saveTrade.stopLossPrice)) {
+          // touch saveTrade stopLoss          
+          if (saveTrade.isLong) {
+            if (saveTrade.stopLossPrice > saveTrade.tradePrice) {
+              const profit = (saveTrade.stopLossPrice - saveTrade.tradePrice) * quantity;
+              resultLoss -= profit;
+            } else {
+              const loss = (saveTrade.tradePrice - saveTrade.stopLossPrice) * quantity;
+              resultLoss += loss;
+            }
+          } else {
+            if (saveTrade.stopLossPrice < saveTrade.tradePrice) {
+              const profit = (saveTrade.tradePrice - saveTrade.stopLossPrice) * quantity;
+              resultLoss -= profit;
+            } else {
+              const loss = (saveTrade.stopLossPrice - saveTrade.tradePrice) * quantity;
+              resultLoss += loss;
+            }
+          }
+
+          numberSaveTradeHandled += 1;
+          maxNumberSaveTradeHandlers += 1;
+
+          console.log('numberSaveTradeHandled', numberSaveTradeHandled);
+          console.log('resultLoss', resultLoss);
+
+          if (resultLoss > maxResultLoss) {
+            maxResultLoss = resultLoss;
+          }
+
+          const tmpSavePrice = (candle.close / 100) * (averagePercent * 2);
+
+          saveTrade = {
+            isActive: false,
+            quantity: saveTrade.quantity,
+            triggerPrices: [
+              { isLong: true, price: saveTrade.stopLossPrice + tmpSavePrice },
+              { isLong: false, price: saveTrade.stopLossPrice - tmpSavePrice },
+            ],
+          };
+
+          drawFigureLevels({ instrumentId }, [{
+            seriesId: uuidv4(),
+            time: candle.originalTimeUnix - 300,
+            timeframe: activePeriod,
+            value: saveTrade.triggerPrices[0].price,
+          }, {
+            seriesId: uuidv4(),
+            time: candle.originalTimeUnix - 300,
+            timeframe: activePeriod,
+            value: saveTrade.triggerPrices[1].price,
+          }]);
+
+          markers.push({
+            shape: 'arrowDown',
+            color: constants.RED_COLOR,
+            time: candle.originalTimeUnix,
+          });
+        } else if ((saveTrade.isLong && candle.high >= saveTradeTakeProfitPrice)
+          || (!saveTrade.isLong && candle.low <= saveTradeTakeProfitPrice)) {
+          // touch saveTrade takeProfit
+          resultLoss = 0;
+          saveTrade = false;
+
+          alert('tp');
+          drawFigureLevels({ instrumentId }, [{
+            seriesId: uuidv4(),
+            time: candle.originalTimeUnix - 300,
+            timeframe: activePeriod,
+            value: saveTradeTakeProfitPrice,
+            defaultColor: constants.GREEN_COLOR,
+          }]);
+
+          activeTransaction.trades.forEach(trade => {
+            trade.originalTimeUnix = candle.originalTimeUnix;
+          });
+        } else if ((saveTrade.isLong && candle.high >= saveTrade.triggerPrice)
+          || (!saveTrade.isLong && candle.low <= saveTrade.triggerPrice)) {
+          const tmpSavePrice = (candle.close / 100) * (averagePercent * 2);
+
+          if (saveTrade.isLong) {
+            saveTrade.stopLossPrice = saveTrade.triggerPrice - tmpSavePrice;
+            saveTrade.triggerPrice += tmpSavePrice;
+          } else {
+            saveTrade.stopLossPrice = saveTrade.triggerPrice + tmpSavePrice;
+            saveTrade.triggerPrice -= tmpSavePrice;
+          }
+
+          drawFigureLevels({ instrumentId }, [{
+            seriesId: uuidv4(),
+            time: candle.originalTimeUnix - 300,
+            timeframe: activePeriod,
+            value: saveTrade.triggerPrice,
+            defaultColor: constants.YELLOW_COLOR,
+          }, {
+            seriesId: uuidv4(),
+            time: candle.originalTimeUnix - 300,
+            timeframe: activePeriod,
+            value: saveTrade.stopLossPrice,
+            defaultColor: constants.RED_COLOR,
+          }]);
+        }
+      } else {
+        const isTriggered = saveTrade.triggerPrices.find(trigger =>
+          (trigger.isLong && candle.high >= trigger.price) || (!trigger.isLong && candle.low <= trigger.price));
+
+        if (isTriggered) {
+          const tmpSavePrice = (candle.close / 100) * (averagePercent * 2);
+
+          saveTrade.isActive = true;
+          saveTrade.isLong = isTriggered.isLong;
+          saveTrade.tradePrice = isTriggered.price;
+          saveTrade.stopLossPrice = saveTrade.isLong ? saveTrade.tradePrice - tmpSavePrice : saveTrade.tradePrice + tmpSavePrice;
+          saveTrade.triggerPrice = saveTrade.isLong ? saveTrade.tradePrice + (tmpSavePrice * 2) : saveTrade.tradePrice - (tmpSavePrice * 2);
+
+          drawFigureLevels({ instrumentId }, [{
+            seriesId: uuidv4(),
+            time: candle.originalTimeUnix - 300,
+            timeframe: activePeriod,
+            value: saveTrade.stopLossPrice,
+            defaultColor: constants.RED_COLOR,
+          }, {
+            seriesId: uuidv4(),
+            time: candle.originalTimeUnix - 300,
+            timeframe: activePeriod,
+            value: saveTrade.triggerPrice,
+            defaultColor: constants.YELLOW_COLOR,
+          }]);
+        }
+      }
+    }
+
+    if (activeTransaction.trades.some(t => t.isActive)) {
+      const limitStopLossPrice = isLong ? bottomSavePrice - (savePrice / 2) : topSavePrice + (savePrice / 2);
+
+      // touch stopLoss
+      if ((isLong && (candle.low <= limitStopLossPrice || candle.close <= bottomSavePrice))
+        || (!isLong && (candle.high >= limitStopLossPrice || candle.close >= topSavePrice))) {
+        const stopLossPrice = isLong ?
+          candle.low <= limitStopLossPrice ? limitStopLossPrice : candle.close
+          : candle.high >= limitStopLossPrice ? limitStopLossPrice : candle.close;
+
+        const loss = (isLong ? (transactionPrice - stopLossPrice) : (stopLossPrice - transactionPrice)) * quantity;
+        resultLoss += loss;
+        maxResultLoss += loss;
+
+        activeTransaction.trades.forEach(trade => {
+          TradingDemo.finishTrade(activeTransaction, trade, {
+            instrumentPrice: transactionPrice,
+            endedAtUnix: candle.originalTimeUnix,
+          });
+        });
+
+        saveTrade = {
+          isActive: true, // true == save mode, -50% to profit
+          isLong: !isLong,
+          quantity: quantity,
+          tradePrice: stopLossPrice,
+        };
+
+        saveTrade.stopLossPrice = saveTrade.isLong ? saveTrade.tradePrice - savePrice : saveTrade.tradePrice + savePrice;
+        saveTrade.triggerPrice = saveTrade.isLong ? saveTrade.tradePrice + (savePrice * 2) : saveTrade.tradePrice - (savePrice * 2);
+      } else {
+        // touch takeProfit
+        const { takeProfitPrice } = activeTransaction.trades[0];
+
+        if ((isLong && candle.high >= takeProfitPrice)
+          || !isLong && candle.low <= takeProfitPrice) {
+          activeTransaction.trades.forEach(trade => {
+            TradingDemo.finishTrade(activeTransaction, trade, {
+              instrumentPrice: takeProfitPrice,
+              endedAtUnix: candle.originalTimeUnix,
+            });
+          });
+
+          saveTrade = false;
+        }
+      }
+    }
+
+    const doesExistActiveTrade = activeTransaction.trades.some(t => t.isActive);
+
+    if (!doesExistActiveTrade && !saveTrade) {
+      TradingDemo.finishTransaction(activeTransaction, {
+        endedAtUnix: candle.originalTimeUnix,
+      });
+
+      tradingList.updateTradesInTradeList(activeTransaction, activeTransaction.trades);
+      tradingList.setTransactions(trading.transactions);
+      tradingList.updateCommonStatistics();
+
+      const difference = lastCandleTimeUnix - lastCandle.originalTimeUnix;
+
+      const days = parseInt(difference / 86400, 10);
+      const hours = parseInt((difference % 86400) / 3600, 10);
+
+      alert(`d: ${days}; h: ${hours}; n: ${maxNumberSaveTradeHandlers}; l: ${maxResultLoss.toFixed(1)};`);
+    }
+  }
+}
 
 const smartMoveToFinishTransaction = async (activeTransaction) => {
   if (!activeTransaction || !activeTransaction.isActive) {
@@ -848,18 +1083,6 @@ const smartMoveToFinishTransaction = async (activeTransaction) => {
 
   let maxResultLoss = 0;
   let maxNumberSaveTradeHandlers = 0;
-
-  const calculateTradePrice = (candle, triggerPrice, savePrice) => {
-    const isLong = candle.open < triggerPrice;
-
-    const difference = isLong ? candle.high - triggerPrice : triggerPrice - candle.low;
-
-    if ((difference / savePrice) > 1) {
-      return isLong ? triggerPrice + savePrice : triggerPrice - savePrice;
-    }
-
-    return candle.close;
-  };
 
   while (1) {
     let isSuccess = false;
@@ -897,122 +1120,121 @@ const smartMoveToFinishTransaction = async (activeTransaction) => {
       break;
     }
 
-    let saveTrade = {
-      quantity: quantity / 2,
-      isLong: !isLong,
-      tradePrice: transactionPrice,
-      averagePrices: [transactionPrice],
-    };
-
-    if (saveTrade.isLong) {
-      saveTrade.stopLossPrice = bottomSavePrice;
-      saveTrade.limitStopLossPrice = bottomSavePrice;
-      saveTrade.averagingPrice = topSavePrice + (savePrice * 2);
-    } else {
-      saveTrade.stopLossPrice = topSavePrice;
-      saveTrade.limitStopLossPrice = topSavePrice;
-      saveTrade.averagingPrice = bottomSavePrice - (savePrice * 2);
-    }
+    let saveTrade = false;
 
     candles.every(candle => {
-      const sum = resultLoss / saveTrade.quantity;
-      const saveTradeTakeProfitPrice = saveTrade.isLong ? saveTrade.tradePrice + sum : saveTrade.tradePrice - sum;
-      console.log(saveTrade, candle.originalTime, saveTradeTakeProfitPrice, resultLoss);
+      const averagePercent = chartCandles.calculateExpotentialAveragePercent(36);
 
-      // touch saveTrade stopLoss
-      if ((saveTrade.isLong && (candle.low <= saveTrade.limitStopLossPrice || candle.close <= saveTrade.stopLossPrice))
-        || (!saveTrade.isLong && (candle.high >= saveTrade.limitStopLossPrice || candle.close >= saveTrade.stopLossPrice))) {
-        const stopLossPrice = saveTrade.isLong ?
-          candle.low <= saveTrade.limitStopLossPrice ? saveTrade.limitStopLossPrice : candle.close
-          : candle.high >= saveTrade.limitStopLossPrice ? saveTrade.limitStopLossPrice : candle.close;
+      if (saveTrade) {
+        if (saveTrade.isActive) {
+          const sum = resultLoss / saveTrade.quantity;
+          const saveTradeTakeProfitPrice = saveTrade.isLong ? saveTrade.tradePrice + sum : saveTrade.tradePrice - sum;
 
-        if (saveTrade.averagePrices.length === 1) {
-          const loss = (saveTrade.isLong ? (saveTrade.tradePrice - stopLossPrice) : (stopLossPrice - saveTrade.tradePrice)) * saveTrade.quantity;
-          resultLoss += loss;
-          maxResultLoss += loss;
-          numberSaveTradeHandled += 1;
-          maxNumberSaveTradeHandlers += 1;
-        }
+          if ((saveTrade.isLong && candle.low <= saveTrade.stopLossPrice)
+            || (!saveTrade.isLong && candle.high >= saveTrade.stopLossPrice)) {
+            // touch saveTrade stopLoss          
+            if (saveTrade.isLong) {
+              if (saveTrade.stopLossPrice > saveTrade.tradePrice) {
+                const profit = (saveTrade.stopLossPrice - saveTrade.tradePrice) * quantity;
+                resultLoss -= profit;
+              } else {
+                const loss = (saveTrade.tradePrice - saveTrade.stopLossPrice) * quantity;
+                resultLoss += loss;
+              }
+            } else {
+              if (saveTrade.stopLossPrice < saveTrade.tradePrice) {
+                const profit = (saveTrade.tradePrice - saveTrade.stopLossPrice) * quantity;
+                resultLoss -= profit;
+              } else {
+                const loss = (saveTrade.stopLossPrice - saveTrade.tradePrice) * quantity;
+                resultLoss += loss;
+              }
+            }
 
-        saveTrade = {
-          quantity: saveTrade.quantity,
-          isLong: !saveTrade.isLong,
-          tradePrice: stopLossPrice,
-          averagePrices: [stopLossPrice],
-        };
+            numberSaveTradeHandled += 1;
+            maxNumberSaveTradeHandlers += 1;
 
-        if (saveTrade.isLong) {
-          saveTrade.stopLossPrice = saveTrade.tradePrice - (savePrice * 2);
-          saveTrade.limitStopLossPrice = saveTrade.stopLossPrice - savePrice;
-          saveTrade.averagingPrice = saveTrade.tradePrice + (savePrice * 2);
+            if (resultLoss > maxResultLoss) {
+              maxResultLoss = resultLoss;
+            }
+
+            const tmpSavePrice = (candle.close / 100) * (averagePercent * 2);
+
+            saveTrade = {
+              isActive: false,
+              quantity: saveTrade.quantity,
+              triggerPrices: [
+                { isLong: true, price: saveTrade.stopLossPrice + tmpSavePrice },
+                { isLong: false, price: saveTrade.stopLossPrice - tmpSavePrice },
+              ],
+            };
+
+            console.log('sl saveTrade', candle.originalTime, saveTrade, resultLoss);
+
+            markers.push({
+              shape: 'arrowDown',
+              color: constants.RED_COLOR,
+              time: candle.originalTimeUnix,
+            });
+          } else if ((saveTrade.isLong && candle.high >= saveTradeTakeProfitPrice)
+            || (!saveTrade.isLong && candle.low <= saveTradeTakeProfitPrice)) {
+            // touch saveTrade takeProfit
+            resultLoss = 0;
+            saveTrade = false;
+            markers.push({
+              shape: 'arrowDown',
+              color: constants.GREEN_COLOR,
+              time: candle.originalTimeUnix,
+            });
+
+            activeTransaction.trades.forEach(trade => {
+              trade.originalTimeUnix = candle.originalTimeUnix;
+            });
+          } else if ((saveTrade.isLong && candle.high >= saveTrade.triggerPrice)
+            || (!saveTrade.isLong && candle.low <= saveTrade.triggerPrice)) {
+            const tmpSavePrice = (candle.close / 100) * (averagePercent * 2);
+
+            if (saveTrade.isLong) {
+              saveTrade.stopLossPrice = saveTrade.triggerPrice - tmpSavePrice;
+              saveTrade.triggerPrice += tmpSavePrice;
+            } else {
+              saveTrade.stopLossPrice = saveTrade.triggerPrice + tmpSavePrice;
+              saveTrade.triggerPrice -= tmpSavePrice;
+            }
+
+            console.log('triggered saveTrade', candle.originalTime);
+
+            markers.push({
+              shape: 'arrowDown',
+              color: constants.ORANGE_COLOR,
+              time: candle.originalTimeUnix,
+            });
+          }
         } else {
-          saveTrade.stopLossPrice = saveTrade.tradePrice + (savePrice * 2);
-          saveTrade.limitStopLossPrice = saveTrade.stopLossPrice + savePrice;
-          saveTrade.averagingPrice = saveTrade.tradePrice - (savePrice * 2);
-        }
+          const isTriggered = saveTrade.triggerPrices.find(trigger =>
+            (trigger.isLong && candle.high >= trigger.price) || (!trigger.isLong && candle.low <= trigger.price));
 
-        // console.log('saveTrade', saveTrade);
+          if (isTriggered) {
+            console.log('isTriggered saveTrade', candle.originalTime);
+            const tmpSavePrice = (candle.close / 100) * (averagePercent * 2);
 
-        markers.push({
-          shape: 'arrowDown',
-          color: constants.RED_COLOR,
-          time: candle.originalTimeUnix,
-        });
-      } else if (resultLoss && ((saveTrade.isLong && candle.high >= saveTradeTakeProfitPrice)
-        || (!saveTrade.isLong && candle.low <= saveTradeTakeProfitPrice))) {
-        // touch saveTrade takeProfit
-        resultLoss = 0;
-        saveTrade = false;
-        markers.push({
-          shape: 'arrowDown',
-          color: constants.GREEN_COLOR,
-          time: candle.originalTimeUnix,
-        });
+            saveTrade.isActive = true;
+            saveTrade.isLong = isTriggered.isLong;
+            saveTrade.tradePrice = isTriggered.price;
+            saveTrade.stopLossPrice = saveTrade.isLong ? saveTrade.tradePrice - tmpSavePrice : saveTrade.tradePrice + tmpSavePrice;
+            saveTrade.triggerPrice = saveTrade.isLong ? saveTrade.tradePrice + (tmpSavePrice * 2) : saveTrade.tradePrice - (tmpSavePrice * 2);
 
-        activeTransaction.trades.forEach(trade => {
-          trade.originalTimeUnix = candle.originalTimeUnix;
-        });
-      } else if ((saveTrade.isLong && candle.high >= saveTrade.averagingPrice)
-        || (!saveTrade.isLong && candle.low <= saveTrade.averagingPrice)) {
-        saveTrade.quantity += (quantity / 2);
-        saveTrade.averagePrices.push(saveTrade.averagingPrice);
-
-        const averageValue = saveTrade.averagePrices.reduce((a, b) => a + b, 0) / saveTrade.averagePrices.length;
-        // console.log('averageValue', averageValue, saveTrade.averagePrices);
-
-        saveTrade.tradePrice = averageValue;
-        saveTrade.stopLossPrice = saveTrade.tradePrice;
-        saveTrade.limitStopLossPrice = saveTrade.stopLossPrice;
-
-        if (!isActiveRobotTrading) {
-          saveFigureLevelsToLocalStorage([{
-            seriesId: uuidv4(),
-            instrumentId: instrumentDoc._id,
-            time: candle.originalTimeUnix - 300,
-            timeframe: AVAILABLE_PERIODS.get('1h'),
-            value: saveTrade.stopLossPrice,
-            isLong: true,
-          }]);
-
-          saveFigureLevelsToLocalStorage([{
-            seriesId: uuidv4(),
-            instrumentId: instrumentDoc._id,
-            time: candle.originalTimeUnix - 300,
-            timeframe: activePeriod,
-            value: saveTrade.averagingPrice,
-            isLong: true,
-          }]);
-        }
-
-        if (saveTrade.isLong) {
-          saveTrade.averagingPrice = saveTrade.averagingPrice + (savePrice * 2);
-        } else {
-          saveTrade.averagingPrice = saveTrade.averagingPrice - (savePrice * 2);
+            markers.push({
+              shape: 'arrowDown',
+              color: constants.BLUE_COLOR,
+              time: candle.originalTimeUnix,
+            });
+          }
         }
       }
 
       if (activeTransaction.trades.some(t => t.isActive)) {
-        const limitStopLossPrice = isLong ? bottomSavePrice - savePrice : topSavePrice + savePrice;
+        const limitStopLossPrice = isLong ? bottomSavePrice - (savePrice / 2) : topSavePrice + (savePrice / 2);
 
         // touch stopLoss
         if ((isLong && (candle.low <= limitStopLossPrice || candle.close <= bottomSavePrice))
@@ -1031,6 +1253,16 @@ const smartMoveToFinishTransaction = async (activeTransaction) => {
               endedAtUnix: candle.originalTimeUnix,
             });
           });
+
+          saveTrade = {
+            isActive: true, // true == save mode, -50% to profit
+            isLong: !isLong,
+            quantity: quantity,
+            tradePrice: stopLossPrice,
+          };
+
+          saveTrade.stopLossPrice = saveTrade.isLong ? saveTrade.tradePrice - savePrice : saveTrade.tradePrice + savePrice;
+          saveTrade.triggerPrice = saveTrade.isLong ? saveTrade.tradePrice + (savePrice * 2) : saveTrade.tradePrice - (savePrice * 2);
 
           markers.push({
             shape: 'arrowDown',
@@ -1081,7 +1313,8 @@ const smartMoveToFinishTransaction = async (activeTransaction) => {
     }
   }
 
-  report.push([resultLoss, numberSaveTradeHandled, activeTransaction.startedAtUnix]);
+  report.push([maxResultLoss, maxNumberSaveTradeHandlers, activeTransaction.startedAtUnix]);
+  // report.push([resultLoss, numberSaveTradeHandled, activeTransaction.startedAtUnix]);
   // report.push([maxResultLoss, maxNumberSaveTradeHandlers, activeTransaction.startedAtUnix]);
 
   if (activeTransaction.isActive) {
@@ -1095,7 +1328,7 @@ const smartMoveToFinishTransaction = async (activeTransaction) => {
     tradingList.updateCommonStatistics();
     */
 
-    /*
+    // /*
     if (!isActiveRobotTrading) {
       finishDatePointUnix = lastCandleTimeUnix;
       await reloadCharts(instrumentDoc._id);
@@ -1106,10 +1339,10 @@ const smartMoveToFinishTransaction = async (activeTransaction) => {
 
       drawTrades({ instrumentId: instrumentDoc._id }, activeTransaction, choosenPeriods);
     }
-    */
+    // */
 
     // finishDatePointUnix += 86400;
-    // await reloadCharts(instrumentDoc._id);
+    await reloadCharts(instrumentDoc._id);
 
     return false;
   }
@@ -1136,6 +1369,9 @@ const smartMoveToFinishTransaction = async (activeTransaction) => {
     newChartCandles.drawMarkers();
 
     drawTrades({ instrumentId: instrumentDoc._id }, activeTransaction, choosenPeriods);
+
+    const figureLevelsData = getFigureLevelsFromLocalStorage({ instrumentId: instrumentDoc._id });
+    drawFigureLevels({ instrumentId: instrumentDoc._id }, figureLevelsData);
   }
 
   return true;
@@ -1683,6 +1919,10 @@ const nextTick = async () => {
       calculatePriceLeaders(activePeriod, lastCandles);
       sortListInstruments();
     }
+  }
+
+  if (window.myNextTick) {
+    window.myNextTick(lastCandle);
   }
 };
 
@@ -2548,9 +2788,9 @@ const drawFigureLevels = ({ instrumentId }, figureLevelsData = []) => {
     const firstCandleTime = candlesData[0].originalTimeUnix;
 
     figureLevelsData.forEach(({
-      seriesId, time, value, timeframe,
+      seriesId, time, value, timeframe, defaultColor,
     }) => {
-      let color = settings.figureLevels.colorFor5mLevels;
+      let color = defaultColor || settings.figureLevels.colorFor5mLevels;
 
       switch (timeframe) {
         case AVAILABLE_PERIODS.get('5m'): {
@@ -2566,11 +2806,11 @@ const drawFigureLevels = ({ instrumentId }, figureLevelsData = []) => {
             time -= time % 86400;
           }
 
-          color = settings.figureLevels.colorFor1hLevels;
+          color = defaultColor || settings.figureLevels.colorFor1hLevels;
           break;
         }
 
-        case AVAILABLE_PERIODS.get('1d'): color = settings.figureLevels.colorFor1dLevels; break;
+        case AVAILABLE_PERIODS.get('1d'): color = defaultColor || settings.figureLevels.colorFor1dLevels; break;
         default: alert(`Unknown timeframe - ${timeframe}`); break;
       }
 

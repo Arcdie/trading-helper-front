@@ -267,7 +267,7 @@ class ChartCandles {
     return EMA.calculate({
       period,
       values: targetCandlesPeriod.map(candle => {
-        const difference = Math.abs(candle.close - candle.open);
+        const difference = Math.abs(candle.high - candle.low);
         return 100 / (candle.open / difference);
       }),
     })[0];
