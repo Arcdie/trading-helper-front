@@ -1271,18 +1271,21 @@ const moveTo = {
           const isShortCurrentRound = (lastValueMediumMovingAverage < lastValueLongMovingAverage && lastValueShortMovingAverage < lastValueMediumMovingAverage);
 
           if (isLongCurrentRound) {
-            counter = 0;
-            // if (!isLong) {
-            //   counter = 0;
-            //   isLong = true;
-            // }
-            //
-            // if (lastCandle.close < lastValueMediumMovingAverage) {
-            //   counter = 0;
-            // } else {
-            //   counter += 1;
-            // }
+            // /*
+            if (!isLong) {
+              counter = 0;
+              isLong = true;
+            }
+
+            if (lastCandle.close < lastValueMediumMovingAverage) {
+              counter = 0;
+            } else {
+              counter += 1;
+            }
+            // */
           } else if (isShortCurrentRound) {
+            counter = 0;
+            /*
             if (isLong) {
               counter = 0;
               isLong = false;
@@ -1293,6 +1296,7 @@ const moveTo = {
             } else {
               counter += 1;
             }
+            // */
           }
           // */
 
@@ -1715,6 +1719,7 @@ const moveTo = {
 
         await reloadCharts(choosenInstrumentId);
         drawTrades({ instrumentId: instrumentDoc._id, }, activeTransaction, choosenPeriods);
+        finishDatePointUnix = startFinishDatePointUnix;
       }
     }
   },

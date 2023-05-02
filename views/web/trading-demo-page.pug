@@ -45,8 +45,11 @@ block scripts
 	script(src='/libs/trading-view-charts.min.js')
 	script(src='/libs/technical-indicators.min.js')
 	script(type='module').
-		import { v4 as uuidv4 } from 'https://jspm.dev/uuid';
-		window.uuidv4 = uuidv4;
+		//- import { v4 as uuidv4 } from 'https://jspm.dev/uuid';
+		//- window.uuidv4 = uuidv4;
+		window.uuidv4 = () => {
+			return `${new Date().getTime()}-${getRandomNumber(100000, 999999)}`;
+		};
 
 	script(src='/javascripts/websocket.js')
 	script(src='/javascripts/chart-functions/chart-candles.js')

@@ -7,7 +7,7 @@ classes, LightweightCharts,
 const TRADING_CONSTANTS = {
   DEFAULT_NUMBER_TRADES: 4,
   DEFAULT_STOPLOSS_PERCENT: 0.5,
-  DEFAULT_TAKEPROFIT_RELATION: 1,
+  DEFAULT_TAKEPROFIT_RELATION: 3,
 
   MAX_NUMBER_TRADES: 400,
 
@@ -160,6 +160,7 @@ class TradingDemo {
         stopLossPercent: 0,
         originalStopLossPrice: 0,
         originalStopLossPercent: 0,
+        instrumentPrice,
 
         trades: [],
 
@@ -223,9 +224,17 @@ class TradingDemo {
 
       newTransaction.stopLossPrice = stopLossPrice;
       newTransaction.stopLossPercent = stopLossPercent;
-      newTransaction.originalStopLossPrice = newTransaction.stopLossPrice;
-      newTransaction.originalStopLossPercent = newTransaction.stopLossPercent;
+      newTransaction.originalStopLossPrice = stopLossPrice;
+      newTransaction.originalStopLossPercent = stopLossPercent;
       newTransaction.quantity = parseFloat((quantity).toFixed(stepSizePrecision));
+
+      /*
+      const difference = (Math.abs(newTransaction.originalStopLossPrice - instrumentPrice)) * 10;
+
+      console.log('stopLossPercent', stopLossPercent);
+      newTransaction.stopLossPrice = newTransaction.isLong ? instrumentPrice - difference : instrumentPrice + difference;
+      newTransaction.stopLossPercent = stopLossPercent * 10;
+      */
 
       for (let i = 0; i < numberTrades; i += 1) {
         const newTrade = TradingDemo.createTrade(newTransaction, {
@@ -422,7 +431,7 @@ class TradingDemo {
     const sumProfit = (transaction.originalStopLossPrice / 100) * takeProfitPercent;
     // const halfSumProfit = sumProfit / 2;
 
-    const takeProfitPrice = transaction.isLong ? instrumentPrice + (sumProfit * 1) : instrumentPrice - (sumProfit * 1);
+    const takeProfitPrice = transaction.isLong ? instrumentPrice + sumProfit : instrumentPrice - sumProfit;
     return parseFloat((takeProfitPrice).toFixed(tickSizePrecision));
   }
 
@@ -528,7 +537,6 @@ class TradingDemo {
   }
 
   nextTick(instrumentDoc, candleData, isActivatedLimitOrder = false) {
-    return false;
     const activeTransaction = this.getActiveTransaction(instrumentDoc._id);
 
     if (!activeTransaction) {
@@ -539,7 +547,7 @@ class TradingDemo {
     const changes = [];
     const activeTrades = activeTransaction.trades.filter(t => t.isActive);
 
-    // /*
+    /*
     if (activeTransaction.isLong) {
       if ((isActivatedLimitOrder && candleData.close <= activeTransaction.stopLossPrice)
         || (!isActivatedLimitOrder && candleData.low <= activeTransaction.stopLossPrice)) {
@@ -587,6 +595,7 @@ class TradingDemo {
         };
       }
     }
+    */
 
     const targetTrades = activeTransaction.isLong
       ? activeTrades.filter(trade => trade.takeProfitPrice <= candleData.high)

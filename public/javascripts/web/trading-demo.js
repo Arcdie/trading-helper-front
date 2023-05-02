@@ -494,7 +494,7 @@ $(document).ready(async () => {
       }
 
       tradingList.setTransactions(trading.transactions);
-      window.myNextTick = smartNextTick(result.transaction);
+      // window.myNextTick = smartNextTick(result.transaction);
     });
 
   $(document)
@@ -1388,8 +1388,8 @@ const doMoveTo = async () => {
   if (notifications.length) {
     return moveTo.moveToNearesNotification();
   } else if (activeTransaction) {
-    return smartMoveToFinishTransaction(activeTransaction);
-    // return moveTo.moveToFinishTransaction(activeTransaction);
+    // return smartMoveToFinishTransaction(activeTransaction);
+    return moveTo.moveToFinishTransaction(activeTransaction);
   } else {
     switch (choosenNextEvent) {
       case AVAILABLE_NEXT_EVENTS.get('priceJump'): {
@@ -1453,7 +1453,7 @@ const reloadCharts = async (instrumentId) => {
   const activeLimitOrders = trading.limitOrders.filter(o => o.instrumentId === choosenInstrumentId);
   activeLimitOrders.length && drawLimitOrders({ instrumentId }, activeLimitOrders);
 
-  notifications.lengtg && drawNotifications(notifications);
+  notifications.length && drawNotifications(notifications);
 };
 
 const clearInstrumentData = ({ instrumentId }) => {
@@ -1921,9 +1921,9 @@ const nextTick = async () => {
     }
   }
 
-  if (window.myNextTick) {
-    window.myNextTick(lastCandle);
-  }
+  // if (window.myNextTick) {
+  //   window.myNextTick(lastCandle);
+  // }
 };
 
 const calculateAveragePercent = async (period, endTimeUnix) => {
@@ -2067,7 +2067,6 @@ const loadCharts = ({
       isActiveSearching = false;
       activePeriod = chartCandles.period;
       const coordinateToPrice = chartCandles.mainSeries.coordinateToPrice(param.point.y);
-      console.log('coordinateToPrice', coordinateToPrice);
       let paramTime = param.time;
 
       if (param.time && chartCandles.period === AVAILABLE_PERIODS.get('1d')) {
@@ -2573,6 +2572,8 @@ const changeFinishDatePoint = (newValue, doUpdateLocalStorage) => {
 };
 
 const transactionCreatedHandler = (instrumentDoc, { transaction }) => {
+  const difference = Math.abs(transaction.instrumentPrice - transaction.originalStopLossPrice);
+
   choosenPeriods.forEach(period => {
     const chartCandles = instrumentDoc[`chart_candles_${period}`];
     const transactionSeries = TradingDemo.createTransactionChartSeries(chartCandles, transaction);
@@ -2586,6 +2587,54 @@ const transactionCreatedHandler = (instrumentDoc, { transaction }) => {
     [transactionSeries, stopLossSeries, ...takeProfitSeries].forEach(
       series => chartCandles.drawSeries(series, [{ value: series.price, time: validTime }]),
     );
+
+    /*
+    const priceUp = transaction.instrumentPrice + (difference * 2);
+    const priceDown = transaction.instrumentPrice - (difference * 2);
+
+    const options = {
+      color: constants.RED_COLOR,
+      lastValueVisible: false,
+    };
+
+    const series1 = chartCandles.addExtraSeries(options, {
+      isTrade: true,
+      time: transaction.startedAtUnix,
+      id: `transaction-${transaction.id}-${priceUp}`,
+      price: priceUp,
+    });
+
+    const series2 = chartCandles.addExtraSeries(options, {
+      isTrade: true,
+      time: transaction.startedAtUnix,
+      id: `transaction-${transaction.id}-${priceDown}`,
+      price: priceDown,
+    });
+
+    chartCandles.drawSeries(series1, [{ value: series1.price, time: validTime }]);
+    chartCandles.drawSeries(series2, [{ value: series2.price, time: validTime }]);
+    */
+
+
+    /*
+    for (let i = 0; i < 5; i += 1) {
+      const price = transaction.isLong ? transaction.instrumentPrice - (difference * (i + 1)) : transaction.instrumentPrice + (difference * (i + 1));
+
+      const options = {
+        color: constants.RED_COLOR,
+        lastValueVisible: false,
+      };
+
+      const series = chartCandles.addExtraSeries(options, {
+        isTrade: true,
+        time: transaction.startedAtUnix,
+        id: `transaction-${transaction.id}-${price}`,
+        price,
+      });
+
+      chartCandles.drawSeries(series, [{ value: series.price, time: validTime }]);
+    }
+    */
   });
 
   tradingList.addTradesToTradeList(transaction, transaction.trades);
@@ -2883,6 +2932,7 @@ const drawTrades = ({ instrumentId }, transaction, periods = []) => {
   }
 
   const instrumentDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
+  const difference = Math.abs(transaction.instrumentPrice - transaction.originalStopLossPrice);
 
   periods.forEach(period => {
     const chartCandles = instrumentDoc[`chart_candles_${period}`];
@@ -2906,6 +2956,70 @@ const drawTrades = ({ instrumentId }, transaction, periods = []) => {
 
       chartCandles.drawSeries(series, values);
     });
+
+    /*
+    const priceUp = transaction.instrumentPrice + (difference * 2);
+    const priceDown = transaction.instrumentPrice - (difference * 2);
+
+    const options = {
+      color: constants.RED_COLOR,
+      lastValueVisible: false,
+    };
+
+    const series1 = chartCandles.addExtraSeries(options, {
+      isTrade: true,
+      time: transaction.startedAtUnix,
+      id: `transaction-${transaction.id}-${priceUp}`,
+      price: priceUp,
+    });
+
+    const series2 = chartCandles.addExtraSeries(options, {
+      isTrade: true,
+      time: transaction.startedAtUnix,
+      id: `transaction-${transaction.id}-${priceDown}`,
+      price: priceDown,
+    });
+
+    const values1 = [{ value: series1.price, time: ChartCandles.getValidTime(series1.time, period) }];
+    const values2 = [{ value: series2.price, time: ChartCandles.getValidTime(series2.time, period) }];
+
+    if (series1.time !== validTime) {
+      values1.push({ value: series1.price, time: validTime });
+      values2.push({ value: series2.price, time: validTime });
+    }
+
+    chartCandles.drawSeries(series1, values1);
+    chartCandles.drawSeries(series2, values2);
+    */
+
+    /*
+    for (let i = 0; i < 5; i += 1) {
+      const price = transaction.isLong ? transaction.instrumentPrice - (difference * (i + 1)) : transaction.instrumentPrice + (difference * (i + 1));
+
+      const options = {
+        color: constants.RED_COLOR,
+        lastValueVisible: false,
+      };
+
+      const series = chartCandles.addExtraSeries(options, {
+        isTrade: true,
+        time: transaction.startedAtUnix,
+        id: `transaction-${transaction.id}-${price}`,
+        price,
+      });
+
+      const values = [{
+        value: series.price,
+        time: ChartCandles.getValidTime(series.time, period),
+      }];
+
+      if (series.time !== validTime) {
+        values.push({ value: series.price, time: validTime });
+      }
+
+      chartCandles.drawSeries(series, values);
+    }
+    */
   });
 };
 
