@@ -17,10 +17,10 @@ const TRADING_CONSTANTS = {
     return 100 / this.DEFAULT_NUMBER_TRADES;
   },
 
-  // MAKER_COMMISSION_PERCENT: 0.02 / 100,
-  // TAKER_COMMISSION_PERCENT: 0.04 / 100,
-  MAKER_COMMISSION_PERCENT: (0.0180 - 0.0045) / 100,
-  TAKER_COMMISSION_PERCENT: (0.0360 - 0.009) / 100,
+  MAKER_COMMISSION_PERCENT: 0.02 / 100,
+  TAKER_COMMISSION_PERCENT: 0.04 / 100,
+  // MAKER_COMMISSION_PERCENT: (0.0180 - 0.0045) / 100,
+  // TAKER_COMMISSION_PERCENT: (0.0360 - 0.009) / 100,
 };
 
 const EActions = new Map([
@@ -229,12 +229,12 @@ class TradingDemo {
       newTransaction.quantity = parseFloat((quantity).toFixed(stepSizePrecision));
 
       /*
-      const difference = (Math.abs(newTransaction.originalStopLossPrice - instrumentPrice)) * 10;
+      const difference = (Math.abs(newTransaction.originalStopLossPrice - instrumentPrice)) * 3;
 
       console.log('stopLossPercent', stopLossPercent);
       newTransaction.stopLossPrice = newTransaction.isLong ? instrumentPrice - difference : instrumentPrice + difference;
-      newTransaction.stopLossPercent = stopLossPercent * 10;
-      */
+      newTransaction.stopLossPercent = stopLossPercent * 3;
+      // */
 
       for (let i = 0; i < numberTrades; i += 1) {
         const newTrade = TradingDemo.createTrade(newTransaction, {
@@ -547,7 +547,7 @@ class TradingDemo {
     const changes = [];
     const activeTrades = activeTransaction.trades.filter(t => t.isActive);
 
-    /*
+    // /*
     if (activeTransaction.isLong) {
       if ((isActivatedLimitOrder && candleData.close <= activeTransaction.stopLossPrice)
         || (!isActivatedLimitOrder && candleData.low <= activeTransaction.stopLossPrice)) {
@@ -595,7 +595,7 @@ class TradingDemo {
         };
       }
     }
-    */
+    // */
 
     const targetTrades = activeTransaction.isLong
       ? activeTrades.filter(trade => trade.takeProfitPrice <= candleData.high)

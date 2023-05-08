@@ -429,13 +429,19 @@ $(document).ready(async () => {
       if (!trading.getActiveTransaction(choosenInstrumentId)) {
         // const averagePercent = await calculateAveragePercent(AVAILABLE_PERIODS.get('1h'), firstCandle.originalTimeUnix);
         // const stopLossPercent = averagePercent * 2;
+
         const averagePercent = chartCandles.calculateExpotentialAveragePercent(36);
         const stopLossPercent = (averagePercent * 2);
         trading.changeStopLossPercent(stopLossPercent);
 
-        const savePrice = (firstCandle.close / 100) * (stopLossPercent);
-        const topSavePrice = firstCandle.close + savePrice;
-        const bottomSavePrice = firstCandle.close - savePrice;
+
+        // const differenceBetweenPrices = Math.abs(firstCandle.open - firstCandle.close);
+        // const stopLossPercent = 100 / (firstCandle.open / differenceBetweenPrices);
+        // trading.changeStopLossPercent(stopLossPercent / 2);
+
+        // const savePrice = (firstCandle.close / 100) * (stopLossPercent);
+        // const topSavePrice = firstCandle.close + savePrice;
+        // const bottomSavePrice = firstCandle.close - savePrice;
 
         /*
         if (!isActiveRobotTrading) {
@@ -1052,37 +1058,41 @@ const smartNextTick = (activeTransaction) => {
   }
 }
 
-const smartMoveToFinishTransaction = async (activeTransaction) => {
-  if (!activeTransaction || !activeTransaction.isActive) {
+const smartMoveToFinishTransaction = async (transaction) => {
+  if (!transaction || !transaction.isActive) {
     return false;
   }
 
   markers = [];
 
-  const instrumentDoc = instrumentsDocs.find(doc => doc._id === activeTransaction.instrumentId);
+  const instrumentDoc = instrumentsDocs.find(doc => doc._id === transaction.instrumentId);
   const chartCandles = instrumentDoc[`chart_candles_${activePeriod}`];
   const { originalData } = chartCandles;
 
   document.previousTitle = document.title;
   document.title = `${instrumentDoc.name} ...`;
 
-  const incrementValue = 300;
-
-  const transactionPrice = TradingDemo.getAveragePrice(activeTransaction);
-  const { isLong } = activeTransaction;
-  const quantity = activeTransaction.trades[0].quantity * activeTransaction.trades.length;
+  const { isLong } = transaction;
+  const quantity = transaction.trades[0].quantity * transaction.trades.length;
   const lastCandle = originalData[originalData.length - 1];
-  const savePrice = (lastCandle.close / 100) * (activeTransaction.originalStopLossPercent);
-  const topSavePrice = lastCandle.close + savePrice;
-  const bottomSavePrice = lastCandle.close - savePrice;
+
+  const difference = Math.abs(transaction.instrumentPrice - transaction.originalStopLossPrice);
+
+  const topSavePrice = transaction.instrumentPrice + difference;
+  const bottomSavePrice = transaction.instrumentPrice - difference;
+
   let lastCandleTimeUnix = lastCandle.originalTimeUnix;
 
   let wasAsked = false;
-  let resultLoss = 0;
+  let wasTouchedInitPrice = true;
   let numberSaveTradeHandled = 0;
 
   let maxResultLoss = 0;
   let maxNumberSaveTradeHandlers = 0;
+
+  let resultLoss = 0;
+  let saveTrade = false;
+  let reversedTrade = false;
 
   while (1) {
     let isSuccess = false;
@@ -1098,14 +1108,12 @@ const smartMoveToFinishTransaction = async (activeTransaction) => {
       }
     }
 
-    const incrementTime = lastCandleTimeUnix + (incrementValue * 1440); // 5 days
-
     const getCandlesOptions = {
       period: activePeriod,
       instrumentId: instrumentDoc._id,
 
       startTime: moment.unix(lastCandleTimeUnix),
-      endTime: moment.unix(incrementTime),
+      endTime: moment.unix(lastCandleTimeUnix + (300 * 1440)), // 5 days
     };
 
     const rawCandles = await getCandlesData(getCandlesOptions);
@@ -1120,184 +1128,191 @@ const smartMoveToFinishTransaction = async (activeTransaction) => {
       break;
     }
 
-    let saveTrade = false;
-
     candles.every(candle => {
-      const averagePercent = chartCandles.calculateExpotentialAveragePercent(36);
-
-      if (saveTrade) {
-        if (saveTrade.isActive) {
-          const sum = resultLoss / saveTrade.quantity;
-          const saveTradeTakeProfitPrice = saveTrade.isLong ? saveTrade.tradePrice + sum : saveTrade.tradePrice - sum;
-
-          if ((saveTrade.isLong && candle.low <= saveTrade.stopLossPrice)
-            || (!saveTrade.isLong && candle.high >= saveTrade.stopLossPrice)) {
-            // touch saveTrade stopLoss          
-            if (saveTrade.isLong) {
-              if (saveTrade.stopLossPrice > saveTrade.tradePrice) {
-                const profit = (saveTrade.stopLossPrice - saveTrade.tradePrice) * quantity;
-                resultLoss -= profit;
-              } else {
-                const loss = (saveTrade.tradePrice - saveTrade.stopLossPrice) * quantity;
-                resultLoss += loss;
-              }
-            } else {
-              if (saveTrade.stopLossPrice < saveTrade.tradePrice) {
-                const profit = (saveTrade.tradePrice - saveTrade.stopLossPrice) * quantity;
-                resultLoss -= profit;
-              } else {
-                const loss = (saveTrade.stopLossPrice - saveTrade.tradePrice) * quantity;
-                resultLoss += loss;
-              }
-            }
-
-            numberSaveTradeHandled += 1;
-            maxNumberSaveTradeHandlers += 1;
-
-            if (resultLoss > maxResultLoss) {
-              maxResultLoss = resultLoss;
-            }
-
-            const tmpSavePrice = (candle.close / 100) * (averagePercent * 2);
-
-            saveTrade = {
-              isActive: false,
-              quantity: saveTrade.quantity,
-              triggerPrices: [
-                { isLong: true, price: saveTrade.stopLossPrice + tmpSavePrice },
-                { isLong: false, price: saveTrade.stopLossPrice - tmpSavePrice },
-              ],
-            };
-
-            console.log('sl saveTrade', candle.originalTime, saveTrade, resultLoss);
-
-            markers.push({
-              shape: 'arrowDown',
-              color: constants.RED_COLOR,
-              time: candle.originalTimeUnix,
-            });
-          } else if ((saveTrade.isLong && candle.high >= saveTradeTakeProfitPrice)
-            || (!saveTrade.isLong && candle.low <= saveTradeTakeProfitPrice)) {
-            // touch saveTrade takeProfit
-            resultLoss = 0;
-            saveTrade = false;
-            markers.push({
-              shape: 'arrowDown',
-              color: constants.GREEN_COLOR,
-              time: candle.originalTimeUnix,
-            });
-
-            activeTransaction.trades.forEach(trade => {
-              trade.originalTimeUnix = candle.originalTimeUnix;
-            });
-          } else if ((saveTrade.isLong && candle.high >= saveTrade.triggerPrice)
-            || (!saveTrade.isLong && candle.low <= saveTrade.triggerPrice)) {
-            const tmpSavePrice = (candle.close / 100) * (averagePercent * 2);
-
-            if (saveTrade.isLong) {
-              saveTrade.stopLossPrice = saveTrade.triggerPrice - tmpSavePrice;
-              saveTrade.triggerPrice += tmpSavePrice;
-            } else {
-              saveTrade.stopLossPrice = saveTrade.triggerPrice + tmpSavePrice;
-              saveTrade.triggerPrice -= tmpSavePrice;
-            }
-
-            console.log('triggered saveTrade', candle.originalTime);
-
-            markers.push({
-              shape: 'arrowDown',
-              color: constants.ORANGE_COLOR,
-              time: candle.originalTimeUnix,
-            });
-          }
-        } else {
-          const isTriggered = saveTrade.triggerPrices.find(trigger =>
-            (trigger.isLong && candle.high >= trigger.price) || (!trigger.isLong && candle.low <= trigger.price));
-
-          if (isTriggered) {
-            console.log('isTriggered saveTrade', candle.originalTime);
-            const tmpSavePrice = (candle.close / 100) * (averagePercent * 2);
-
-            saveTrade.isActive = true;
-            saveTrade.isLong = isTriggered.isLong;
-            saveTrade.tradePrice = isTriggered.price;
-            saveTrade.stopLossPrice = saveTrade.isLong ? saveTrade.tradePrice - tmpSavePrice : saveTrade.tradePrice + tmpSavePrice;
-            saveTrade.triggerPrice = saveTrade.isLong ? saveTrade.tradePrice + (tmpSavePrice * 2) : saveTrade.tradePrice - (tmpSavePrice * 2);
-
-            markers.push({
-              shape: 'arrowDown',
-              color: constants.BLUE_COLOR,
-              time: candle.originalTimeUnix,
-            });
-          }
-        }
+      if (!wasTouchedInitPrice) {
+        wasTouchedInitPrice = transaction.instrumentPrice <= candle.high && transaction.instrumentPrice >= candle.low;
       }
 
-      if (activeTransaction.trades.some(t => t.isActive)) {
-        const limitStopLossPrice = isLong ? bottomSavePrice - (savePrice / 2) : topSavePrice + (savePrice / 2);
-
+      if (transaction.trades.some(t => t.isActive)) {
         // touch stopLoss
-        if ((isLong && (candle.low <= limitStopLossPrice || candle.close <= bottomSavePrice))
-          || (!isLong && (candle.high >= limitStopLossPrice || candle.close >= topSavePrice))) {
-          const stopLossPrice = isLong ?
-            candle.low <= limitStopLossPrice ? limitStopLossPrice : candle.close
-            : candle.high >= limitStopLossPrice ? limitStopLossPrice : candle.close;
+        if ((isLong && candle.low <= transaction.stopLossPrice)
+          || (!isLong && candle.high >= transaction.stopLossPrice)) {
+          const loss = (isLong
+            ? (transaction.instrumentPrice - transaction.stopLossPrice)
+            : (transaction.stopLossPrice - transaction.instrumentPrice)) * quantity;
 
-          const loss = (isLong ? (transactionPrice - stopLossPrice) : (stopLossPrice - transactionPrice)) * quantity;
           resultLoss += loss;
           maxResultLoss += loss;
 
-          activeTransaction.trades.forEach(trade => {
-            TradingDemo.finishTrade(activeTransaction, trade, {
-              instrumentPrice: transactionPrice,
+          console.log('loss-transaction', loss, resultLoss);
+
+          transaction.trades.forEach(trade => {
+            TradingDemo.finishTrade(transaction, trade, {
+              instrumentPrice: transaction.instrumentPrice,
               endedAtUnix: candle.originalTimeUnix,
             });
           });
 
-          saveTrade = {
-            isActive: true, // true == save mode, -50% to profit
-            isLong: !isLong,
-            quantity: quantity,
-            tradePrice: stopLossPrice,
-          };
-
-          saveTrade.stopLossPrice = saveTrade.isLong ? saveTrade.tradePrice - savePrice : saveTrade.tradePrice + savePrice;
-          saveTrade.triggerPrice = saveTrade.isLong ? saveTrade.tradePrice + (savePrice * 2) : saveTrade.tradePrice - (savePrice * 2);
-
           markers.push({
-            shape: 'arrowDown',
             color: constants.RED_COLOR,
             time: candle.originalTimeUnix,
+            shape: isLong ? 'arrowDown' : 'arrowUp',
           });
         } else {
           // touch takeProfit
-          const { takeProfitPrice } = activeTransaction.trades[0];
+          const { takeProfitPrice } = transaction.trades[0];
 
           if ((isLong && candle.high >= takeProfitPrice)
-            || !isLong && candle.low <= takeProfitPrice) {
-            activeTransaction.trades.forEach(trade => {
-              TradingDemo.finishTrade(activeTransaction, trade, {
+            || (!isLong && candle.low <= takeProfitPrice)) {
+            transaction.trades.forEach(trade => {
+              TradingDemo.finishTrade(transaction, trade, {
                 instrumentPrice: takeProfitPrice,
                 endedAtUnix: candle.originalTimeUnix,
               });
             });
 
-            saveTrade = false;
-
             markers.push({
-              shape: 'arrowDown',
               color: constants.GREEN_COLOR,
               time: candle.originalTimeUnix,
+              shape: isLong ? 'arrowDown' : 'arrowUp',
             });
           }
         }
       }
 
-      lastCandleTimeUnix = candle.originalTimeUnix;
-      const doesExistActiveTrade = activeTransaction.trades.some(t => t.isActive);
+      // /*
+      if (
+        !reversedTrade
+        // && resultLoss > 0
+        && wasTouchedInitPrice
+        && (candle.high >= topSavePrice || candle.low <= bottomSavePrice)) {
+        const isLongTrade = candle.high >= topSavePrice;
 
-      if (!doesExistActiveTrade && !saveTrade) {
-        TradingDemo.finishTransaction(activeTransaction, {
+        reversedTrade = {
+          quantity,
+          isLong: !isLongTrade,
+          startedAtUnix: candle.originalTimeUnix,
+          tradePrice: isLongTrade ? topSavePrice : bottomSavePrice,
+          stopLossPrice: isLongTrade ? topSavePrice + (difference * 2) : bottomSavePrice - (difference * 2),
+        };
+
+        markers.push({
+          color: constants.YELLOW_COLOR,
+          time: candle.originalTimeUnix,
+          shape: isLongTrade ? 'arrowDown' : 'arrowUp',
+        });
+
+        const loss = (difference * 2) * reversedTrade.quantity;
+        console.log('loss-reversedTrade', loss, resultLoss);
+        resultLoss += loss;
+
+        wasTouchedInitPrice = false;
+      }
+
+      if (reversedTrade && reversedTrade.startedAtUnix !== candle.originalTimeUnix) {
+        if ((reversedTrade.isLong && candle.low <= reversedTrade.stopLossPrice)
+          || (!reversedTrade.isLong && candle.high >= reversedTrade.stopLossPrice)) {
+          // touch reversedTrade stopLoss
+          if (resultLoss > maxResultLoss) {
+            maxResultLoss = resultLoss;
+            console.log('maxResultLoss', maxResultLoss);
+          }
+
+          markers.push({
+            color: constants.RED_COLOR,
+            time: candle.originalTimeUnix,
+            shape: saveTrade.isLong ? 'arrowUp' : 'arrowDown',
+          });
+
+          reversedTrade = false;
+        } else if ((reversedTrade.isLong && candle.high >= transaction.instrumentPrice)
+          || (!reversedTrade.isLong && candle.low <= transaction.instrumentPrice)) {
+          // touch reversedTrade takeProfit
+          const loss = (difference * 2) * reversedTrade.quantity;
+          const profit = difference * reversedTrade.quantity;
+          resultLoss -= (loss + profit);
+
+          console.log('profit-reversedTrade', profit, resultLoss, candle.originalTime);
+
+          markers.push({
+            color: constants.GREEN_COLOR,
+            time: candle.originalTimeUnix,
+            shape: saveTrade.isLong ? 'arrowUp' : 'arrowDown',
+          });
+
+          reversedTrade = false;
+        }
+      }
+      // */
+
+      if (!saveTrade && resultLoss > 0 && (candle.low <= bottomSavePrice || candle.high >= topSavePrice)) {
+        const isLongTrade = candle.high >= topSavePrice;
+
+        saveTrade = {
+          quantity,
+          isLong: isLongTrade,
+          stopLossPrice: transaction.instrumentPrice,
+          tradePrice: isLongTrade ? topSavePrice : bottomSavePrice,
+          startedAtUnix: candle.originalTimeUnix,
+        };
+
+        markers.push({
+          color: constants.YELLOW_COLOR,
+          time: candle.originalTimeUnix,
+          shape: isLongTrade ? 'arrowUp' : 'arrowDown',
+        });
+      }
+
+      if (saveTrade && saveTrade.startedAtUnix !== candle.originalTimeUnix) {
+        const sumLoss = resultLoss / saveTrade.quantity;
+        const takeProfitPrice = saveTrade.isLong ? saveTrade.tradePrice + sumLoss : saveTrade.tradePrice - sumLoss;
+
+        if ((saveTrade.isLong && candle.low <= saveTrade.stopLossPrice)
+          || (!saveTrade.isLong && candle.high >= saveTrade.stopLossPrice)) {
+          // touch saveTrade stopLoss
+          const loss = Math.abs(saveTrade.tradePrice - saveTrade.stopLossPrice) * quantity;
+          resultLoss += loss;
+          console.log('loss-saveTrade', loss, resultLoss);
+
+          numberSaveTradeHandled += 1;
+          maxNumberSaveTradeHandlers += 1;
+
+          if (resultLoss > maxResultLoss) {
+            maxResultLoss = resultLoss;
+            console.log('maxResultLoss', maxResultLoss);
+          }
+
+          markers.push({
+            color: constants.RED_COLOR,
+            time: candle.originalTimeUnix,
+            shape: saveTrade.isLong ? 'arrowDown' : 'arrowUp',
+          });
+
+          saveTrade = false;
+        } else if ((saveTrade.isLong && candle.high >= takeProfitPrice)
+          || (!saveTrade.isLong && candle.low <= takeProfitPrice)) {
+          // touch saveTrade takeProfit
+          resultLoss = 0;
+
+          markers.push({
+            color: constants.GREEN_COLOR,
+            time: candle.originalTimeUnix,
+            shape: saveTrade.isLong ? 'arrowDown' : 'arrowUp',
+          });
+
+          saveTrade = false;
+
+          transaction.trades.forEach(trade => {
+            trade.originalTimeUnix = candle.originalTimeUnix;
+          });
+        }
+      }
+
+      lastCandleTimeUnix = candle.originalTimeUnix;
+      const doesExistActiveTrade = transaction.trades.some(t => t.isActive);
+
+      if (!doesExistActiveTrade && (resultLoss <= 0 || resultLoss >= 6)) {
+        TradingDemo.finishTransaction(transaction, {
           endedAtUnix: candle.originalTimeUnix,
         });
 
@@ -1313,11 +1328,11 @@ const smartMoveToFinishTransaction = async (activeTransaction) => {
     }
   }
 
-  report.push([maxResultLoss, maxNumberSaveTradeHandlers, activeTransaction.startedAtUnix]);
+  report.push([maxResultLoss, maxNumberSaveTradeHandlers, transaction.startedAtUnix]);
   // report.push([resultLoss, numberSaveTradeHandled, activeTransaction.startedAtUnix]);
   // report.push([maxResultLoss, maxNumberSaveTradeHandlers, activeTransaction.startedAtUnix]);
 
-  if (activeTransaction.isActive) {
+  if (transaction.isActive) {
     document.title = document.previousTitle;
     alert(`!Success, n: ${maxNumberSaveTradeHandlers}; l: ${maxResultLoss.toFixed(1)}`);
 
@@ -1337,7 +1352,7 @@ const smartMoveToFinishTransaction = async (activeTransaction) => {
       markers.forEach(m => newChartCandles.addMarker(m));
       newChartCandles.drawMarkers();
 
-      drawTrades({ instrumentId: instrumentDoc._id }, activeTransaction, choosenPeriods);
+      drawTrades({ instrumentId: instrumentDoc._id }, transaction, choosenPeriods);
     }
     // */
 
@@ -1349,29 +1364,29 @@ const smartMoveToFinishTransaction = async (activeTransaction) => {
 
   document.title = document.previousTitle;
 
-  tradingList.updateTradesInTradeList(activeTransaction, activeTransaction.trades);
+  tradingList.updateTradesInTradeList(transaction, transaction.trades);
   tradingList.setTransactions(trading.transactions);
   tradingList.updateCommonStatistics();
 
-  const difference = lastCandleTimeUnix - lastCandle.originalTimeUnix;
+  const timeDifference = lastCandleTimeUnix - lastCandle.originalTimeUnix;
 
-  const days = parseInt(difference / 86400, 10);
-  const hours = parseInt((difference % 86400) / 3600, 10);
+  const days = parseInt(timeDifference / 86400, 10);
+  const hours = parseInt((timeDifference % 86400) / 3600, 10);
 
-  finishDatePointUnix = lastCandleTimeUnix + incrementValue;
+  finishDatePointUnix = lastCandleTimeUnix + 300;
   await reloadCharts(instrumentDoc._id);
 
   if (!isActiveRobotTrading) {
-    alert(`d: ${days}; h: ${hours}; n: ${maxNumberSaveTradeHandlers}; l: ${maxResultLoss.toFixed(1)};`);
+    alert(`l: ${maxResultLoss.toFixed(1)}; n: ${maxNumberSaveTradeHandlers}; d: ${days}; h: ${hours};`);
 
     const newChartCandles = instrumentDoc[`chart_candles_${activePeriod}`];
     markers.forEach(m => newChartCandles.addMarker(m));
     newChartCandles.drawMarkers();
 
-    drawTrades({ instrumentId: instrumentDoc._id }, activeTransaction, choosenPeriods);
+    drawTrades({ instrumentId: instrumentDoc._id }, transaction, choosenPeriods);
 
-    const figureLevelsData = getFigureLevelsFromLocalStorage({ instrumentId: instrumentDoc._id });
-    drawFigureLevels({ instrumentId: instrumentDoc._id }, figureLevelsData);
+    // const figureLevelsData = getFigureLevelsFromLocalStorage({ instrumentId: instrumentDoc._id });
+    // drawFigureLevels({ instrumentId: instrumentDoc._id }, figureLevelsData);
   }
 
   return true;
@@ -1388,8 +1403,8 @@ const doMoveTo = async () => {
   if (notifications.length) {
     return moveTo.moveToNearesNotification();
   } else if (activeTransaction) {
-    // return smartMoveToFinishTransaction(activeTransaction);
-    return moveTo.moveToFinishTransaction(activeTransaction);
+    return smartMoveToFinishTransaction(activeTransaction);
+    // return moveTo.moveToFinishTransaction(activeTransaction);
   } else {
     switch (choosenNextEvent) {
       case AVAILABLE_NEXT_EVENTS.get('priceJump'): {
@@ -2635,6 +2650,42 @@ const transactionCreatedHandler = (instrumentDoc, { transaction }) => {
       chartCandles.drawSeries(series, [{ value: series.price, time: validTime }]);
     }
     */
+
+    for (let i = 0; i < 2; i += 1) {
+      const price = transaction.isLong ? transaction.instrumentPrice + (difference * (i + 1)) : transaction.instrumentPrice - (difference * (i + 1));
+
+      const options = {
+        color: constants.RED_COLOR,
+        lastValueVisible: false,
+      };
+
+      const series = chartCandles.addExtraSeries(options, {
+        isTrade: true,
+        time: transaction.startedAtUnix,
+        id: `transaction-${transaction.id}-${price}`,
+        price,
+      });
+
+      chartCandles.drawSeries(series, [{ value: series.price, time: validTime }]);
+    }
+
+    for (let i = 1; i < 3; i += 1) {
+      const price = transaction.isLong ? transaction.instrumentPrice - (difference * (i + 1)) : transaction.instrumentPrice + (difference * (i + 1));
+
+      const options = {
+        color: constants.RED_COLOR,
+        lastValueVisible: false,
+      };
+
+      const series = chartCandles.addExtraSeries(options, {
+        isTrade: true,
+        time: transaction.startedAtUnix,
+        id: `transaction-${transaction.id}-${price}`,
+        price,
+      });
+
+      chartCandles.drawSeries(series, [{ value: series.price, time: validTime }]);
+    }
   });
 
   tradingList.addTradesToTradeList(transaction, transaction.trades);
@@ -3020,6 +3071,60 @@ const drawTrades = ({ instrumentId }, transaction, periods = []) => {
       chartCandles.drawSeries(series, values);
     }
     */
+
+    for (let i = 0; i < 2; i += 1) {
+      const price = transaction.isLong ? transaction.instrumentPrice + (difference * (i + 1)) : transaction.instrumentPrice - (difference * (i + 1));
+
+      const options = {
+        color: constants.RED_COLOR,
+        lastValueVisible: false,
+      };
+
+      const series = chartCandles.addExtraSeries(options, {
+        isTrade: true,
+        time: transaction.startedAtUnix,
+        id: `transaction-${transaction.id}-${price}`,
+        price,
+      });
+
+      const values = [{
+        value: series.price,
+        time: ChartCandles.getValidTime(series.time, period),
+      }];
+
+      if (series.time !== validTime) {
+        values.push({ value: series.price, time: validTime });
+      }
+
+      chartCandles.drawSeries(series, values);
+    }
+
+    for (let i = 1; i < 3; i += 1) {
+      const price = transaction.isLong ? transaction.instrumentPrice - (difference * (i + 1)) : transaction.instrumentPrice + (difference * (i + 1));
+
+      const options = {
+        color: constants.RED_COLOR,
+        lastValueVisible: false,
+      };
+
+      const series = chartCandles.addExtraSeries(options, {
+        isTrade: true,
+        time: transaction.startedAtUnix,
+        id: `transaction-${transaction.id}-${price}`,
+        price,
+      });
+
+      const values = [{
+        value: series.price,
+        time: ChartCandles.getValidTime(series.time, period),
+      }];
+
+      if (series.time !== validTime) {
+        values.push({ value: series.price, time: validTime });
+      }
+
+      chartCandles.drawSeries(series, values);
+    }
   });
 };
 

@@ -573,7 +573,7 @@ const moveTo = {
     let lCandles = originalData.length;
 
     let averagePercent = 0;
-    const factor = activePeriod === AVAILABLE_PERIODS.get('1h') ? 3 : 5;
+    const factor = activePeriod === AVAILABLE_PERIODS.get('1h') ? 3 : 3;
 
     await (async () => {
       while (1) {
@@ -616,7 +616,7 @@ const moveTo = {
           const differenceBetweenPrices = Math.abs(preparedData.open - preparedData.close);
           const percentPerPrice = 100 / (preparedData.open / differenceBetweenPrices);
 
-          if (percentPerPrice > (averagePercent * factor) && isLong) {
+          if (percentPerPrice > (averagePercent * factor) && !isLong) {
             isSuccess = true;
             finishDatePointUnix = getUnix(candle.time) + incrementValue;
             return false;
@@ -1719,7 +1719,7 @@ const moveTo = {
 
         await reloadCharts(choosenInstrumentId);
         drawTrades({ instrumentId: instrumentDoc._id, }, activeTransaction, choosenPeriods);
-        finishDatePointUnix = startFinishDatePointUnix;
+        // finishDatePointUnix = startFinishDatePointUnix;
       }
     }
   },
