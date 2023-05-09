@@ -260,14 +260,8 @@ const moveTo = {
     const lastCandle = instrumentDoc[`candles_data_${activePeriod}`][0];
     let lastCandleTimeUnix = getUnix(lastCandle.time);
 
-    let incrementValue = 300;
-    if (activePeriod === AVAILABLE_PERIODS.get('1h')) {
-      incrementValue = 3600;
-    } else if (activePeriod === AVAILABLE_PERIODS.get('1d')) {
-      incrementValue = 86400;
-    }
-
     let isSuccess = false;
+    const incrementValue = AVAILABLE_PERIODS.get('5m') ? 300 : 3600;
 
     let candles1h = await getCandlesData({
       instrumentId: instrumentDoc._id,

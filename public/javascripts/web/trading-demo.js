@@ -248,6 +248,9 @@ $(document).ready(async () => {
       if (choosenInstrumentId) {
         fillLastViewedInstruments(choosenInstrumentId);
         clearInstrumentData({ instrumentId: choosenInstrumentId });
+
+        removeFigureLinesFromLocalStorage({ instrumentId: choosenInstrumentId });
+        removeFigureLevelsFromLocalStorage({ instrumentId: choosenInstrumentId });
       }
 
       if (isSingleDateCounter) {
@@ -430,10 +433,24 @@ $(document).ready(async () => {
         // const averagePercent = await calculateAveragePercent(AVAILABLE_PERIODS.get('1h'), firstCandle.originalTimeUnix);
         // const stopLossPercent = averagePercent * 2;
 
+        // /*
         const averagePercent = chartCandles.calculateExpotentialAveragePercent(36);
         const stopLossPercent = (averagePercent * 2);
         trading.changeStopLossPercent(stopLossPercent);
+        // */
 
+        /*
+        const figureLevelsData = getFigureLevelsFromLocalStorage({ instrumentId: choosenInstrumentId });
+        if (!figureLevelsData.length || figureLevelsData.length < 2) {
+          alert('No figure levels');
+          return false;
+        }
+        const sorted = figureLevelsData.sort((a, b) => a.value > b.value ? 1 : -1);
+        const middlePrice = sorted[1].value - ((sorted[1].value - sorted[0].value) / 2);
+        const differenceBetweenPrices = Math.abs(sorted[1].value - middlePrice);
+        const stopLossPercent = 100 / (sorted[1].value / differenceBetweenPrices);
+        trading.changeStopLossPercent(stopLossPercent);
+        // */
 
         // const differenceBetweenPrices = Math.abs(firstCandle.open - firstCandle.close);
         // const stopLossPercent = 100 / (firstCandle.open / differenceBetweenPrices);
@@ -443,64 +460,35 @@ $(document).ready(async () => {
         // const topSavePrice = firstCandle.close + savePrice;
         // const bottomSavePrice = firstCandle.close - savePrice;
 
-        /*
-        if (!isActiveRobotTrading) {
-          saveFigureLevelsToLocalStorage([{
-            seriesId: uuidv4(),
-            instrumentId: instrumentDoc._id,
-            time: firstCandle.originalTimeUnix - 300,
-            timeframe: activePeriod,
-            value: topSavePrice,
-            isLong: true,
-          }, {
-            seriesId: uuidv4(),
-            instrumentId: instrumentDoc._id,
-            time: firstCandle.originalTimeUnix - 300,
-            timeframe: activePeriod,
-            value: bottomSavePrice,
-            isLong: false,
-          }]);
+        const result = trading.createTransaction(instrumentDoc, {
+          ...firstCandle,
+          // close: middlePrice,
+        }, true);
 
-          drawFigureLevels({ instrumentId: instrumentDoc._id }, [{
-            seriesId: uuidv4(),
-            time: firstCandle.originalTimeUnix - 300,
-            timeframe: activePeriod,
-            value: topSavePrice,
-          }, {
-            seriesId: uuidv4(),
-            time: firstCandle.originalTimeUnix - 300,
-            timeframe: activePeriod,
-            value: bottomSavePrice,
-          }]);
-        }
-        */
-      }
-
-      const result = trading.createTransaction(instrumentDoc, firstCandle, true);
-
-      if (!result) {
-        return false;
-      }
-
-      switch (result.action) {
-        case EActions.get('transactionCreated'): {
-          removeTemporaryStopLossSeries(instrumentDoc);
-          transactionCreatedHandler(instrumentDoc, result);
-          break;
-        }
-
-        case EActions.get('tradeCreated'): tradeCreatedHandler(instrumentDoc, result); break;
-        case EActions.get('tradeFinished'): tradeFinishedHandler(instrumentDoc, result); break;
-        case EActions.get('transactionFinished'): transactionFinishedHandler(instrumentDoc, result); break;
-
-        default: {
-          alert('Unknown action');
+        if (!result) {
           return false;
         }
-      }
 
-      tradingList.setTransactions(trading.transactions);
-      // window.myNextTick = smartNextTick(result.transaction);
+        switch (result.action) {
+          case EActions.get('transactionCreated'): {
+            removeTemporaryStopLossSeries(instrumentDoc);
+            transactionCreatedHandler(instrumentDoc, result);
+            break;
+          }
+
+          case EActions.get('tradeCreated'): tradeCreatedHandler(instrumentDoc, result); break;
+          case EActions.get('tradeFinished'): tradeFinishedHandler(instrumentDoc, result); break;
+          case EActions.get('transactionFinished'): transactionFinishedHandler(instrumentDoc, result); break;
+
+          default: {
+            alert('Unknown action');
+            return false;
+          }
+        }
+
+        tradingList.setTransactions(trading.transactions);
+        // window.myNextTick = smartNextTick(result.transaction);
+      }
     });
 
   $(document)
@@ -619,51 +607,28 @@ $(document).ready(async () => {
       } else if (e.keyCode === 191) {
         // /
         await runRobotTrading();
+        // calculateFigureLevels({ instrumentId: choosenInstrumentId });
       } else if (e.keyCode === 82) {
         // R
         if (choosenInstrumentId) {
           await reloadCharts(choosenInstrumentId);
         }
       } else if (e.keyCode === 189) {
-        // todo: fix
         // -
         if (!choosenInstrumentId) {
           choosenInstrumentId = instrumentsDocs[0]._id;
         }
 
-        const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
-
-        let nextInstrumentDoc = instrumentsDocs[0];
-        let nextIndex = instrumentDoc.index;
-
-        for (let i = 1; i < 10; i += 1) {
-          nextIndex += i;
-          nextInstrumentDoc = instrumentsDocs.find(doc => doc.index === nextIndex);
-          if (nextInstrumentDoc) break;
-        }
-
-        $instrumentsList.find(`#instrument-${nextInstrumentDoc._id}`).click();
+        const $nextElem = $(`#instrument-${choosenInstrumentId}`).next();
+        $nextElem.click();
       } else if (e.keyCode === 187) {
         // +
         if (!choosenInstrumentId) {
           choosenInstrumentId = instrumentsDocs[0]._id;
         }
 
-        const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
-        let nextInstrumentDoc = instrumentsDocs[0];
-        let nextIndex = instrumentDoc.index;
-
-        for (let i = 1; i < 10; i += 1) {
-          nextIndex -= i;
-          const tmpDoc = instrumentsDocs.find(doc => doc.index === nextIndex);
-
-          if (tmpDoc) {
-            nextInstrumentDoc = tmpDoc;
-            break;
-          }
-        }
-
-        $instrumentsList.find(`#instrument-${nextInstrumentDoc._id}`).click();
+        const $prevElem = $(`#instrument-${choosenInstrumentId}`).next();
+        $prevElem.click();
       } else if (e.keyCode === 67) {
         // C
         trading.$tradingForm.find('.risks-block .sl button').click();
@@ -759,7 +724,7 @@ const runRobotTrading = async () => {
 
   const instrumentDoc = instrumentsDocs.find(doc => doc._id === choosenInstrumentId);
   const numberIterations = [...Array(100).keys()];
-  trading.changeNumberTrades(4);
+  // trading.changeNumberTrades(4);
 
   for await (const i of numberIterations) {
     // await doMoveTo();
@@ -1072,7 +1037,6 @@ const smartMoveToFinishTransaction = async (transaction) => {
   document.previousTitle = document.title;
   document.title = `${instrumentDoc.name} ...`;
 
-  const { isLong } = transaction;
   const quantity = transaction.trades[0].quantity * transaction.trades.length;
   const lastCandle = originalData[originalData.length - 1];
 
@@ -1085,13 +1049,10 @@ const smartMoveToFinishTransaction = async (transaction) => {
 
   let wasAsked = false;
   let wasTouchedInitPrice = true;
-  let numberSaveTradeHandled = 0;
-
-  let maxResultLoss = 0;
-  let maxNumberSaveTradeHandlers = 0;
 
   let resultLoss = 0;
-  let saveTrade = false;
+  let resultProfit = 0;
+  let saveTrade = true;
   let reversedTrade = false;
 
   while (1) {
@@ -1133,188 +1094,127 @@ const smartMoveToFinishTransaction = async (transaction) => {
         wasTouchedInitPrice = transaction.instrumentPrice <= candle.high && transaction.instrumentPrice >= candle.low;
       }
 
-      /*
-      if (transaction.trades.some(t => t.isActive)) {
-        // touch stopLoss
-        if ((isLong && candle.low <= transaction.stopLossPrice)
-          || (!isLong && candle.high >= transaction.stopLossPrice)) {
-          const loss = (isLong
-            ? (transaction.instrumentPrice - transaction.stopLossPrice)
-            : (transaction.stopLossPrice - transaction.instrumentPrice)) * quantity;
+      if (resultLoss === 0) {
+        if (reversedTrade) {
+          if ((reversedTrade.isLong && candle.low <= reversedTrade.stopLossPrice)
+            || (!reversedTrade.isLong && candle.high >= reversedTrade.stopLossPrice)) {
+            // touch reversedTrade stopLoss
 
-          resultLoss += loss;
-          maxResultLoss += loss;
+            const loss = (difference * 1) * reversedTrade.quantity;
+            console.log('loss-reversedTrade', loss, resultLoss);
+            resultLoss += loss;
 
-          console.log('loss-transaction', loss, resultLoss);
-
-          transaction.trades.forEach(trade => {
-            TradingDemo.finishTrade(transaction, trade, {
-              instrumentPrice: transaction.instrumentPrice,
-              endedAtUnix: candle.originalTimeUnix,
+            markers.push({
+              color: constants.RED_COLOR,
+              time: candle.originalTimeUnix,
+              shape: reversedTrade.isLong ? 'arrowUp' : 'arrowDown',
             });
-          });
 
-          markers.push({
-            color: constants.RED_COLOR,
-            time: candle.originalTimeUnix,
-            shape: isLong ? 'arrowDown' : 'arrowUp',
-          });
-        } else {
-          // touch takeProfit
-          const { takeProfitPrice } = transaction.trades[0];
+            saveTrade = false;
 
-          if ((isLong && candle.high >= takeProfitPrice)
-            || (!isLong && candle.low <= takeProfitPrice)) {
-            transaction.trades.forEach(trade => {
-              TradingDemo.finishTrade(transaction, trade, {
-                instrumentPrice: takeProfitPrice,
-                endedAtUnix: candle.originalTimeUnix,
-              });
-            });
+            if (resultProfit) {
+              reversedTrade = false;
+            }
+
+            // reversedTrade = false;
+          } else if ((reversedTrade.isLong && candle.high >= (transaction.instrumentPrice))
+            || (!reversedTrade.isLong && candle.low <= (transaction.instrumentPrice))) {
+            // touch reversedTrade takeProfit
+            const profit = (difference * 1) * reversedTrade.quantity;
+            resultProfit += profit;
 
             markers.push({
               color: constants.GREEN_COLOR,
               time: candle.originalTimeUnix,
-              shape: isLong ? 'arrowDown' : 'arrowUp',
+              shape: reversedTrade.isLong ? 'arrowUp' : 'arrowDown',
             });
+
+            reversedTrade = false;
+          }
+        }
+
+        if (
+          !reversedTrade
+          && wasTouchedInitPrice
+          && (candle.high >= topSavePrice || candle.low <= bottomSavePrice)
+        ) {
+          const isLongTrade = candle.high >= topSavePrice;
+
+          reversedTrade = {
+            quantity,
+            isLong: !isLongTrade,
+            startedAtUnix: candle.originalTimeUnix,
+            tradePrice: isLongTrade ? topSavePrice : bottomSavePrice,
+            stopLossPrice: isLongTrade ? topSavePrice + (difference * 1) : bottomSavePrice - (difference * 1),
+          };
+
+          markers.push({
+            color: constants.YELLOW_COLOR,
+            time: candle.originalTimeUnix,
+            shape: isLongTrade ? 'arrowDown' : 'arrowUp',
+          });
+
+          wasTouchedInitPrice = false;
+        }
+      }
+
+      if (resultProfit === 0 && resultLoss !== 0) {
+        if (!saveTrade) {
+          const isLong = !reversedTrade.isLong;
+
+          saveTrade = {
+            quantity,
+            isLong,
+            tradePrice: reversedTrade.stopLossPrice,
+            startedAtUnix: candle.originalTimeUnix,
+            stopLossPrice: isLong ? reversedTrade.stopLossPrice - (difference * 1) : reversedTrade.stopLossPrice + (difference * 1),
+            takeProfitPrice: isLong ? reversedTrade.stopLossPrice + (difference * 2) : reversedTrade.stopLossPrice - (difference * 2),
+          };
+
+          markers.push({
+            color: constants.YELLOW_COLOR,
+            time: candle.originalTimeUnix,
+            shape: isLong ? 'arrowUp' : 'arrowDown',
+          });
+        }
+
+        if (saveTrade) {
+          if (saveTrade.startedAtUnix !== candle.originalTimeUnix
+            && ((saveTrade.isLong && candle.low <= saveTrade.stopLossPrice)
+              || (!saveTrade.isLong && candle.high >= saveTrade.stopLossPrice))) {
+            // touch saveTrade stopLoss
+            const loss = Math.abs(saveTrade.tradePrice - saveTrade.stopLossPrice) * quantity;
+            resultLoss += loss;
+
+            markers.push({
+              color: constants.RED_COLOR,
+              time: candle.originalTimeUnix,
+              shape: saveTrade.isLong ? 'arrowDown' : 'arrowUp',
+            });
+
+            saveTrade = false;
+            reversedTrade = false;
+          } else if ((saveTrade.isLong && candle.high >= saveTrade.takeProfitPrice)
+            || (!saveTrade.isLong && candle.low <= saveTrade.takeProfitPrice)) {
+            // touch saveTrade takeProfit
+            resultLoss = 0;
+            resultProfit += difference;
+
+            markers.push({
+              color: constants.GREEN_COLOR,
+              time: candle.originalTimeUnix,
+              shape: saveTrade.isLong ? 'arrowDown' : 'arrowUp',
+            });
+
+            saveTrade = false;
+            reversedTrade = false;
           }
         }
       }
-      */
-
-      // /*
-      if (
-        !reversedTrade
-        // && resultLoss > 0
-        && wasTouchedInitPrice
-        && (candle.high >= topSavePrice || candle.low <= bottomSavePrice)
-      ) {
-        const isLongTrade = candle.high >= topSavePrice;
-
-        reversedTrade = {
-          quantity,
-          isLong: !isLongTrade,
-          startedAtUnix: candle.originalTimeUnix,
-          tradePrice: isLongTrade ? topSavePrice : bottomSavePrice,
-          stopLossPrice: isLongTrade ? topSavePrice + (difference * 2) : bottomSavePrice - (difference * 2),
-        };
-
-        markers.push({
-          color: constants.YELLOW_COLOR,
-          time: candle.originalTimeUnix,
-          shape: isLongTrade ? 'arrowDown' : 'arrowUp',
-        });
-
-        wasTouchedInitPrice = false;
-      } else if (reversedTrade) {
-        if ((reversedTrade.isLong && candle.low <= reversedTrade.stopLossPrice)
-          || (!reversedTrade.isLong && candle.high >= reversedTrade.stopLossPrice)) {
-          // touch reversedTrade stopLoss
-
-          const loss = (difference * 2) * reversedTrade.quantity;
-          console.log('loss-reversedTrade', loss, resultLoss);
-          resultLoss += loss;
-
-          if (resultLoss > maxResultLoss) {
-            maxResultLoss = resultLoss;
-            console.log('maxResultLoss', maxResultLoss);
-          }
-
-          markers.push({
-            color: constants.RED_COLOR,
-            time: candle.originalTimeUnix,
-            shape: saveTrade.isLong ? 'arrowUp' : 'arrowDown',
-          });
-
-          reversedTrade = false;
-        } else if ((reversedTrade.isLong && candle.high >= transaction.instrumentPrice)
-          || (!reversedTrade.isLong && candle.low <= transaction.instrumentPrice)) {
-          // touch reversedTrade takeProfit
-          // const loss = (difference * 2) * reversedTrade.quantity;
-          const profit = difference * reversedTrade.quantity;
-          resultLoss -= profit;
-
-          console.log('profit-reversedTrade', profit, resultLoss, candle.originalTime);
-
-          markers.push({
-            color: constants.GREEN_COLOR,
-            time: candle.originalTimeUnix,
-            shape: saveTrade.isLong ? 'arrowUp' : 'arrowDown',
-          });
-
-          reversedTrade = false;
-        }
-      }
-      // */
-
-      /*
-      if (!saveTrade && (candle.low <= bottomSavePrice || candle.high >= topSavePrice)) {
-        const isLongTrade = candle.high >= topSavePrice;
-
-        saveTrade = {
-          quantity,
-          isLong: isLongTrade,
-          stopLossPrice: transaction.instrumentPrice,
-          tradePrice: isLongTrade ? topSavePrice : bottomSavePrice,
-          startedAtUnix: candle.originalTimeUnix,
-        };
-
-        markers.push({
-          color: constants.YELLOW_COLOR,
-          time: candle.originalTimeUnix,
-          shape: isLongTrade ? 'arrowUp' : 'arrowDown',
-        });
-      }
-
-      if (saveTrade && saveTrade.startedAtUnix !== candle.originalTimeUnix) {
-        const sumLoss = resultLoss / saveTrade.quantity;
-        const takeProfitPrice = saveTrade.isLong ? saveTrade.tradePrice + sumLoss : saveTrade.tradePrice - sumLoss;
-
-        if ((saveTrade.isLong && candle.low <= saveTrade.stopLossPrice)
-          || (!saveTrade.isLong && candle.high >= saveTrade.stopLossPrice)) {
-          // touch saveTrade stopLoss
-          const loss = Math.abs(saveTrade.tradePrice - saveTrade.stopLossPrice) * quantity;
-          resultLoss += loss;
-          console.log('loss-saveTrade', loss, resultLoss);
-
-          numberSaveTradeHandled += 1;
-          maxNumberSaveTradeHandlers += 1;
-
-          if (resultLoss > maxResultLoss) {
-            maxResultLoss = resultLoss;
-            console.log('maxResultLoss', maxResultLoss);
-          }
-
-          markers.push({
-            color: constants.RED_COLOR,
-            time: candle.originalTimeUnix,
-            shape: saveTrade.isLong ? 'arrowDown' : 'arrowUp',
-          });
-
-          saveTrade = false;
-        } else if ((saveTrade.isLong && candle.high >= takeProfitPrice)
-          || (!saveTrade.isLong && candle.low <= takeProfitPrice)) {
-          // touch saveTrade takeProfit
-          resultLoss = 0;
-
-          markers.push({
-            color: constants.GREEN_COLOR,
-            time: candle.originalTimeUnix,
-            shape: saveTrade.isLong ? 'arrowDown' : 'arrowUp',
-          });
-
-          saveTrade = false;
-        }
-      }
-      */
 
       lastCandleTimeUnix = candle.originalTimeUnix;
 
-      // const doesExistActiveTrade = transaction.trades.some(t => t.isActive);
-      // if (!doesExistActiveTrade && (resultLoss <= 0 || resultLoss >= 9)) {
-
-      if (resultLoss <= -2 || resultLoss >= 3) {
-        console.log('resultLoss', resultLoss);
+      if (!reversedTrade && !saveTrade) {
         transaction.trades.forEach(trade => {
           TradingDemo.finishTrade(transaction, trade, {
             endedAtUnix: candle.originalTimeUnix,
@@ -1338,9 +1238,7 @@ const smartMoveToFinishTransaction = async (transaction) => {
     }
   }
 
-  report.push([resultLoss, maxResultLoss, maxNumberSaveTradeHandlers, transaction.startedAtUnix]);
-  // report.push([resultLoss, numberSaveTradeHandled, activeTransaction.startedAtUnix]);
-  // report.push([maxResultLoss, maxNumberSaveTradeHandlers, activeTransaction.startedAtUnix]);
+  report.push([resultProfit, resultLoss, transaction.startedAtUnix]);
 
   if (transaction.isActive) {
     document.title = document.previousTitle;
@@ -1387,7 +1285,10 @@ const smartMoveToFinishTransaction = async (transaction) => {
   await reloadCharts(instrumentDoc._id);
 
   if (!isActiveRobotTrading) {
-    alert(`l: ${maxResultLoss.toFixed(1)}; n: ${maxNumberSaveTradeHandlers}; d: ${days}; h: ${hours};`);
+    resultLoss = Math.ceil(resultLoss);
+    resultProfit = Math.ceil(resultProfit);
+
+    alert(`r: ${resultProfit - resultLoss}; l: ${resultLoss}; p: ${resultProfit}; d: ${days}; h: ${hours};`);
 
     const newChartCandles = instrumentDoc[`chart_candles_${activePeriod}`];
     markers.forEach(m => newChartCandles.addMarker(m));
@@ -1413,8 +1314,8 @@ const doMoveTo = async () => {
   if (notifications.length) {
     return moveTo.moveToNearesNotification();
   } else if (activeTransaction) {
-    // return smartMoveToFinishTransaction(activeTransaction);
-    return moveTo.moveToFinishTransaction(activeTransaction);
+    return smartMoveToFinishTransaction(activeTransaction);
+    // return moveTo.moveToFinishTransaction(activeTransaction);
   } else {
     switch (choosenNextEvent) {
       case AVAILABLE_NEXT_EVENTS.get('priceJump'): {
@@ -2613,54 +2514,6 @@ const transactionCreatedHandler = (instrumentDoc, { transaction }) => {
       series => chartCandles.drawSeries(series, [{ value: series.price, time: validTime }]),
     );
 
-    /*
-    const priceUp = transaction.instrumentPrice + (difference * 2);
-    const priceDown = transaction.instrumentPrice - (difference * 2);
-
-    const options = {
-      color: constants.RED_COLOR,
-      lastValueVisible: false,
-    };
-
-    const series1 = chartCandles.addExtraSeries(options, {
-      isTrade: true,
-      time: transaction.startedAtUnix,
-      id: `transaction-${transaction.id}-${priceUp}`,
-      price: priceUp,
-    });
-
-    const series2 = chartCandles.addExtraSeries(options, {
-      isTrade: true,
-      time: transaction.startedAtUnix,
-      id: `transaction-${transaction.id}-${priceDown}`,
-      price: priceDown,
-    });
-
-    chartCandles.drawSeries(series1, [{ value: series1.price, time: validTime }]);
-    chartCandles.drawSeries(series2, [{ value: series2.price, time: validTime }]);
-    */
-
-
-    /*
-    for (let i = 0; i < 5; i += 1) {
-      const price = transaction.isLong ? transaction.instrumentPrice - (difference * (i + 1)) : transaction.instrumentPrice + (difference * (i + 1));
-
-      const options = {
-        color: constants.RED_COLOR,
-        lastValueVisible: false,
-      };
-
-      const series = chartCandles.addExtraSeries(options, {
-        isTrade: true,
-        time: transaction.startedAtUnix,
-        id: `transaction-${transaction.id}-${price}`,
-        price,
-      });
-
-      chartCandles.drawSeries(series, [{ value: series.price, time: validTime }]);
-    }
-    */
-
     // /*
     for (let i = 0; i < 1; i += 1) {
       const price = transaction.isLong ? transaction.instrumentPrice + (difference * (i + 1)) : transaction.instrumentPrice - (difference * (i + 1));
@@ -3020,70 +2873,6 @@ const drawTrades = ({ instrumentId }, transaction, periods = []) => {
 
       chartCandles.drawSeries(series, values);
     });
-
-    /*
-    const priceUp = transaction.instrumentPrice + (difference * 2);
-    const priceDown = transaction.instrumentPrice - (difference * 2);
-
-    const options = {
-      color: constants.RED_COLOR,
-      lastValueVisible: false,
-    };
-
-    const series1 = chartCandles.addExtraSeries(options, {
-      isTrade: true,
-      time: transaction.startedAtUnix,
-      id: `transaction-${transaction.id}-${priceUp}`,
-      price: priceUp,
-    });
-
-    const series2 = chartCandles.addExtraSeries(options, {
-      isTrade: true,
-      time: transaction.startedAtUnix,
-      id: `transaction-${transaction.id}-${priceDown}`,
-      price: priceDown,
-    });
-
-    const values1 = [{ value: series1.price, time: ChartCandles.getValidTime(series1.time, period) }];
-    const values2 = [{ value: series2.price, time: ChartCandles.getValidTime(series2.time, period) }];
-
-    if (series1.time !== validTime) {
-      values1.push({ value: series1.price, time: validTime });
-      values2.push({ value: series2.price, time: validTime });
-    }
-
-    chartCandles.drawSeries(series1, values1);
-    chartCandles.drawSeries(series2, values2);
-    */
-
-    /*
-    for (let i = 0; i < 5; i += 1) {
-      const price = transaction.isLong ? transaction.instrumentPrice - (difference * (i + 1)) : transaction.instrumentPrice + (difference * (i + 1));
-
-      const options = {
-        color: constants.RED_COLOR,
-        lastValueVisible: false,
-      };
-
-      const series = chartCandles.addExtraSeries(options, {
-        isTrade: true,
-        time: transaction.startedAtUnix,
-        id: `transaction-${transaction.id}-${price}`,
-        price,
-      });
-
-      const values = [{
-        value: series.price,
-        time: ChartCandles.getValidTime(series.time, period),
-      }];
-
-      if (series.time !== validTime) {
-        values.push({ value: series.price, time: validTime });
-      }
-
-      chartCandles.drawSeries(series, values);
-    }
-    */
 
     // /*
     for (let i = 0; i < 1; i += 1) {
@@ -3998,4 +3787,97 @@ const getCandlesData = async ({
   // console.log('end loading');
 
   return resultGetCandles.result;
+};
+
+
+/* Extra functions */
+
+const calculateFigureLevels = ({ instrumentId }) => {
+  const instrumentDoc = instrumentsDocs.find(doc => doc._id === instrumentId);
+
+  const chartCandles = instrumentDoc[`chart_candles_${activePeriod}`];
+  const candlesData = chartCandles.originalData;
+  const lCandles = candlesData.length;
+
+  if (!lCandles) {
+    return true;
+  }
+
+  const levels = [];
+
+  const highLevels = getHighLevels({
+    candles: candlesData,
+    distanceFromLeftSide: 50,
+    distanceFromRightSide: 50,
+  });
+
+  // const lowLevels = [];
+
+  const lowLevels = getLowLevels({
+    candles: candlesData,
+    distanceFromLeftSide: 50,
+    distanceFromRightSide: 50,
+  });
+
+  if ((!highLevels || !highLevels.length)
+    && (!lowLevels || !lowLevels.length)) {
+    return true;
+  }
+
+  lowLevels.forEach(level => {
+    const doesExistLevelWithThisPrice = levels.some(l => l.levelPrice === level.levelPrice);
+
+    if (!doesExistLevelWithThisPrice) {
+      const candleIndex = candlesData.findIndex(
+        candle => candle.originalTimeUnix === level.startOfLevelUnix,
+      );
+
+      let endOfLevelUnix = candlesData[lCandles - 1].originalTimeUnix;
+
+      for (let j = candleIndex; j < lCandles; j += 1) {
+        if (candlesData[j].low < level.levelPrice) {
+          endOfLevelUnix = candlesData[j].originalTimeUnix;
+          break;
+        }
+      }
+
+      levels.push({
+        ...level,
+        isLong: false,
+        endOfLevelUnix,
+      });
+    }
+  });
+
+  highLevels.forEach(level => {
+    const doesExistLevelWithThisPrice = levels.some(l => l.levelPrice === level.levelPrice);
+
+    if (!doesExistLevelWithThisPrice) {
+      const candleIndex = candlesData.findIndex(
+        candle => candle.originalTimeUnix === level.startOfLevelUnix,
+      );
+
+      let endOfLevelUnix = candlesData[lCandles - 1].originalTimeUnix;
+
+      for (let j = candleIndex; j < lCandles; j += 1) {
+        if (candlesData[j].high > level.levelPrice) {
+          endOfLevelUnix = candlesData[j].originalTimeUnix;
+          break;
+        }
+      }
+
+      levels.push({
+        ...level,
+        isLong: true,
+        endOfLevelUnix,
+      });
+    }
+  });
+
+  drawFigureLevels({ instrumentId }, levels.map(level => ({
+    seriesId: uuidv4(),
+    timeframe: activePeriod,
+    value: level.levelPrice,
+    time: level.startOfLevelUnix,
+  })));
 };
