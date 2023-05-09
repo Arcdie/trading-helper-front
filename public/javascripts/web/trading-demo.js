@@ -1133,6 +1133,7 @@ const smartMoveToFinishTransaction = async (transaction) => {
         wasTouchedInitPrice = transaction.instrumentPrice <= candle.high && transaction.instrumentPrice >= candle.low;
       }
 
+      /*
       if (transaction.trades.some(t => t.isActive)) {
         // touch stopLoss
         if ((isLong && candle.low <= transaction.stopLossPrice)
@@ -1179,13 +1180,15 @@ const smartMoveToFinishTransaction = async (transaction) => {
           }
         }
       }
+      */
 
       // /*
       if (
         !reversedTrade
         // && resultLoss > 0
         && wasTouchedInitPrice
-        && (candle.high >= topSavePrice || candle.low <= bottomSavePrice)) {
+        && (candle.high >= topSavePrice || candle.low <= bottomSavePrice)
+      ) {
         const isLongTrade = candle.high >= topSavePrice;
 
         reversedTrade = {
@@ -1202,17 +1205,16 @@ const smartMoveToFinishTransaction = async (transaction) => {
           shape: isLongTrade ? 'arrowDown' : 'arrowUp',
         });
 
-        const loss = (difference * 2) * reversedTrade.quantity;
-        console.log('loss-reversedTrade', loss, resultLoss);
-        resultLoss += loss;
-
         wasTouchedInitPrice = false;
-      }
-
-      if (reversedTrade && reversedTrade.startedAtUnix !== candle.originalTimeUnix) {
+      } else if (reversedTrade) {
         if ((reversedTrade.isLong && candle.low <= reversedTrade.stopLossPrice)
           || (!reversedTrade.isLong && candle.high >= reversedTrade.stopLossPrice)) {
           // touch reversedTrade stopLoss
+
+          const loss = (difference * 2) * reversedTrade.quantity;
+          console.log('loss-reversedTrade', loss, resultLoss);
+          resultLoss += loss;
+
           if (resultLoss > maxResultLoss) {
             maxResultLoss = resultLoss;
             console.log('maxResultLoss', maxResultLoss);
@@ -1228,9 +1230,9 @@ const smartMoveToFinishTransaction = async (transaction) => {
         } else if ((reversedTrade.isLong && candle.high >= transaction.instrumentPrice)
           || (!reversedTrade.isLong && candle.low <= transaction.instrumentPrice)) {
           // touch reversedTrade takeProfit
-          const loss = (difference * 2) * reversedTrade.quantity;
+          // const loss = (difference * 2) * reversedTrade.quantity;
           const profit = difference * reversedTrade.quantity;
-          resultLoss -= (loss + profit);
+          resultLoss -= profit;
 
           console.log('profit-reversedTrade', profit, resultLoss, candle.originalTime);
 
@@ -1245,7 +1247,8 @@ const smartMoveToFinishTransaction = async (transaction) => {
       }
       // */
 
-      if (!saveTrade && resultLoss > 0 && (candle.low <= bottomSavePrice || candle.high >= topSavePrice)) {
+      /*
+      if (!saveTrade && (candle.low <= bottomSavePrice || candle.high >= topSavePrice)) {
         const isLongTrade = candle.high >= topSavePrice;
 
         saveTrade = {
@@ -1301,17 +1304,24 @@ const smartMoveToFinishTransaction = async (transaction) => {
           });
 
           saveTrade = false;
-
-          transaction.trades.forEach(trade => {
-            trade.originalTimeUnix = candle.originalTimeUnix;
-          });
         }
       }
+      */
 
       lastCandleTimeUnix = candle.originalTimeUnix;
-      const doesExistActiveTrade = transaction.trades.some(t => t.isActive);
 
-      if (!doesExistActiveTrade && (resultLoss <= 0 || resultLoss >= 6)) {
+      // const doesExistActiveTrade = transaction.trades.some(t => t.isActive);
+      // if (!doesExistActiveTrade && (resultLoss <= 0 || resultLoss >= 9)) {
+
+      if (resultLoss <= -2 || resultLoss >= 3) {
+        console.log('resultLoss', resultLoss);
+        transaction.trades.forEach(trade => {
+          TradingDemo.finishTrade(transaction, trade, {
+            endedAtUnix: candle.originalTimeUnix,
+            instrumentPrice: resultLoss <= 0 ? transaction.trades[0].takeProfitPrice : transaction.instrumentPrice,
+          });
+        });
+
         TradingDemo.finishTransaction(transaction, {
           endedAtUnix: candle.originalTimeUnix,
         });
@@ -1328,7 +1338,7 @@ const smartMoveToFinishTransaction = async (transaction) => {
     }
   }
 
-  report.push([maxResultLoss, maxNumberSaveTradeHandlers, transaction.startedAtUnix]);
+  report.push([resultLoss, maxResultLoss, maxNumberSaveTradeHandlers, transaction.startedAtUnix]);
   // report.push([resultLoss, numberSaveTradeHandled, activeTransaction.startedAtUnix]);
   // report.push([maxResultLoss, maxNumberSaveTradeHandlers, activeTransaction.startedAtUnix]);
 
@@ -1403,8 +1413,8 @@ const doMoveTo = async () => {
   if (notifications.length) {
     return moveTo.moveToNearesNotification();
   } else if (activeTransaction) {
-    return smartMoveToFinishTransaction(activeTransaction);
-    // return moveTo.moveToFinishTransaction(activeTransaction);
+    // return smartMoveToFinishTransaction(activeTransaction);
+    return moveTo.moveToFinishTransaction(activeTransaction);
   } else {
     switch (choosenNextEvent) {
       case AVAILABLE_NEXT_EVENTS.get('priceJump'): {
@@ -2651,7 +2661,8 @@ const transactionCreatedHandler = (instrumentDoc, { transaction }) => {
     }
     */
 
-    for (let i = 0; i < 2; i += 1) {
+    // /*
+    for (let i = 0; i < 1; i += 1) {
       const price = transaction.isLong ? transaction.instrumentPrice + (difference * (i + 1)) : transaction.instrumentPrice - (difference * (i + 1));
 
       const options = {
@@ -2668,8 +2679,9 @@ const transactionCreatedHandler = (instrumentDoc, { transaction }) => {
 
       chartCandles.drawSeries(series, [{ value: series.price, time: validTime }]);
     }
+    // */
 
-    for (let i = 1; i < 3; i += 1) {
+    for (let i = 0; i < 1; i += 1) {
       const price = transaction.isLong ? transaction.instrumentPrice - (difference * (i + 1)) : transaction.instrumentPrice + (difference * (i + 1));
 
       const options = {
@@ -2686,6 +2698,7 @@ const transactionCreatedHandler = (instrumentDoc, { transaction }) => {
 
       chartCandles.drawSeries(series, [{ value: series.price, time: validTime }]);
     }
+    // */
   });
 
   tradingList.addTradesToTradeList(transaction, transaction.trades);
@@ -3072,7 +3085,8 @@ const drawTrades = ({ instrumentId }, transaction, periods = []) => {
     }
     */
 
-    for (let i = 0; i < 2; i += 1) {
+    // /*
+    for (let i = 0; i < 1; i += 1) {
       const price = transaction.isLong ? transaction.instrumentPrice + (difference * (i + 1)) : transaction.instrumentPrice - (difference * (i + 1));
 
       const options = {
@@ -3098,8 +3112,9 @@ const drawTrades = ({ instrumentId }, transaction, periods = []) => {
 
       chartCandles.drawSeries(series, values);
     }
+    // */
 
-    for (let i = 1; i < 3; i += 1) {
+    for (let i = 0; i < 1; i += 1) {
       const price = transaction.isLong ? transaction.instrumentPrice - (difference * (i + 1)) : transaction.instrumentPrice + (difference * (i + 1));
 
       const options = {
@@ -3125,6 +3140,7 @@ const drawTrades = ({ instrumentId }, transaction, periods = []) => {
 
       chartCandles.drawSeries(series, values);
     }
+    // */
   });
 };
 

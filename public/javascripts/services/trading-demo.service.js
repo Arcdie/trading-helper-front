@@ -229,11 +229,11 @@ class TradingDemo {
       newTransaction.quantity = parseFloat((quantity).toFixed(stepSizePrecision));
 
       /*
-      const difference = (Math.abs(newTransaction.originalStopLossPrice - instrumentPrice)) * 3;
+      const difference = (Math.abs(newTransaction.originalStopLossPrice - instrumentPrice)) * 2;
 
       console.log('stopLossPercent', stopLossPercent);
       newTransaction.stopLossPrice = newTransaction.isLong ? instrumentPrice - difference : instrumentPrice + difference;
-      newTransaction.stopLossPercent = stopLossPercent * 3;
+      newTransaction.stopLossPercent = stopLossPercent * 2;
       // */
 
       for (let i = 0; i < numberTrades; i += 1) {
