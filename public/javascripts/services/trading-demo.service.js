@@ -7,7 +7,7 @@ classes, LightweightCharts,
 const TRADING_CONSTANTS = {
   DEFAULT_NUMBER_TRADES: 4,
   DEFAULT_STOPLOSS_PERCENT: 0.5,
-  DEFAULT_TAKEPROFIT_RELATION: 3,
+  DEFAULT_TAKEPROFIT_RELATION: 5,
 
   MAX_NUMBER_TRADES: 400,
 
@@ -228,12 +228,13 @@ class TradingDemo {
       newTransaction.originalStopLossPercent = stopLossPercent;
       newTransaction.quantity = parseFloat((quantity).toFixed(stepSizePrecision));
 
-      /*
-      const difference = (Math.abs(newTransaction.originalStopLossPrice - instrumentPrice)) * 2;
-
       console.log('stopLossPercent', stopLossPercent);
+
+      /*
+      const difference = (Math.abs(newTransaction.originalStopLossPrice - instrumentPrice)) * 4;
+
       newTransaction.stopLossPrice = newTransaction.isLong ? instrumentPrice - difference : instrumentPrice + difference;
-      newTransaction.stopLossPercent = stopLossPercent * 2;
+      newTransaction.stopLossPercent = stopLossPercent * 4;
       // */
 
       for (let i = 0; i < numberTrades; i += 1) {

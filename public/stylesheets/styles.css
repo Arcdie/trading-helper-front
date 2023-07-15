@@ -792,6 +792,221 @@ button#settings {
               .experiment .report table.main-table tr td table tr td:last-child {
                 border-right: none; }
 
+.live {
+  padding: 10px;
+  position: relative;
+  display: flex;
+  flex-direction: column; }
+  .live .row {
+    display: flex;
+    position: relative;
+    border-top: 1px solid black;
+    margin-top: 15px; }
+    .live .row:first-child {
+      margin-top: 0px;
+      border-top: none; }
+  .live .charts-container {
+    width: 100%;
+    display: block;
+    box-sizing: border-box;
+    position: relative; }
+    .live .charts-container .chart-container {
+      display: inline-block;
+      position: relative; }
+    .live .charts-container .charts-nav {
+      height: 20px;
+      position: absolute;
+      z-index: 999;
+      top: 15px;
+      left: 15px; }
+      .live .charts-container .charts-nav .row {
+        width: 90px;
+        display: flex;
+        align-items: center;
+        border-top: none; }
+    .live .charts-container .legend p.values:first-child {
+      margin-bottom: 10px; }
+    .live .charts-container .legend p.values span {
+      color: #000FFF;
+      margin-left: 5px;
+      margin-right: 5px; }
+    .live .charts-container .ruler {
+      position: absolute;
+      left: -9999px;
+      top: -9999px;
+      z-index: 999;
+      font-size: 16px;
+      color: #0044e8; }
+    .live .charts-container .add-notification {
+      width: 20px;
+      height: 20px;
+      cursor: pointer;
+      text-align: center;
+      background-color: black;
+      border-radius: 1000px;
+      position: absolute;
+      right: 83px;
+      top: -9999px;
+      z-index: 9; }
+      .live .charts-container .add-notification span {
+        color: white;
+        font-size: 20px;
+        position: relative;
+        top: -1px; }
+    .live .charts-container .actions-menu {
+      display: none;
+      margin-top: 12px; }
+      .live .charts-container .actions-menu .chart-slider {
+        display: inline-block; }
+        .live .charts-container .actions-menu .chart-slider p {
+          display: inline-block;
+          margin: 0 8px;
+          font: 17px sans-serif; }
+          .live .charts-container .actions-menu .chart-slider p span.current-slide {
+            margin-right: 3px; }
+          .live .charts-container .actions-menu .chart-slider p span.amount-slides {
+            margin-left: 3px; }
+        .live .charts-container .actions-menu .chart-slider button {
+          display: inline-block;
+          background-color: transparent;
+          border-radius: 100px;
+          cursor: pointer;
+          font-size: 17px; }
+      .live .charts-container .actions-menu .volume-timelife {
+        width: 16px;
+        display: inline-block;
+        margin-left: 11px; }
+        .live .charts-container .actions-menu .volume-timelife input[type="text"] {
+          width: 100%;
+          height: 100%;
+          text-align: center;
+          position: relative;
+          bottom: 2px; }
+    .live .charts-container .chart-periods {
+      display: flex;
+      margin-top: 12px; }
+      .live .charts-container .chart-periods div {
+        width: 40px;
+        height: 40px;
+        cursor: pointer;
+        display: none;
+        box-sizing: border-box;
+        margin-right: 5px;
+        position: relative;
+        border: 1px dashed #d9d9d9;
+        background-color: white; }
+        .live .charts-container .chart-periods div.is_worked {
+          display: flex;
+          justify-content: center;
+          align-items: center; }
+        .live .charts-container .chart-periods div.is_active {
+          border-color: #00bf20; }
+        .live .charts-container .chart-periods div span {
+          margin: 8px auto;
+          text-align: center;
+          display: block;
+          user-select: none; }
+    .live .charts-container .drawing {
+      display: flex; }
+      .live .charts-container .drawing div {
+        width: 40px;
+        height: 40px;
+        cursor: pointer;
+        box-sizing: border-box;
+        margin-right: 5px;
+        position: relative;
+        border: 1px dashed #d9d9d9;
+        background-color: white; }
+        .live .charts-container .drawing div.is_active {
+          border-color: #00bf20; }
+        .live .charts-container .drawing div img {
+          width: 100%;
+          height: 100%; }
+    .live .charts-container .chart-candles {
+      width: 100%;
+      height: 80%;
+      border: 1px solid black;
+      border-right: none;
+      box-sizing: border-box; }
+    .live .charts-container .chart-volume {
+      width: 100%;
+      height: 20%;
+      border: 1px solid black;
+      border-right: none;
+      box-sizing: border-box; }
+  .live aside {
+    position: absolute;
+    right: 0;
+    z-index: 99999;
+    display: flex;
+    flex-direction: row-reverse; }
+    .live aside .instruments-container {
+      width: 100%;
+      display: none; }
+      .live aside .instruments-container.is_active {
+        display: block; }
+      .live aside .instruments-container .instruments-list .headlines {
+        user-select: none; }
+        .live aside .instruments-container .instruments-list .headlines span {
+          width: 45px;
+          text-align: center; }
+          .live aside .instruments-container .instruments-list .headlines span.name {
+            width: 187px;
+            text-align: left; }
+      .live aside .instruments-container .instruments-list .list .instrument {
+        position: relative;
+        display: flex;
+        align-items: center; }
+        .live aside .instruments-container .instruments-list .list .instrument.is_favorite span.name b:before, .live aside .instruments-container .instruments-list .list .instrument.is_favorite span.name b:after {
+          background-color: #ffb632; }
+        .live aside .instruments-container .instruments-list .list .instrument span {
+          width: 45px;
+          text-align: center; }
+          .live aside .instruments-container .instruments-list .list .instrument span.is_long {
+            color: #00b706; }
+          .live aside .instruments-container .instruments-list .list .instrument span.is_short {
+            color: red; }
+          .live aside .instruments-container .instruments-list .list .instrument span.name {
+            width: 190px;
+            text-align: left;
+            display: flex;
+            align-items: center; }
+            .live aside .instruments-container .instruments-list .list .instrument span.name b {
+              position: relative;
+              width: 28px;
+              height: 26px;
+              display: inline-block;
+              top: 3px;
+              left: -3px; }
+            .live aside .instruments-container .instruments-list .list .instrument span.name b:before,
+            .live aside .instruments-container .instruments-list .list .instrument span.name b:after {
+              position: absolute;
+              content: "";
+              left: 13px;
+              top: 0;
+              width: 12px;
+              height: 20px;
+              background-color: #e7e7e7;
+              border-radius: 50px 50px 0 0;
+              transform: rotate(-45deg);
+              transform-origin: 0 100%; }
+            .live aside .instruments-container .instruments-list .list .instrument span.name b:after {
+              left: 0;
+              transform: rotate(45deg);
+              transform-origin: 100% 100%; }
+  .live .settings {
+    padding-top: 15px;
+    display: flex;
+    flex-direction: row;
+    align-items: center; }
+    .live .settings div {
+      display: inline-block; }
+      .live .settings div.single-date-counter {
+        margin-right: 8px; }
+        .live .settings div.single-date-counter input[type="checkbox"] {
+          width: 21px;
+          height: 21px; }
+
 .trades-viewer {
   padding: 10px;
   position: relative;

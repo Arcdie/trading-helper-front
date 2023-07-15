@@ -249,8 +249,8 @@ $(document).ready(async () => {
         fillLastViewedInstruments(choosenInstrumentId);
         clearInstrumentData({ instrumentId: choosenInstrumentId });
 
-        removeFigureLinesFromLocalStorage({ instrumentId: choosenInstrumentId });
-        removeFigureLevelsFromLocalStorage({ instrumentId: choosenInstrumentId });
+        // removeFigureLinesFromLocalStorage({ instrumentId: choosenInstrumentId });
+        // removeFigureLevelsFromLocalStorage({ instrumentId: choosenInstrumentId });
       }
 
       if (isSingleDateCounter) {
@@ -429,66 +429,66 @@ $(document).ready(async () => {
       const { originalData } = chartCandles;
       const firstCandle = originalData[originalData.length - 1];
 
-      if (!trading.getActiveTransaction(choosenInstrumentId)) {
-        // const averagePercent = await calculateAveragePercent(AVAILABLE_PERIODS.get('1h'), firstCandle.originalTimeUnix);
-        // const stopLossPercent = averagePercent * 2;
+      // if (!trading.getActiveTransaction(choosenInstrumentId)) {
+      // const averagePercent = await calculateAveragePercent(AVAILABLE_PERIODS.get('1h'), firstCandle.originalTimeUnix);
+      // const stopLossPercent = averagePercent * 2;
 
-        // /*
-        const averagePercent = chartCandles.calculateExpotentialAveragePercent(36);
-        const stopLossPercent = (averagePercent * 2);
-        trading.changeStopLossPercent(stopLossPercent);
-        // */
+      /*
+      const averagePercent = chartCandles.calculateExpotentialAveragePercent(36);
+      const stopLossPercent = (averagePercent * 2);
+      trading.changeStopLossPercent(stopLossPercent);
+      // */
 
-        /*
-        const figureLevelsData = getFigureLevelsFromLocalStorage({ instrumentId: choosenInstrumentId });
-        if (!figureLevelsData.length || figureLevelsData.length < 2) {
-          alert('No figure levels');
-          return false;
-        }
-        const sorted = figureLevelsData.sort((a, b) => a.value > b.value ? 1 : -1);
-        const middlePrice = sorted[1].value - ((sorted[1].value - sorted[0].value) / 2);
-        const differenceBetweenPrices = Math.abs(sorted[1].value - middlePrice);
-        const stopLossPercent = 100 / (sorted[1].value / differenceBetweenPrices);
-        trading.changeStopLossPercent(stopLossPercent);
-        // */
-
-        // const differenceBetweenPrices = Math.abs(firstCandle.open - firstCandle.close);
-        // const stopLossPercent = 100 / (firstCandle.open / differenceBetweenPrices);
-        // trading.changeStopLossPercent(stopLossPercent / 2);
-
-        // const savePrice = (firstCandle.close / 100) * (stopLossPercent);
-        // const topSavePrice = firstCandle.close + savePrice;
-        // const bottomSavePrice = firstCandle.close - savePrice;
-
-        const result = trading.createTransaction(instrumentDoc, {
-          ...firstCandle,
-          // close: middlePrice,
-        }, true);
-
-        if (!result) {
-          return false;
-        }
-
-        switch (result.action) {
-          case EActions.get('transactionCreated'): {
-            removeTemporaryStopLossSeries(instrumentDoc);
-            transactionCreatedHandler(instrumentDoc, result);
-            break;
-          }
-
-          case EActions.get('tradeCreated'): tradeCreatedHandler(instrumentDoc, result); break;
-          case EActions.get('tradeFinished'): tradeFinishedHandler(instrumentDoc, result); break;
-          case EActions.get('transactionFinished'): transactionFinishedHandler(instrumentDoc, result); break;
-
-          default: {
-            alert('Unknown action');
-            return false;
-          }
-        }
-
-        tradingList.setTransactions(trading.transactions);
-        // window.myNextTick = smartNextTick(result.transaction);
+      /*
+      const figureLevelsData = getFigureLevelsFromLocalStorage({ instrumentId: choosenInstrumentId });
+      if (!figureLevelsData.length || figureLevelsData.length < 2) {
+        alert('No figure levels');
+        return false;
       }
+      const sorted = figureLevelsData.sort((a, b) => a.value > b.value ? 1 : -1);
+      const middlePrice = sorted[1].value - ((sorted[1].value - sorted[0].value) / 2);
+      const differenceBetweenPrices = Math.abs(sorted[1].value - middlePrice);
+      const stopLossPercent = 100 / (sorted[1].value / differenceBetweenPrices);
+      trading.changeStopLossPercent(stopLossPercent);
+      // */
+
+      // const differenceBetweenPrices = Math.abs(firstCandle.open - firstCandle.close);
+      // const stopLossPercent = 100 / (firstCandle.open / differenceBetweenPrices);
+      // trading.changeStopLossPercent(stopLossPercent / 2);
+
+      // const savePrice = (firstCandle.close / 100) * (stopLossPercent);
+      // const topSavePrice = firstCandle.close + savePrice;
+      // const bottomSavePrice = firstCandle.close - savePrice;
+
+      const result = trading.createTransaction(instrumentDoc, {
+        ...firstCandle,
+        // close: middlePrice,
+      }, true);
+
+      if (!result) {
+        return false;
+      }
+
+      switch (result.action) {
+        case EActions.get('transactionCreated'): {
+          removeTemporaryStopLossSeries(instrumentDoc);
+          transactionCreatedHandler(instrumentDoc, result);
+          break;
+        }
+
+        case EActions.get('tradeCreated'): tradeCreatedHandler(instrumentDoc, result); break;
+        case EActions.get('tradeFinished'): tradeFinishedHandler(instrumentDoc, result); break;
+        case EActions.get('transactionFinished'): transactionFinishedHandler(instrumentDoc, result); break;
+
+        default: {
+          alert('Unknown action');
+          return false;
+        }
+      }
+
+      tradingList.setTransactions(trading.transactions);
+      // window.myNextTick = smartNextTick(result.transaction);
+      // }
     });
 
   $(document)
@@ -1100,7 +1100,7 @@ const smartMoveToFinishTransaction = async (transaction) => {
             || (!reversedTrade.isLong && candle.high >= reversedTrade.stopLossPrice)) {
             // touch reversedTrade stopLoss
 
-            const loss = (difference * 1) * reversedTrade.quantity;
+            const loss = (difference * 3) * reversedTrade.quantity;
             console.log('loss-reversedTrade', loss, resultLoss);
             resultLoss += loss;
 
@@ -1111,10 +1111,11 @@ const smartMoveToFinishTransaction = async (transaction) => {
             });
 
             saveTrade = false;
+            reversedTrade = false;
 
-            if (resultProfit) {
-              reversedTrade = false;
-            }
+            // if (resultProfit) {
+            //   reversedTrade = false;
+            // }
 
             // reversedTrade = false;
           } else if ((reversedTrade.isLong && candle.high >= (transaction.instrumentPrice))
@@ -1145,7 +1146,7 @@ const smartMoveToFinishTransaction = async (transaction) => {
             isLong: !isLongTrade,
             startedAtUnix: candle.originalTimeUnix,
             tradePrice: isLongTrade ? topSavePrice : bottomSavePrice,
-            stopLossPrice: isLongTrade ? topSavePrice + (difference * 1) : bottomSavePrice - (difference * 1),
+            stopLossPrice: isLongTrade ? topSavePrice + (difference * 5) : bottomSavePrice - (difference * 5),
           };
 
           markers.push({
@@ -1159,6 +1160,7 @@ const smartMoveToFinishTransaction = async (transaction) => {
       }
 
       if (resultProfit === 0 && resultLoss !== 0) {
+        /*
         if (!saveTrade) {
           const isLong = !reversedTrade.isLong;
 
@@ -1210,6 +1212,7 @@ const smartMoveToFinishTransaction = async (transaction) => {
             reversedTrade = false;
           }
         }
+        */
       }
 
       lastCandleTimeUnix = candle.originalTimeUnix;
@@ -1314,8 +1317,8 @@ const doMoveTo = async () => {
   if (notifications.length) {
     return moveTo.moveToNearesNotification();
   } else if (activeTransaction) {
-    return smartMoveToFinishTransaction(activeTransaction);
-    // return moveTo.moveToFinishTransaction(activeTransaction);
+    // return smartMoveToFinishTransaction(activeTransaction);
+    return moveTo.moveToFinishTransaction(activeTransaction);
   } else {
     switch (choosenNextEvent) {
       case AVAILABLE_NEXT_EVENTS.get('priceJump'): {
@@ -2515,11 +2518,12 @@ const transactionCreatedHandler = (instrumentDoc, { transaction }) => {
     );
 
     // /*
-    for (let i = 0; i < 1; i += 1) {
+    // for tp
+    for (let i = 2; i < 4; i += 1) {
       const price = transaction.isLong ? transaction.instrumentPrice + (difference * (i + 1)) : transaction.instrumentPrice - (difference * (i + 1));
 
       const options = {
-        color: constants.RED_COLOR,
+        color: constants.GREEN_COLOR,
         lastValueVisible: false,
       };
 
@@ -2534,7 +2538,9 @@ const transactionCreatedHandler = (instrumentDoc, { transaction }) => {
     }
     // */
 
-    for (let i = 0; i < 1; i += 1) {
+    /*
+    // for sl
+    for (let i = 1; i < 6; i += 1) {
       const price = transaction.isLong ? transaction.instrumentPrice - (difference * (i + 1)) : transaction.instrumentPrice + (difference * (i + 1));
 
       const options = {
@@ -2875,11 +2881,12 @@ const drawTrades = ({ instrumentId }, transaction, periods = []) => {
     });
 
     // /*
-    for (let i = 0; i < 1; i += 1) {
+    // for tp
+    for (let i = 2; i < 4; i += 1) {
       const price = transaction.isLong ? transaction.instrumentPrice + (difference * (i + 1)) : transaction.instrumentPrice - (difference * (i + 1));
 
       const options = {
-        color: constants.RED_COLOR,
+        color: constants.GREEN_COLOR,
         lastValueVisible: false,
       };
 
@@ -2903,7 +2910,9 @@ const drawTrades = ({ instrumentId }, transaction, periods = []) => {
     }
     // */
 
-    for (let i = 0; i < 1; i += 1) {
+    /*
+    // for sl
+    for (let i = 1; i < 6; i += 1) {
       const price = transaction.isLong ? transaction.instrumentPrice - (difference * (i + 1)) : transaction.instrumentPrice + (difference * (i + 1));
 
       const options = {

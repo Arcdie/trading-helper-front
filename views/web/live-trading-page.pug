@@ -1,0 +1,44 @@
+extends ../app
+
+block variables
+	-
+		const pageTitle = 'Live';
+
+block content
+	.page.live
+		.row
+			.charts-container
+
+			aside
+				.instruments-container
+					.search
+						input(type="text" placeholder="Поиск")
+						//- button#settings
+						//- 	img(src="/images/settings.png", alt="settings")
+					
+					.instruments-list
+						.headlines
+							span.name(data-type="name") Инструмент
+							span(data-type="priceChange_5m") 5M
+							span(data-type="priceChange_1h") 1H
+							span(data-type="priceChange_1d") 1D
+							span.figure-level-percent(data-type="figureLevel") FL
+
+						.list
+
+		.row
+			.settings
+
+block scripts
+	script(src='/libs/uuid.min.js')
+	script(src='/libs/moment.min.js')
+	script(src='/libs/trading-view-charts.min.js')
+	script(src='/libs/technical-indicators.min.js')
+
+	//- script(src='/javascripts/websocket.js')
+	script(src='/javascripts/chart-functions/chart-candles.js')
+	script(src='/javascripts/chart-functions/indicators/volume.js')
+	script(src='/javascripts/chart-functions/indicators/volume-average.js')
+	script(src='/javascripts/chart-functions/indicators/moving-average.js')
+
+	script(src='/javascripts/web/live-trading.js')
